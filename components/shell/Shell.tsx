@@ -4,6 +4,7 @@ import { Sidebar } from "./Sidebar";
 import { Toolbar } from "./Toolbar";
 import { AgentDock } from "./AgentDock";
 import { ChartTooltips } from "../ChartTooltips";
+import { Hydrator } from "../Hydrator";
 
 export function Shell({ children }: { children: ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </main>
       <AgentDock />
       <ChartTooltips />
+      <Hydrator />
     </div>
   );
 }

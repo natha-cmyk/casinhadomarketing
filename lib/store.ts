@@ -64,11 +64,18 @@ export interface UIState {
   // calendário
   calCanal: string; calPerfil: string; calCV: string; calMonth: number; calYear: number;
   postModal: { mode: "new" | "edit"; id?: string; y: number; m: number; d: number } | null;
-  // dados editáveis (in-memory até Bloco 4)
+  // dados editáveis (persistidos no Bloco 4)
   okr: Okr; posts: PostItem[]; fontes: FonteItem[]; fonteMap: FonteMap | null; perfil: Perfil;
+  hydrated: boolean;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
+  hydrate: (d: {
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean } | null;
+    perfil: Perfil | null;
+    okr: Okr | null;
+    posts: { posts: PostItem[] } | null;
+  }) => void;
   // escopo
   setPeriod: (p: Period) => void; setYear: (y: number) => void; setMonth: (m: number) => void;
   setWeek: (w: number) => void; setQuarter: (q: number) => void;
@@ -115,8 +122,24 @@ export const useStore = create<UIState>((set) => ({
     empresa: PERFIL_DEFAULT.empresa, segmento: PERFIL_DEFAULT.segmento, cidade: PERFIL_DEFAULT.cidade,
     site: PERFIL_DEFAULT.site, canais: [...PERFIL_DEFAULT.canais], produtos: [...PERFIL_DEFAULT.produtos], relacao: {},
   },
+  hydrated: false,
 
   set: (patch) => set(patch),
+  hydrate: (d) =>
+    set((s) => {
+      const patch: Partial<UIState> = { hydrated: true };
+      if (d.config) {
+        patch.redes = d.config.redes ?? s.redes;
+        patch.paineis = d.config.paineis ?? s.paineis;
+        patch.contas = d.config.contas ?? s.contas;
+        patch.cfgOpen = d.config.cfgOpen ?? s.cfgOpen;
+        patch.impOpen = !!d.config.impOpen;
+      }
+      if (d.perfil) patch.perfil = d.perfil;
+      if (d.okr && d.okr.areas) patch.okr = d.okr;
+      if (d.posts && Array.isArray(d.posts.posts)) patch.posts = d.posts.posts;
+      return patch;
+    }),
   setPeriod: (p) => set({ period: p }),
   setYear: (y) => set({ year: y }),
   setMonth: (m) => set({ month: m, quarter: quarterOf(m) }),
