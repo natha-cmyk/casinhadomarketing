@@ -1,5 +1,5 @@
-import { SectionStub } from "@/components/SectionStub";
+import { InstagramView } from "@/components/views/InstagramView";
 
 export default function Page() {
-  return <SectionStub view="instagram" />;
+  return <InstagramView />;
 }

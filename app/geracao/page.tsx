@@ -1,5 +1,5 @@
-import { SectionStub } from "@/components/SectionStub";
+import { GeracaoView } from "@/components/views/GeracaoView";
 
 export default function Page() {
-  return <SectionStub view="canais" />;
+  return <GeracaoView />;
 }

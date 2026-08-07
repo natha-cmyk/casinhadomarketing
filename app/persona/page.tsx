@@ -1,5 +1,5 @@
-import { SectionStub } from "@/components/SectionStub";
+import PersonaView from "@/components/views/PersonaView";
 
 export default function Page() {
-  return <SectionStub view="persona" />;
+  return <PersonaView />;
 }

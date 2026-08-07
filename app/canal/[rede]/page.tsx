@@ -1,6 +1,6 @@
-import { SectionStub } from "@/components/SectionStub";
+import { SocialView } from "@/components/views/SocialView";
 
 export default async function Page({ params }: PageProps<"/canal/[rede]">) {
   const { rede } = await params;
-  return <SectionStub view={rede} />;
+  return <SocialView rede={rede} />;
 }

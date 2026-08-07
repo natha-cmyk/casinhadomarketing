@@ -1,5 +1,5 @@
-import { SectionStub } from "@/components/SectionStub";
+import ConcorrenciaView from "@/components/views/ConcorrenciaView";
 
 export default function Page() {
-  return <SectionStub view="concorrencia" />;
+  return <ConcorrenciaView />;
 }

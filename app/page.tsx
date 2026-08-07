@@ -1,5 +1,5 @@
-import { SectionStub } from "@/components/SectionStub";
+import { PainelView } from "@/components/views/PainelView";
 
 export default function Home() {
-  return <SectionStub view="overview" />;
+  return <PainelView />;
 }
