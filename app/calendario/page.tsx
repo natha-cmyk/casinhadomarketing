@@ -1,5 +1,5 @@
-import { SectionStub } from "@/components/SectionStub";
+import { CalendarioView } from "@/components/views/CalendarioView";
 
 export default function Page() {
-  return <SectionStub view="calendario" />;
+  return <CalendarioView />;
 }

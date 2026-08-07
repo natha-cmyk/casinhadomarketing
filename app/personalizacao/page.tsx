@@ -1,5 +1,5 @@
-import { SectionStub } from "@/components/SectionStub";
+import PersonalizacaoView from "@/components/views/PersonalizacaoView";
 
 export default function Page() {
-  return <SectionStub view="config" />;
+  return <PersonalizacaoView />;
 }

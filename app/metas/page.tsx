@@ -1,5 +1,5 @@
-import { SectionStub } from "@/components/SectionStub";
+import MetasView from "@/components/views/MetasView";
 
 export default function Page() {
-  return <SectionStub view="metas" />;
+  return <MetasView />;
 }
