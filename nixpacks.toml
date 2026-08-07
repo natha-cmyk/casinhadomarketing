@@ -1,0 +1,3 @@
+# Força Node 22 no build do EasyPanel/Nixpacks (Next 16 + React 19 exigem Node 20+).
+[phases.setup]
+nixPkgs = ["nodejs_22"]
