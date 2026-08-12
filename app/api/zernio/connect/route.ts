@@ -21,7 +21,9 @@ export async function GET(req: Request) {
       await prisma.workspace.update({ where: { id: ws.id }, data: { zernioProfileId: profileId } });
     }
 
-    const { authUrl } = await connectUrl(platform, profileId);
+    // volta pro nosso app depois do OAuth (cliente nunca vê o dashboard da Zernio)
+    const origin = req.headers.get("origin") || new URL(req.url).origin;
+    const { authUrl } = await connectUrl(platform, profileId, `${origin}/conectado`);
     return NextResponse.json({ authUrl });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 502 });

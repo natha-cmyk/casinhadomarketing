@@ -58,11 +58,14 @@ export function createProfile(name: string, description?: string) {
   });
 }
 
-// GET /connect/{platform}?profileId= — URL de OAuth hospedado p/ conectar conta
-export function connectUrl(platform: string, profileId?: string) {
+// GET /connect/{platform}?profileId=&redirect_url= — OAuth hospedado.
+// redirect_url = pra onde a Zernio volta DEPOIS do OAuth (nossa plataforma, não o dashboard dela).
+export function connectUrl(platform: string, profileId?: string, redirectUrl?: string) {
   const pid = profileId ?? process.env.ZERNIO_PROFILE_ID;
-  const qs = pid ? `?profileId=${encodeURIComponent(pid)}` : "";
-  return zernio<{ authUrl: string }>(`/connect/${encodeURIComponent(platform)}${qs}`);
+  const q = new URLSearchParams();
+  if (pid) q.set("profileId", pid);
+  if (redirectUrl) q.set("redirect_url", redirectUrl);
+  return zernio<{ authUrl: string }>(`/connect/${encodeURIComponent(platform)}?${q.toString()}`);
 }
 
 // GET /analytics/{platform}/account-insights — séries por conta (máx 90 dias)

@@ -1,7 +1,7 @@
 "use client";
 // Conexões via Zernio: conectar contas de rede direto na plataforma (OAuth hospedado).
 // O usuário nunca entra na Zernio. // TODO(zernio): tratar fluxos multi-step (select-page/account).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { REDES } from "@/lib/seed-data";
 
@@ -18,6 +18,15 @@ export function ConexoesZernio() {
   const [erro, setErro] = useState<string | null>(null);
 
   const connected = new Set(accounts.map((a) => a.platform));
+
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.data === "zernio-connected") refresh();
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function refresh() {
     try {
