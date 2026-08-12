@@ -267,7 +267,6 @@ export default function PersonalizacaoView() {
         title="Conexões"
         sub="Conecte as contas do cliente direto por aqui — login na própria rede, sem entrar na Zernio. As métricas aparecem nos painéis depois."
         accent="var(--red)"
-        defaultOpen
         action={
           <button className="btn-link" onClick={refreshConx} type="button">
             Atualizar

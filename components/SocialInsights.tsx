@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { PageHead, KpiCard } from "@/components/ui";
 import { Chart } from "@/components/Chart";
+import { Spinner } from "@/components/Spinner";
 import { lineChart } from "@/lib/charts";
 import { fmt, kfmt } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
@@ -103,7 +104,7 @@ export function SocialInsights({ rede }: { rede: string }) {
         title={label}
         desc={`${acct.displayName || "conta conectada"} · dados reais (Zernio)${data ? ` · ${data.dateRange.since} → ${data.dateRange.until}` : ""}`}
       />
-      {loading && <div className="card">Carregando métricas…</div>}
+      {loading && <Spinner texto="Carregando métricas…" />}
       {err && <div className="auth-err">{err}</div>}
       {!loading && !err && (
         <div className="grid" style={{ gap: 16 }}>

@@ -85,6 +85,7 @@ export const META: Record<string, NavItem> = Object.fromEntries(
 export const TEMPORAL = [
   "instagram", "tiktok", "x", "facebook", "linkedin", "youtube",
   "threads", "reddit", "pinterest", "bluesky", "snapchat", "googlebusiness",
+  "ads", "canais", // Canais Pagos e Geração também usam período
 ];
 export const usesCompare = (v: string) => v === "instagram";
 

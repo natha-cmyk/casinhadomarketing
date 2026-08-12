@@ -1,7 +1,7 @@
 "use client";
 // Porta viewCalendario (blueprint 1445-1474) + helpers contaChip/filaRow/postMatch/postChip/
 // contentMonthGrid (1417-1444) + feriadosMoveis/feriadosLista (662-663). Estética mLabs.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore, type PostItem } from "@/lib/store";
 import {
   CANAIS_POST,
@@ -102,15 +102,12 @@ export function CalendarioView() {
     );
   };
 
-  // ── contas conectadas (Zernio) — contagem social/conversas para o badge ──
-  const nConn = new Set(
-    zernioAccounts
-      .map((a) => PLAT_REV[a.platform] || a.platform)
-      .filter((id) => {
-        const r = REDES.find((x) => x.id === id);
-        return r && r.grupo !== "ads";
-      })
-  ).size;
+  // ── contas conectadas (Zernio) — redes social/conversas conectadas ──
+  const connRedes = Array.from(new Set(zernioAccounts.map((a) => PLAT_REV[a.platform] || a.platform)))
+    .map((id) => REDES.find((x) => x.id === id))
+    .filter((r): r is (typeof REDES)[number] => !!r && r.grupo !== "ads");
+  const nConn = connRedes.length;
+  const [contasOpen, setContasOpen] = useState(false);
 
   // ── toolbar: contadores por status do mês ──
   const mo = posts.filter((p) => p.y === year && p.m === month);
@@ -170,16 +167,30 @@ export function CalendarioView() {
         }
       />
 
-      {/* Contas conectadas — sincronizadas com a Zernio (mesmo visual da Personalização) */}
-      <div className="card pad-lg" style={{ marginBottom: 14 }}>
-        <div className="card-head">
-          <div>
+      {/* Contas conectadas — minimizada por padrão (só ícones); expande no clique */}
+      <div className={`card pad-lg${contasOpen ? " open" : ""}`} style={{ marginBottom: 14 }}>
+        <div className="card-head" style={{ marginBottom: contasOpen ? 14 : 0, cursor: "pointer" }} onClick={() => setContasOpen((o) => !o)}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
             <div className="t">Contas conectadas</div>
-            <div className="sub">redes ligadas via Zernio — coloridas quando conectadas, cinza quando não</div>
+            {!contasOpen &&
+              (connRedes.length ? (
+                <div className="cc-conx-mini">
+                  {connRedes.map((r) => (
+                    <span key={r.id} className="cc-conx-ico" style={{ background: r.cor }} title={r.label}>
+                      {r.grupo === "social" ? <Ic name={r.id === "instagram" ? "ig" : r.id} /> : (r.label || "?")[0]}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="cc-conx-none">nenhuma conectada</span>
+              ))}
           </div>
           <span className="badge">{nConn}</span>
+          <svg className="acc-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ transform: contasOpen ? "rotate(180deg)" : "none", transition: ".18s", color: "var(--label-3)" }}>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
         </div>
-        <ConexoesGrid grupos={["social", "conversas"]} />
+        {contasOpen && <ConexoesGrid grupos={["social", "conversas"]} />}
       </div>
 
       {/* Toolbar */}
