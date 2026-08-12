@@ -2,9 +2,10 @@
 // Porta a viewConfig do blueprint (linhas 1344-1393) + helpers de import/CSV,
 // chip lists, matriz de relação, toggles de redes e acordeões de indicadores.
 // Fidelidade 1:1 com casinha-do-marketing.html.
-import { useState } from "react";
+// UX: cada seção é um card colapsável (.psec) com acento de cor próprio; só "Conexões" abre por padrão.
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { PageHead } from "@/components/ui";
-import { ConexoesZernio } from "@/components/ConexoesZernio";
+import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { Ic } from "@/components/Ic";
 import { REDES, PANEL_INDICATORS } from "@/lib/seed-data";
 import { useStore, newId, type FonteItem } from "@/lib/store";
@@ -47,6 +48,105 @@ function extTipo(ext: string): "csv" | "xlsx" | "pdf" {
   return "pdf";
 }
 
+/* ===== PSection: card de seção colapsável, com acento de cor por seção ===== */
+function PSection({
+  title,
+  sub,
+  accent,
+  meta,
+  action,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  sub?: string;
+  accent: string;
+  meta?: ReactNode;
+  action?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`psec${open ? " open" : ""}`} style={{ "--psec-accent": accent } as CSSProperties}>
+      <div
+        className="psec-h"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((o) => !o);
+          }
+        }}
+      >
+        <span className="psec-badge" aria-hidden="true" />
+        <div className="psec-titles">
+          <div className="psec-t">{title}</div>
+          {sub ? <div className="psec-sub">{sub}</div> : null}
+        </div>
+        <span className="psec-meta">
+          {meta}
+          {action ? (
+            <span className="psec-act" onClick={(e) => e.stopPropagation()}>
+              {action}
+            </span>
+          ) : null}
+          <svg className="psec-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </span>
+      </div>
+      {open ? <div className="psec-body">{children}</div> : null}
+    </div>
+  );
+}
+
+/* ===== DropZone: área de upload com estado "arrastando" ===== */
+function DropZone({
+  accept,
+  onFile,
+  title,
+  hint,
+}: {
+  accept: string;
+  onFile: (file?: File | null) => void;
+  title: string;
+  hint: string;
+}) {
+  const [over, setOver] = useState(false);
+  return (
+    <label
+      className={`drop${over ? " over" : ""}`}
+      role="button"
+      aria-label={title}
+      onDragOver={(e) => e.preventDefault()}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        setOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        onFile(e.dataTransfer.files?.[0]);
+      }}
+    >
+      <div className="di">
+        <Ic name="upload" />
+      </div>
+      <h4>{title}</h4>
+      <p>{hint}</p>
+      <input type="file" accept={accept} style={{ display: "none" }} onChange={(e) => onFile(e.target.files?.[0])} />
+    </label>
+  );
+}
+
 export default function PersonalizacaoView() {
   const perfil = useStore((s) => s.perfil);
   const setPerfil = useStore((s) => s.setPerfil);
@@ -61,17 +161,23 @@ export default function PersonalizacaoView() {
   const setPainelInd = useStore((s) => s.setPainelInd);
   const cfgOpen = useStore((s) => s.cfgOpen);
   const toggleCfgOpen = useStore((s) => s.toggleCfgOpen);
-  const impOpen = useStore((s) => s.impOpen);
   const fontes = useStore((s) => s.fontes);
   const addFonte = useStore((s) => s.addFonte);
   const fonteMap = useStore((s) => s.fonteMap);
   const setFonteMap = useStore((s) => s.setFonteMap);
   const set = useStore((s) => s.set);
+  const setZernioAccounts = useStore((s) => s.setZernioAccounts);
 
   // Kit do Panteão: só nome do arquivo (extração no backend — OpenClaw).
   const [kit, setKit] = useState<string | null>(null);
 
-  const impBodyOpen = impOpen || !!fonteMap;
+  async function refreshConx() {
+    try {
+      const r = await fetch("/api/zernio/accounts");
+      const d = await r.json();
+      if (d?.accounts) setZernioAccounts(d.accounts);
+    } catch {}
+  }
 
   /* ===== shownInd (blueprint 1233) ===== */
   function shownInd(panel: string, id: string): boolean {
@@ -156,142 +262,115 @@ export default function PersonalizacaoView() {
         desc="No primeiro acesso, importe o kit de pré-trabalho do Panteão para pré-preencher o ambiente. Depois, mantenha canais, produtos e indicadores por aqui."
       />
 
-      <ConexoesZernio />
+      {/* ===== Conexões ===== */}
+      <PSection
+        title="Conexões"
+        sub="Conecte as contas do cliente direto por aqui — login na própria rede, sem entrar na Zernio. As métricas aparecem nos painéis depois."
+        accent="var(--red)"
+        defaultOpen
+        action={
+          <button className="btn-link" onClick={refreshConx} type="button">
+            Atualizar
+          </button>
+        }
+      >
+        <ConexoesGrid grupos={["social", "conversas", "ads"]} />
+      </PSection>
 
       {/* ===== Importe seus dados ===== */}
-      <div className="card pad-lg" style={{ marginBottom: 16 }}>
-        <button className={`imp-head${impBodyOpen ? " open" : ""}`} onClick={() => set({ impOpen: !impOpen })} type="button">
-          <div>
-            <div className="t">Importe seus dados</div>
-            <div className="sub">kit do Panteão + planilhas e documentos (CSV, XLSX, PDF)</div>
-          </div>
-          <span className="imp-meta">
+      <PSection
+        title="Importe seus dados"
+        sub="kit do Panteão + planilhas e documentos (CSV, XLSX, PDF)"
+        accent="var(--excelente)"
+        meta={
+          <span className="psec-count">
             {kit ? "kit ✓" : "kit —"} · {fontes.length} fonte(s)
-            <svg className="acc-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M6 9l6 6 6-6" />
-            </svg>
           </span>
-        </button>
-        {impBodyOpen && (
-          <div className="imp-body">
-            <div className="imp-sub">
-              <div className="imp-sub-h">
-                Kit do Panteão<span className="imp-sub-t">importação única · extração no backend</span>
-              </div>
-              {kit ? (
-                <div className="file-chip">
-                  <div className="fi">PDF</div>
-                  <div>
-                    <b>{kit}</b>
-                    <span>ambiente pré-preenchido a partir do kit</span>
-                  </div>
-                  <button className="x" onClick={() => setKit(null)} aria-label="Remover" type="button">
-                    ✕
-                  </button>
+        }
+      >
+        <div className="imp-body">
+          <div className="imp-sub">
+            <div className="imp-sub-h">
+              Kit do Panteão<span className="imp-sub-t">importação única · extração no backend</span>
+            </div>
+            {kit ? (
+              <div className="file-chip">
+                <div className="fi">PDF</div>
+                <div>
+                  <b>{kit}</b>
+                  <span>ambiente pré-preenchido a partir do kit</span>
                 </div>
-              ) : (
-                <label
-                  className="drop"
-                  role="button"
-                  aria-label="Enviar PDF"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    handleKitFile(e.dataTransfer.files?.[0]);
-                  }}
-                >
-                  <div className="di">
-                    <Ic name="upload" />
-                  </div>
-                  <h4>Arraste o PDF ou clique para enviar</h4>
-                  <p>Só no primeiro acesso · pré-preenche canais, produtos e serviços</p>
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    style={{ display: "none" }}
-                    onChange={(e) => handleKitFile(e.target.files?.[0])}
-                  />
-                </label>
-              )}
-            </div>
-
-            <div className="imp-sub">
-              <div className="imp-sub-h">
-                Planilhas & documentos{fontes.length ? <span className="badge"> {fontes.length}</span> : null}
+                <button className="x" onClick={() => setKit(null)} aria-label="Remover" type="button">
+                  ✕
+                </button>
               </div>
-              {fontes.map((f) => (
-                <div className="file-chip" key={f.id}>
-                  <div className="fi">{(f.tipo || "").toUpperCase()}</div>
-                  <div>
-                    <b>{f.nome}</b>
-                    <span>
-                      {f.pendente
-                        ? "pendente · interpretação no backend (OpenClaw)"
-                        : `${f.usados} de ${f.campos} campos · ${f.linhas} linhas`}
-                    </span>
-                  </div>
-                  <button className="x" onClick={() => removeFonte(f.id)} aria-label="Remover" type="button">
-                    ✕
-                  </button>
-                </div>
-              ))}
-              {fonteMap ? (
-                <InterpretPanel
-                  fonteMap={fonteMap}
-                  onCancel={() => setFonteMap(null)}
-                  onToggleField={toggleField}
-                  onConfirm={confirmFonte}
-                />
-              ) : (
-                <label
-                  className="drop"
-                  role="button"
-                  aria-label="Enviar arquivo"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    handleFonteFile(e.dataTransfer.files?.[0]);
-                  }}
-                >
-                  <div className="di">
-                    <Ic name="upload" />
-                  </div>
-                  <h4>Arraste CSV, XLSX ou PDF ou clique para enviar</h4>
-                  <p>CSV é lido aqui na hora · XLSX e PDF interpretados no backend (OpenClaw)</p>
-                  <input
-                    type="file"
-                    accept=".csv,.xlsx,.xls,.pdf"
-                    style={{ display: "none" }}
-                    onChange={(e) => handleFonteFile(e.target.files?.[0])}
-                  />
-                </label>
-              )}
-            </div>
-
-            <div className="tfoot-note">
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#9A9AA0"
-                strokeWidth={2}
-                style={{ flex: "0 0 14px", marginTop: 1 }}
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 8h.01M11 12h1v4h1" />
-              </svg>{" "}
-              Leitura do PDF e interpretação inteligente rodam no backend (Lovable/OpenClaw). O CSV é parseado aqui; a seleção de campos é manual.
-            </div>
+            ) : (
+              <DropZone
+                accept="application/pdf"
+                onFile={handleKitFile}
+                title="Arraste o PDF ou clique para enviar"
+                hint="Só no primeiro acesso · pré-preenche canais, produtos e serviços"
+              />
+            )}
           </div>
-        )}
-      </div>
+
+          <div className="imp-sub">
+            <div className="imp-sub-h">
+              Planilhas & documentos{fontes.length ? <span className="badge"> {fontes.length}</span> : null}
+            </div>
+            {fontes.map((f) => (
+              <div className="file-chip" key={f.id}>
+                <div className="fi">{(f.tipo || "").toUpperCase()}</div>
+                <div>
+                  <b>{f.nome}</b>
+                  <span>
+                    {f.pendente
+                      ? "pendente · interpretação no backend (OpenClaw)"
+                      : `${f.usados} de ${f.campos} campos · ${f.linhas} linhas`}
+                  </span>
+                </div>
+                <button className="x" onClick={() => removeFonte(f.id)} aria-label="Remover" type="button">
+                  ✕
+                </button>
+              </div>
+            ))}
+            {fonteMap ? (
+              <InterpretPanel
+                fonteMap={fonteMap}
+                onCancel={() => setFonteMap(null)}
+                onToggleField={toggleField}
+                onConfirm={confirmFonte}
+              />
+            ) : (
+              <DropZone
+                accept=".csv,.xlsx,.xls,.pdf"
+                onFile={handleFonteFile}
+                title="Arraste CSV, XLSX ou PDF ou clique para enviar"
+                hint="CSV é lido aqui na hora · XLSX e PDF interpretados no backend (OpenClaw)"
+              />
+            )}
+          </div>
+
+          <div className="tfoot-note">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#9A9AA0"
+              strokeWidth={2}
+              style={{ flex: "0 0 14px", marginTop: 1 }}
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8h.01M11 12h1v4h1" />
+            </svg>{" "}
+            Leitura do PDF e interpretação inteligente rodam no backend (Lovable/OpenClaw). O CSV é parseado aqui; a seleção de campos é manual.
+          </div>
+        </div>
+      </PSection>
 
       {/* ===== Ambiente ===== */}
-      <div className="card pad-lg" style={{ marginBottom: 16 }}>
-        <div className="card-head">
-          <div className="t">Ambiente</div>
-        </div>
+      <PSection title="Ambiente" accent="var(--ink)">
         <div className="pm-row">
           <div>
             <label className="field-lbl">Empresa / marca</label>
@@ -327,34 +406,32 @@ export default function PersonalizacaoView() {
             />
           </div>
         </div>
-      </div>
+      </PSection>
 
       {/* ===== Canais trabalhados / Produtos & serviços ===== */}
-      <div className="grid two-col" style={{ marginBottom: 16 }}>
-        <div className="card pad-lg">
-          <div className="card-head">
-            <div className="t">Canais trabalhados</div>
-            <span className="badge">{p.canais.length}</span>
-          </div>
+      <div className="grid two-col psec-grid" style={{ marginBottom: 16 }}>
+        <PSection
+          title="Canais trabalhados"
+          accent="var(--cyan)"
+          meta={<span className="psec-count">{p.canais.length}</span>}
+        >
           <ChipList kind="canais" items={p.canais} onAdd={addChip} onRemove={removeChip} />
-        </div>
-        <div className="card pad-lg">
-          <div className="card-head">
-            <div className="t">Produtos & serviços</div>
-            <span className="badge">{p.produtos.length}</span>
-          </div>
+        </PSection>
+        <PSection
+          title="Produtos & serviços"
+          accent="var(--atencao)"
+          meta={<span className="psec-count">{p.produtos.length}</span>}
+        >
           <ChipList kind="produtos" items={p.produtos} onAdd={addChip} onRemove={removeChip} />
-        </div>
+        </PSection>
       </div>
 
       {/* ===== Relação canais × produtos ===== */}
-      <div className="card pad-lg" style={{ marginBottom: 16 }}>
-        <div className="card-head">
-          <div>
-            <div className="t">Relação canais × produtos</div>
-            <div className="sub">Marque quais canais trabalham cada produto — conecta os dois ambientes acima</div>
-          </div>
-        </div>
+      <PSection
+        title="Relação canais × produtos"
+        sub="Marque quais canais trabalham cada produto — conecta os dois ambientes acima"
+        accent="var(--red)"
+      >
         {p.produtos.length && p.canais.length ? (
           <div className="rel-scroll">
             <table className="rel-tbl">
@@ -391,18 +468,14 @@ export default function PersonalizacaoView() {
         ) : (
           <div className="pm-hint">Adicione canais e produtos acima para relacioná-los.</div>
         )}
-      </div>
+      </PSection>
 
       {/* ===== Redes & canais ===== */}
-      <div className="card pad-lg" style={{ marginBottom: 16 }}>
-        <div className="card-head">
-          <div>
-            <div className="t">Redes & canais</div>
-            <div className="sub">
-              Ative o que você gerencia — conexão via Zernio (OAuth hospedado, 1 clique). Redes sociais habilitam painel.
-            </div>
-          </div>
-        </div>
+      <PSection
+        title="Redes & canais"
+        sub="Ative o que você gerencia — conexão via Zernio (OAuth hospedado, 1 clique). Redes sociais habilitam painel."
+        accent="var(--cyan)"
+      >
         <div className="ind-panel first">
           <div className="ind-h">Social</div>
           {REDES.filter((r) => r.grupo === "social").map((r) => (
@@ -421,16 +494,14 @@ export default function PersonalizacaoView() {
             <RedeToggle key={r.id} rede={r} on={!!redes[r.id]} onToggle={() => toggleRede(r.id)} />
           ))}
         </div>
-      </div>
+      </PSection>
 
       {/* ===== Indicadores dos painéis ===== */}
-      <div className="card pad-lg">
-        <div className="card-head">
-          <div>
-            <div className="t">Indicadores dos painéis</div>
-            <div className="sub">Escolha o que aparece em cada ambiente — clique num painel para expandir</div>
-          </div>
-        </div>
+      <PSection
+        title="Indicadores dos painéis"
+        sub="Escolha o que aparece em cada ambiente — clique num painel para expandir"
+        accent="var(--atencao)"
+      >
         <CfgAccordion
           panel="overview"
           label="Painel"
@@ -493,7 +564,7 @@ export default function PersonalizacaoView() {
           onToggleOpen={() => toggleCfgOpen("metas")}
           onToggleInd={togglePanelInd}
         />
-      </div>
+      </PSection>
     </>
   );
 }
