@@ -1,164 +1,151 @@
 "use client";
-// Portado de viewPersona (blueprint 1517-1598). Personas, receita por produto,
-// carrossel estilo Tinder e insights estratégicos. Dados em lib/seed-data.
-import { useStore } from "@/lib/store";
-import {
-  PERSONA_KPIS,
-  PERSONA_PRODUTOS,
-  PERSONAS,
-  PERSONA_INSIGHTS,
-} from "@/lib/seed-data";
-import { Card, KpiCard, PageHead } from "@/components/ui";
-import { Ic } from "@/components/Ic";
+// Persona & Público — CRUD por workspace (persistido). Começa vazio.
+// Portado de viewPersona (blueprint 1517-1598), simplificado para cards editáveis.
+import { useStore, newId, type PersonaItem } from "@/lib/store";
+import { Card, PageHead } from "@/components/ui";
 
-const INSIGHT_COLORS = ["var(--red)", "var(--cyan)", "var(--excelente)", "var(--atencao)"];
+function PersonaCard({ p }: { p: PersonaItem }) {
+  const update = useStore((s) => s.updatePersona);
+  const remove = useStore((s) => s.removePersona);
+
+  const setDor = (idx: number, v: string) =>
+    update(p.id, { dores: p.dores.map((d, i) => (i === idx ? v : d)) });
+  const addDor = () => update(p.id, { dores: [...p.dores, ""] });
+  const rmDor = (idx: number) => update(p.id, { dores: p.dores.filter((_, i) => i !== idx) });
+
+  const setStat = (idx: number, col: 0 | 1, v: string) =>
+    update(p.id, {
+      stats: p.stats.map((s, i) => (i === idx ? ((col === 0 ? [v, s[1]] : [s[0], v]) as [string, string]) : s)),
+    });
+  const addStat = () => update(p.id, { stats: [...p.stats, ["", ""] as [string, string]] });
+  const rmStat = (idx: number) => update(p.id, { stats: p.stats.filter((_, i) => i !== idx) });
+
+  return (
+    <div className="card ptinder" style={{ marginBottom: 12 }}>
+      <div className="pt-photo" style={{ background: p.cover || "linear-gradient(120deg,#121111,#3a3a3a)" }}>
+        {p.foto && (
+          <img key={p.foto} src={p.foto} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+        )}
+        <span className="pt-emoji">{p.emoji}</span>
+        <div className="pt-photoedit">
+          <input
+            value={p.foto || ""}
+            placeholder="colar URL da foto da persona"
+            autoComplete="off"
+            onChange={(e) => update(p.id, { foto: e.target.value })}
+          />
+        </div>
+      </div>
+      <div className="pt-body">
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button className="btn-link" onClick={() => remove(p.id)} title="Remover persona">✕ Remover</button>
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">Tag</div>
+          <input className="field-edit" value={p.tag} placeholder="P0 · Marca" onChange={(e) => update(p.id, { tag: e.target.value })} />
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">Nome</div>
+          <input className="field-edit" value={p.nome} placeholder="Nome da persona" onChange={(e) => update(p.id, { nome: e.target.value })} />
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">Handle</div>
+          <input className="field-edit" value={p.handle} placeholder="@handle" onChange={(e) => update(p.id, { handle: e.target.value })} />
+        </div>
+        <div className="pt-sec" style={{ display: "flex", gap: 8 }}>
+          <div style={{ width: 90 }}>
+            <div className="pt-l">Emoji</div>
+            <input className="field-edit" value={p.emoji} placeholder="🚀" onChange={(e) => update(p.id, { emoji: e.target.value })} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div className="pt-l">Cover (CSS)</div>
+            <input className="field-edit" value={p.cover} placeholder="linear-gradient(...)" onChange={(e) => update(p.id, { cover: e.target.value })} />
+          </div>
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">Quem representa</div>
+          <textarea className="field-edit" value={p.representa} rows={2} onChange={(e) => update(p.id, { representa: e.target.value })} />
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">O que comunica</div>
+          <textarea className="field-edit" value={p.comunica} rows={2} onChange={(e) => update(p.id, { comunica: e.target.value })} />
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">Dores</div>
+          <div className="pt-dores" style={{ marginBottom: 6 }}>
+            {p.dores.map((d, j) => (
+              <span key={j} className="chip-rm">
+                <input
+                  value={d}
+                  placeholder="dor"
+                  autoComplete="off"
+                  onChange={(e) => setDor(j, e.target.value)}
+                  style={{ border: 0, background: "transparent", font: "inherit", fontSize: "12.5px", width: `${Math.max(6, d.length)}ch` }}
+                />
+                <button onClick={() => rmDor(j)} aria-label="Remover dor">✕</button>
+              </span>
+            ))}
+          </div>
+          <button className="btn-link" onClick={addDor}>＋ Dor</button>
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">Canais</div>
+          <input className="field-edit" value={p.canais} onChange={(e) => update(p.id, { canais: e.target.value })} />
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">Gatilho de conversão</div>
+          <input className="field-edit" value={p.gatilho} onChange={(e) => update(p.id, { gatilho: e.target.value })} />
+        </div>
+        <div className="pt-sec">
+          <div className="pt-l">Stats</div>
+          {p.stats.map((a, j) => (
+            <div key={j} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+              <input className="field-edit" value={a[0]} placeholder="valor" onChange={(e) => setStat(j, 0, e.target.value)} style={{ width: 120 }} />
+              <input className="field-edit" value={a[1]} placeholder="rótulo" onChange={(e) => setStat(j, 1, e.target.value)} />
+              <button className="btn-link" onClick={() => rmStat(j)} aria-label="Remover stat">✕</button>
+            </div>
+          ))}
+          <button className="btn-link" onClick={addStat}>＋ Stat</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PersonaView() {
-  const personaIdx = useStore((s) => s.personaIdx);
-  const personaPhotos = useStore((s) => s.personaPhotos);
-  const set = useStore((s) => s.set);
+  const personas = useStore((s) => s.personas);
+  const addPersona = useStore((s) => s.addPersona);
 
-  const N = PERSONAS.length;
-  const i = Math.min(personaIdx || 0, N - 1);
-  const p = PERSONAS[i];
-  const photo = personaPhotos[i];
+  const add = () =>
+    addPersona({
+      id: newId("persona"), tag: "", handle: "", emoji: "✨", cover: "linear-gradient(120deg,#121111,#3a3a3a)",
+      nome: "Nova persona", representa: "", comunica: "", dores: [], canais: "", gatilho: "", stats: [],
+      ordem: personas.length,
+    });
 
   return (
     <>
       <PageHead
         eyebrow="Estratégia · Inteligência de Personas"
         title="Persona & Público"
-        desc="Do estudo compartilhado (Conexa + Chatwoot + ClickUp CRM · extração 07/2026). Dois níveis: persona de marca (P0) e personas de conversão por produto (P1–P4)."
+        desc="Personas de marca e de conversão do seu público. Crie, edite e remova — tudo salvo neste workspace."
+        right={<button className="btn-link" onClick={add}>＋ Adicionar</button>}
       />
 
-      <div className="grid kpis" style={{ marginBottom: 16 }}>
-        {PERSONA_KPIS.map(([l, v, f]) => (
-          <KpiCard key={l} lbl={l} val={v} foot={f} />
-        ))}
-      </div>
-
-      <Card padLg style={{ marginBottom: 16 }}>
-        <div className="card-head">
-          <div>
-            <div className="t">Receita por produto</div>
-            <div className="sub">a receita está na Sala; o EF é volume e porta de entrada</div>
-          </div>
+      {personas.length === 0 ? (
+        <div className="empty">
+          <div className="e-ico" style={{ fontSize: 22 }}>🧑‍🤝‍🧑</div>
+          <h3>Nenhuma persona ainda</h3>
+          <p>Mapeie quem é o seu público — quem representa, o que comunica, dores, canais e gatilhos de conversão.</p>
+          <button className="btn-link" onClick={add}>＋ Adicionar persona</button>
         </div>
-        {PERSONA_PRODUTOS.map(([n, c, m, d]) => (
-          <div key={n} className="bar-row" style={{ gridTemplateColumns: "180px 90px 110px 1fr" }}>
-            <div className="k">{n}</div>
-            <div className="v tnum" style={{ textAlign: "left" }}>{c}</div>
-            <div className="v tnum" style={{ textAlign: "left" }}>{m}</div>
-            <div style={{ fontSize: "11.5px", color: "var(--label-3)" }}>{d}</div>
-          </div>
-        ))}
-      </Card>
-
-      <div className="card ptinder" style={{ marginBottom: 6 }}>
-        <div className="pt-photo" style={{ background: p.cover }}>
-          {photo && (
-            <img
-              key={photo}
-              src={photo}
-              alt=""
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          )}
-          <span className="pt-emoji">{p.emoji}</span>
-          <div className="pt-photoedit">
-            <input
-              value={photo || ""}
-              placeholder="colar URL da foto da persona"
-              autoComplete="off"
-              onChange={(e) => set({ personaPhotos: { ...personaPhotos, [i]: e.target.value } })}
-            />
-          </div>
-        </div>
-        <div className="pt-body">
-          <div>
-            <div className="pt-tag">{p.tag}</div>
-            <h3 className="pt-name">{p.name}</h3>
-            <div className="pt-handle">{p.handle}</div>
-          </div>
-          <div className="pt-sec">
-            <div className="pt-l">Quem representa</div>
-            <p>{p.representa}</p>
-          </div>
-          <div className="pt-sec">
-            <div className="pt-l">O que comunica</div>
-            <p>{p.comunica}</p>
-          </div>
-          <div className="pt-sec">
-            <div className="pt-l">Dores</div>
-            <div className="pt-dores">
-              {p.dores.map((d, j) => (
-                <span key={j} className="pt-dore">{d}</span>
-              ))}
-            </div>
-          </div>
-          <div className="pt-sec">
-            <div className="pt-l">Canais</div>
-            <p>{p.canais}</p>
-          </div>
-          <div className="pt-sec">
-            <div className="pt-l">Gatilho de conversão</div>
-            <p>{p.gatilho}</p>
-          </div>
-          <div className="pt-stats">
-            {p.stats.map((a, j) => (
-              <div key={j} className="pt-stat">
-                <b>{a[0]}</b>
-                <span>{a[1]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="pt-nav">
-        <button onClick={() => set({ personaIdx: (i - 1 + N) % N })} aria-label="Persona anterior">‹</button>
-        <div className="pt-dots">
-          {PERSONAS.map((_, j) => (
-            <button
-              key={j}
-              className={`pt-dot ${j === i ? "on" : ""}`}
-              onClick={() => set({ personaIdx: j })}
-              aria-label={`Persona ${j + 1}`}
-            />
+      ) : (
+        <Card padLg>
+          {personas.map((p) => (
+            <PersonaCard key={p.id} p={p} />
           ))}
-        </div>
-        <button onClick={() => set({ personaIdx: (i + 1) % N })} aria-label="Próxima persona">›</button>
-      </div>
-
-      <Card padLg>
-        <div className="card-head">
-          <div>
-            <div className="t">Insights estratégicos</div>
-            <div className="sub">reordenados por alavanca de resultado</div>
-          </div>
-        </div>
-        {PERSONA_INSIGHTS.map(([t, d], idx) => (
-          <div key={idx} className="insight" style={{ marginBottom: idx < PERSONA_INSIGHTS.length - 1 ? 10 : 0 }}>
-            <div className="ib" style={{ background: INSIGHT_COLORS[idx] }}>
-              <Ic name="goal" />
-            </div>
-            <p>
-              <b>{t}.</b> {d}
-            </p>
-          </div>
-        ))}
-      </Card>
-      <Card style={{ marginTop: 16 }}>
-        <div className="insight" style={{ border: 0, background: "transparent", padding: 0 }}>
-          <div className="ib" style={{ background: "var(--atencao)" }}>
-            <Ic name="persona" />
-          </div>
-          <p>
-            <b>Higiene de base é prioridade:</b> 45% do Conexa e 96% do CRM sem ramo informado. Lead com segmento conhecido converte 80%+; sem segmento, 28,8%. Capturar o segmento no primeiro toque vale mais que qualquer criativo novo.
-          </p>
-        </div>
-      </Card>
+        </Card>
+      )}
     </>
   );
 }

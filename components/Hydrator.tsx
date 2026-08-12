@@ -3,7 +3,7 @@
 // Tolerante a falha: sem banco, o fetch falha silenciosamente e a app segue com o seed.
 import { useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { fetchAll, saveConfig, savePerfil, saveOkr, savePosts } from "@/lib/api";
+import { fetchAll, saveConfig, savePerfil, saveOkr, savePosts, savePersonas, saveConcorrentes } from "@/lib/api";
 
 export function Hydrator() {
   useEffect(() => {
@@ -33,6 +33,8 @@ export function Hydrator() {
         if (s.perfil !== p.perfil) debounce("perfil", () => savePerfil(useStore.getState()));
         if (s.okr !== p.okr) debounce("okr", () => saveOkr(useStore.getState()));
         if (s.posts !== p.posts) debounce("posts", () => savePosts(useStore.getState()));
+        if (s.personas !== p.personas) debounce("personas", () => savePersonas(useStore.getState()));
+        if (s.concorrentes !== p.concorrentes) debounce("concorrentes", () => saveConcorrentes(useStore.getState()));
       });
     })();
 

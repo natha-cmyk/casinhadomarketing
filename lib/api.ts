@@ -24,16 +24,20 @@ export interface HydrationData {
   perfil: UIState["perfil"] | null;
   okr: { objetivo: string; areas: { id: string; nome: string; krs: { id: string; kr: string; alvo: string; un: string; tag: string; resp: string }[] }[] } | null;
   posts: { posts: UIState["posts"] } | null;
+  personas: { personas: UIState["personas"] } | null;
+  concorrentes: { concorrentes: UIState["concorrentes"] } | null;
 }
 
 export async function fetchAll(): Promise<HydrationData> {
-  const [config, perfil, okr, posts] = await Promise.all([
+  const [config, perfil, okr, posts, personas, concorrentes] = await Promise.all([
     getJSON<HydrationData["config"]>("/api/config"),
     getJSON<HydrationData["perfil"]>("/api/perfil"),
     getJSON<HydrationData["okr"]>("/api/okr"),
     getJSON<HydrationData["posts"]>("/api/posts"),
+    getJSON<HydrationData["personas"]>("/api/personas"),
+    getJSON<HydrationData["concorrentes"]>("/api/concorrentes"),
   ]);
-  return { config, perfil, okr, posts };
+  return { config, perfil, okr, posts, personas, concorrentes };
 }
 
 export function saveConfig(s: UIState) {
@@ -50,4 +54,10 @@ export function saveOkr(s: UIState) {
 }
 export function savePosts(s: UIState) {
   return putJSON("/api/posts", { posts: s.posts });
+}
+export function savePersonas(s: UIState) {
+  return putJSON("/api/personas", { personas: s.personas });
+}
+export function saveConcorrentes(s: UIState) {
+  return putJSON("/api/concorrentes", { concorrentes: s.concorrentes });
 }

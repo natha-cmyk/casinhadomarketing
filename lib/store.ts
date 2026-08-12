@@ -18,6 +18,20 @@ export interface Okr { objetivo: string; areas: AreaItem[] }
 // ── Post do calendário (mesma forma do blueprint; y/m/d) ──
 export interface PostItem extends SeedPost {}
 
+// ── Persona editável (persistida por workspace) ──
+export interface PersonaItem {
+  id: string; tag: string; handle: string; emoji: string; cover: string; nome: string;
+  representa: string; comunica: string; dores: string[]; canais: string; gatilho: string;
+  stats: [string, string][]; foto?: string; ordem: number;
+}
+
+// ── Concorrente editável (persistido por workspace) ──
+export interface ConcItem {
+  id: string; nome: string; ig: string; linkedin: boolean; youtube: boolean;
+  dominio?: string; categoria: "espaco" | "marca" | "certificado" | "cobranca";
+  iconOverride?: string; ordem: number;
+}
+
 // ── Fonte de dados importada ──
 export interface FonteItem { id: string; nome: string; tipo: "csv" | "xlsx" | "pdf"; campos: number; usados: number; linhas: number; pendente: boolean }
 export interface FonteMap {
@@ -55,6 +69,7 @@ export interface UIState {
   postModal: { mode: "new" | "edit"; id?: string; y: number; m: number; d: number } | null;
   // dados editáveis (persistidos no Bloco 4)
   okr: Okr; posts: PostItem[]; fontes: FonteItem[]; fonteMap: FonteMap | null; perfil: Perfil;
+  personas: PersonaItem[]; concorrentes: ConcItem[];
   hydrated: boolean;
   // contas conectadas na Zernio (do profile do workspace)
   zernioAccounts: { _id: string; platform: string; followersCount?: number; displayName?: string }[];
@@ -66,6 +81,8 @@ export interface UIState {
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
+    personas: { personas: PersonaItem[] } | null;
+    concorrentes: { concorrentes: ConcItem[] } | null;
   }) => void;
   // escopo
   setPeriod: (p: Period) => void; setYear: (y: number) => void; setMonth: (m: number) => void;
@@ -85,6 +102,12 @@ export interface UIState {
   // posts
   addPost: (p: PostItem) => void; updatePost: (id: string, patch: Partial<PostItem>) => void;
   deletePost: (id: string) => void;
+  // personas
+  addPersona: (p: PersonaItem) => void; updatePersona: (id: string, patch: Partial<PersonaItem>) => void;
+  removePersona: (id: string) => void;
+  // concorrentes
+  addConc: (c: ConcItem) => void; updateConc: (id: string, patch: Partial<ConcItem>) => void;
+  removeConc: (id: string) => void;
   // perfil
   setPerfil: (patch: Partial<Perfil>) => void; toggleRelacao: (key: string) => void;
   addChip: (field: "canais" | "produtos", v: string) => void;
@@ -108,6 +131,7 @@ export const useStore = create<UIState>((set) => ({
   postModal: null,
   okr: { objetivo: "", areas: [] },
   posts: [],
+  personas: [], concorrentes: [],
   fontes: [], fonteMap: null,
   perfil: { empresa: "", segmento: "", cidade: "", site: "", canais: [], produtos: [], relacao: {} },
   hydrated: false,
@@ -127,6 +151,8 @@ export const useStore = create<UIState>((set) => ({
       if (d.perfil) patch.perfil = d.perfil;
       if (d.okr && d.okr.areas) patch.okr = d.okr;
       if (d.posts && Array.isArray(d.posts.posts)) patch.posts = d.posts.posts;
+      if (d.personas && Array.isArray(d.personas.personas)) patch.personas = d.personas.personas;
+      if (d.concorrentes && Array.isArray(d.concorrentes.concorrentes)) patch.concorrentes = d.concorrentes.concorrentes;
       return patch;
     }),
   setPeriod: (p) => set({ period: p }),
@@ -186,6 +212,14 @@ export const useStore = create<UIState>((set) => ({
   addPost: (p) => set((s) => ({ posts: [...s.posts, p] })),
   updatePost: (id, patch) => set((s) => ({ posts: s.posts.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
   deletePost: (id) => set((s) => ({ posts: s.posts.filter((p) => p.id !== id) })),
+
+  addPersona: (p) => set((s) => ({ personas: [...s.personas, p] })),
+  updatePersona: (id, patch) => set((s) => ({ personas: s.personas.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
+  removePersona: (id) => set((s) => ({ personas: s.personas.filter((p) => p.id !== id) })),
+
+  addConc: (c) => set((s) => ({ concorrentes: [...s.concorrentes, c] })),
+  updateConc: (id, patch) => set((s) => ({ concorrentes: s.concorrentes.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
+  removeConc: (id) => set((s) => ({ concorrentes: s.concorrentes.filter((c) => c.id !== id) })),
 
   setPerfil: (patch) => set((s) => ({ perfil: { ...s.perfil, ...patch } })),
   toggleRelacao: (key) => set((s) => ({ perfil: { ...s.perfil, relacao: { ...s.perfil.relacao, [key]: !s.perfil.relacao[key] } } })),
