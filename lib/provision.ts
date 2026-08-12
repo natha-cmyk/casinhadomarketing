@@ -3,7 +3,11 @@ import { createProfile } from "@/lib/zernio";
 
 // Emails que representam a Seahub → reaproveitam o profile Zernio "Default"
 // (que já tem IG/FB/Meta Ads conectados). Demais cadastros ganham profile novo.
-const SEAHUB_EMAILS = ["jose@seahubcoworking.com.br"];
+// Configurável via env SEAHUB_EMAILS (lista separada por vírgula).
+const SEAHUB_EMAILS = (process.env.SEAHUB_EMAILS || "seahub@seahubcoworking.page")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
 
 // Garante User + Workspace + profile Zernio + Membership + ambiente vazio.
 // Idempotente: se já existe membership, retorna o workspace.
