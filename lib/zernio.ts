@@ -29,11 +29,33 @@ async function zernio<T>(path: string, init?: RequestInit): Promise<T> {
 export interface ZernioAccount {
   _id: string;
   platform: string;
+  profileId?: { _id: string; name?: string } | string;
+  followersCount?: number;
+  displayName?: string;
+  [k: string]: unknown;
 }
 
-// GET /accounts — contas conectadas ao profile da chave
-export function listAccounts() {
-  return zernio<{ accounts: ZernioAccount[] }>("/accounts");
+// GET /accounts — contas conectadas (opcionalmente filtradas por profile)
+export async function listAccounts(profileId?: string) {
+  const qs = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
+  const data = await zernio<{ accounts: ZernioAccount[] }>(`/accounts${qs}`);
+  // filtro defensivo por profile (caso a API não filtre no server)
+  if (profileId) {
+    data.accounts = data.accounts.filter((a) => {
+      const p = a.profileId;
+      const id = typeof p === "string" ? p : p?._id;
+      return !id || id === profileId;
+    });
+  }
+  return data;
+}
+
+// POST /profiles — cria um profile (1 por workspace). Retorna profile._id
+export function createProfile(name: string, description?: string) {
+  return zernio<{ message: string; profile: { _id: string; name: string } }>("/profiles", {
+    method: "POST",
+    body: JSON.stringify({ name, description }),
+  });
 }
 
 // GET /connect/{platform}?profileId= — URL de OAuth hospedado p/ conectar conta
@@ -43,5 +65,32 @@ export function connectUrl(platform: string, profileId?: string) {
   return zernio<{ authUrl: string }>(`/connect/${encodeURIComponent(platform)}${qs}`);
 }
 
-// TODO(zernio): GET /analytics (ligar nos painéis) e POST /posts (publish do calendário)
-// — confirmar shape de resposta do /analytics antes de mapear.
+// GET /analytics/{platform}/account-insights — séries por conta (máx 90 dias)
+export interface AnalyticsMetric {
+  total: number;
+  values: { date: string; value: number }[];
+  unit?: string;
+  currency?: string;
+}
+export interface AnalyticsResponse {
+  success: boolean;
+  accountId: string;
+  platform: string;
+  dateRange: { since: string; until: string };
+  metricType: string;
+  metrics: Record<string, AnalyticsMetric>;
+  unavailableMetrics?: string[];
+}
+export function accountInsights(
+  platform: string,
+  accountId: string,
+  opts?: { metrics?: string; since?: string; until?: string }
+) {
+  const q = new URLSearchParams({ accountId });
+  if (opts?.metrics) q.set("metrics", opts.metrics);
+  if (opts?.since) q.set("since", opts.since);
+  if (opts?.until) q.set("until", opts.until);
+  return zernio<AnalyticsResponse>(`/analytics/${encodeURIComponent(platform)}/account-insights?${q.toString()}`);
+}
+
+// TODO(zernio): POST /posts (publish do calendário) — {content, scheduledFor, timezone, platforms:[{platform,accountId}]}

@@ -467,3 +467,22 @@ svg.chartI{cursor:crosshair}
 .persona-stat:last-child{border-right:0}
 .persona-stat b{display:block;font-size:14px;font-weight:700;letter-spacing:-.01em}
 .persona-stat span{font-size:10px;color:var(--label-3)}
+
+/* ===== Auth (login/cadastro) ===== */
+.auth-wrap{min-height:100dvh;display:grid;place-items:center;padding:24px;background:var(--surface)}
+.auth-card{background:#fff;border:1px solid var(--hairline);border-radius:16px;box-shadow:var(--shadow-pop);padding:34px 32px;width:min(400px,100%);text-align:center}
+.auth-mark{width:48px;height:48px;border-radius:13px;margin:0 auto 16px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:22px;background:linear-gradient(135deg,#FF001E,#00BBC5)}
+.auth-title{font-size:22px;font-weight:800;letter-spacing:-.4px;margin:0 0 4px}
+.auth-sub{font-size:13px;color:var(--label-2);margin:0 0 22px}
+.auth-form{display:flex;flex-direction:column;gap:4px;text-align:left}
+.auth-form .field-lbl{margin-top:10px}
+.auth-btn{justify-content:center;margin-top:18px;padding:11px;font-size:14px}
+.auth-err{margin-top:12px;font-size:12.5px;color:#c60018;background:rgba(255,0,30,.08);border-radius:8px;padding:8px 11px}
+.auth-ok{margin-top:12px;font-size:12.5px;color:#0f7a37;background:rgba(47,180,87,.1);border-radius:8px;padding:8px 11px}
+.auth-alt{font-size:13px;color:var(--label-2);margin:18px 0 0}
+.auth-alt a{color:var(--cyan);font-weight:650;text-decoration:none}
+.auth-foot{font-size:11px;color:var(--label-3);margin-top:20px;padding-top:16px;border-top:1px solid var(--hairline)}
+.sb-foot.acct{gap:8px}
+.acct-email{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--label-2);font-weight:500}
+.acct-sair{border:1px solid var(--hairline-2);background:#fff;border-radius:7px;padding:3px 10px;font-size:11px;font-weight:650;color:var(--label-2);cursor:pointer}
+.acct-sair:hover{background:var(--surface);color:var(--red)}

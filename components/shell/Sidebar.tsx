@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { NAV, SOCIAL_IDS, pathForView, viewForPath } from "@/lib/nav";
 import { useStore } from "@/lib/store";
 import { Ic } from "../Ic";
+import { AccountFooter } from "../AccountFooter";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -76,10 +77,7 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="sb-foot">
-        <span className="dot" />
-        Prévia · dados reais via Zernio
-      </div>
+      <AccountFooter />
     </aside>
   );
 }

@@ -1,10 +1,13 @@
-// EnvConfig (singleton "main"): redes / paineis / contas / cfgOpen / impOpen.
+// EnvConfig do workspace ativo: redes / paineis / contas / cfgOpen / impOpen.
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceId } from "@/lib/auth";
 
 export async function GET() {
   try {
-    const c = await prisma.envConfig.findUnique({ where: { id: "main" } });
+    const ws = await getActiveWorkspaceId();
+    if (!ws) return NextResponse.json(null, { status: 401 });
+    const c = await prisma.envConfig.findUnique({ where: { workspaceId: ws } });
     return NextResponse.json(c);
   } catch {
     return NextResponse.json(null, { status: 503 });
@@ -13,6 +16,8 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
+    const ws = await getActiveWorkspaceId();
+    if (!ws) return NextResponse.json({ error: "unauth" }, { status: 401 });
     const b = await req.json();
     const data = {
       redes: b.redes ?? {},
@@ -22,8 +27,8 @@ export async function PUT(req: Request) {
       impOpen: !!b.impOpen,
     };
     const c = await prisma.envConfig.upsert({
-      where: { id: "main" },
-      create: { id: "main", ...data },
+      where: { workspaceId: ws },
+      create: { workspaceId: ws, ...data },
       update: data,
     });
     return NextResponse.json(c);

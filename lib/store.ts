@@ -4,7 +4,7 @@
 // hidratará estas fatias a partir do banco (hoje semeadas de lib/seed-data).
 import { create } from "zustand";
 import { CUR_YEAR, CUR_MONTH, quarterOf, type Period } from "./scope";
-import { OKR2026, POSTS_SEED, PERFIL_DEFAULT, type SeedPost } from "./seed-data";
+import { type SeedPost } from "./seed-data";
 
 export interface Cmp {
   period: Period; year: number; month: number; week: number; quarter: number;
@@ -34,17 +34,6 @@ export interface Perfil {
 
 let __id = 0;
 const uid = (p: string) => `${p}_${++__id}`;
-
-function seedOkr(): Okr {
-  return {
-    objetivo: OKR2026.objetivo,
-    areas: OKR2026.areas.map((a) => ({
-      id: uid("area"),
-      nome: a.area,
-      krs: a.krs.map((k) => ({ id: uid("kr"), kr: k.kr, alvo: k.alvo, un: k.un, tag: k.tag, resp: k.resp })),
-    })),
-  };
-}
 
 export interface UIState {
   // escopo temporal
@@ -108,20 +97,17 @@ export const useStore = create<UIState>((set) => ({
   adsMetric: "receita", adsPlat: "todos", canaisView: "lista", concProd: "geral",
   igProfile: "seahub", ufFeriado: "RN",
   ind: { seguidores: true, atividades: true, splitFollowers: true, organico: true },
-  redes: { instagram: true, tiktok: false, linkedin: false, youtube: false },
-  contas: { instagram: true, tiktok: false, linkedin: false, youtube: false },
+  redes: {},
+  contas: {},
   paineis: {}, cfgOpen: {}, impOpen: false,
   agentOpen: false, agentMsgs: {},
   metasEdit: false, personaIdx: 0, personaPhotos: {}, compIcons: {}, compEdit: null,
   calCanal: "todos", calPerfil: "todos", calCV: "todos", calMonth: CUR_MONTH, calYear: CUR_YEAR,
   postModal: null,
-  okr: seedOkr(),
-  posts: POSTS_SEED.map((p) => ({ ...p })),
+  okr: { objetivo: "", areas: [] },
+  posts: [],
   fontes: [], fonteMap: null,
-  perfil: {
-    empresa: PERFIL_DEFAULT.empresa, segmento: PERFIL_DEFAULT.segmento, cidade: PERFIL_DEFAULT.cidade,
-    site: PERFIL_DEFAULT.site, canais: [...PERFIL_DEFAULT.canais], produtos: [...PERFIL_DEFAULT.produtos], relacao: {},
-  },
+  perfil: { empresa: "", segmento: "", cidade: "", site: "", canais: [], produtos: [], relacao: {} },
   hydrated: false,
 
   set: (patch) => set(patch),

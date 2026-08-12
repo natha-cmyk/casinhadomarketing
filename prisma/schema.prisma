@@ -1,7 +1,6 @@
-// schema.prisma — Casinha do Marketing (Seahub)
-// Postgres no EasyPanel. Singletons usam id fixo "main" (sempre upsert por esse id).
-// Dados read-mostly (Instagram mensal, ADS, CANAIS, LEADS_M, MRR) ficam em lib/seed-data.ts,
-// não em tabela — só o que o usuário edita é persistido aqui.
+// schema.prisma — Casinha do Marketing (Seahub) · MULTI-TENANT
+// Supabase Postgres. Auth pelo Supabase (auth.users). Aqui espelhamos o User por id (uuid)
+// e escopamos TUDO por workspaceId. Cada workspace = um profile na Zernio (zernioProfileId).
 
 generator client {
   provider = "prisma-client-js"
@@ -10,38 +9,85 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  // Supabase: url = pooler (porta 6543, pgbouncer=true); directUrl = conexão direta
-  // (porta 5432) usada por prisma migrate. Postgres simples: aponte os dois para o mesmo.
   directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────────────────────────────────────────
-// Configuração do ambiente (singleton id="main")
+// Auth / Tenancy
 // ─────────────────────────────────────────────────────────────
-model EnvConfig {
-  id       String @id @default("main")
-  redes    Json   @default("{\"instagram\":true}") // { redeId: bool } — quais redes/canais estão ativos
-  paineis  Json   @default("{}")                   // { painel: { indicadorId: bool } } — visibilidade de indicadores
-  contas   Json   @default("{\"instagram\":true}") // { redeId: bool } — contas conectadas p/ publish (social+conversas)
-  cfgOpen  Json   @default("{}")                   // { painel: bool } — acordeões abertos (UI, opcional)
-  impOpen  Boolean @default(false)                 // "Importe seus dados" aberto (UI, opcional)
-  updatedAt DateTime @updatedAt
+model User {
+  id          String       @id // = auth.users.id (uuid do Supabase)
+  email       String       @unique
+  nome        String       @default("")
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+}
+
+model Workspace {
+  id              String        @id @default(cuid())
+  nome            String
+  zernioProfileId String? // profile da Zernio (contas conectadas deste workspace)
+  createdAt       DateTime      @default(now())
+  memberships     Membership[]
+  envConfig       EnvConfig?
+  perfil          Perfil?
+  objetivo        Objetivo?
+  posts           Post[]
+  areas           Area[]
+  personas        Persona[]
+  concorrentes    Concorrente[]
+  fontes          Fonte[]
+}
+
+enum Role {
+  owner
+  member
+}
+
+model Membership {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        Role      @default(member)
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
 }
 
 // ─────────────────────────────────────────────────────────────
-// Perfil / Ambiente (singleton id="main")
+// Configuração do ambiente (1 por workspace)
+// ─────────────────────────────────────────────────────────────
+model EnvConfig {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  redes       Json      @default("{}") // { redeId: bool }
+  paineis     Json      @default("{}") // { painel: { indId: bool } }
+  contas      Json      @default("{}") // { redeId: { on, accountId } } — contas Zernio conectadas
+  cfgOpen     Json      @default("{}")
+  impOpen     Boolean   @default(false)
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────
+// Perfil / Ambiente (1 por workspace)
 // ─────────────────────────────────────────────────────────────
 model Perfil {
-  id         String   @id @default("main")
-  empresa    String   @default("Seahub Coworking")
-  segmento   String   @default("")
-  cidade     String   @default("")
-  site       String   @default("")
-  canais     String[] @default([]) // canais trabalhados (chips)
-  produtos   String[] @default([]) // produtos & serviços (chips)
-  relacao    Json     @default("{}") // { "canal|produto": true } — matriz canais × produtos
-  kitArquivo String?  // nome do PDF do kit do Panteão importado (extração no backend)
-  updatedAt  DateTime @updatedAt
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  empresa     String    @default("")
+  segmento    String    @default("")
+  cidade      String    @default("")
+  site        String    @default("")
+  canais      String[]  @default([])
+  produtos    String[]  @default([])
+  relacao     Json      @default("{}")
+  kitArquivo  String?
+  updatedAt   DateTime  @updatedAt
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -55,33 +101,34 @@ enum PostStatus {
 }
 
 model Post {
-  id        String     @id @default(cuid())
-  data      DateTime   // dia agendado/publicado (usar só a data)
-  hora      String     @default("09:00") // "HH:MM"
-  titulo    String
-  canal     String     // Instagram | WhatsApp (grupos) | Lista de transmissão | Blog | ...
-  perfil    String     // Seahub | Seabox | Hub Empreendedoras
-  colab     String     @default("") // perfil colaborador (aparece nos dois perfis)
-  pilar     String     @default("")
-  formato   String     @default("")
-  funil     String     @default("")
-  legenda   String     @default("")
-  cta       String     @default("")
-  hashtags  String     @default("")
-  arquivo   String     @default("") // nome do arquivo de capa/mídia
-  status    PostStatus @default(rascunho)
-  contas    String[]   @default([]) // redes-alvo p/ publicar (ids de rede conectada)
-  // futuro (Zernio): zernioPostId, scheduledFor, publishedAt, errorMsg
+  id           String     @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  data         DateTime
+  hora         String     @default("09:00")
+  titulo       String
+  canal        String
+  perfil       String
+  colab        String     @default("")
+  pilar        String     @default("")
+  formato      String     @default("")
+  funil        String     @default("")
+  legenda      String     @default("")
+  cta          String     @default("")
+  hashtags     String     @default("")
+  arquivo      String     @default("")
+  status       PostStatus @default(rascunho)
+  contas       String[]   @default([])
   zernioPostId String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  @@index([data])
+  @@index([workspaceId, data])
   @@index([status])
 }
 
 // ─────────────────────────────────────────────────────────────
-// Fontes de dados importadas (Personalização → Importe seus dados)
+// Fontes de dados importadas
 // ─────────────────────────────────────────────────────────────
 enum FonteTipo {
   csv
@@ -90,89 +137,104 @@ enum FonteTipo {
 }
 
 model Fonte {
-  id        String    @id @default(cuid())
-  nome      String
-  tipo      FonteTipo
-  campos    Int       @default(0) // nº de campos detectados
-  usados    Int       @default(0) // nº de campos escolhidos
-  linhas    Int       @default(0)
-  pendente  Boolean   @default(false) // xlsx/pdf: interpretação no backend/OpenClaw
-  camposMap Json      @default("[]")  // opcional: [{nome,tipo,usar}] do CSV
-  createdAt DateTime  @default(now())
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nome        String
+  tipo        FonteTipo
+  campos      Int       @default(0)
+  usados      Int       @default(0)
+  linhas      Int       @default(0)
+  pendente    Boolean   @default(false)
+  camposMap   Json      @default("[]")
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
 }
 
 // ─────────────────────────────────────────────────────────────
 // OKR / Metas
 // ─────────────────────────────────────────────────────────────
 model Objetivo {
-  id    String @id @default("main")
-  texto String @default("")
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  texto       String    @default("")
+  updatedAt   DateTime  @updatedAt
 }
 
 model Area {
-  id    String @id @default(cuid())
-  nome  String
-  ordem Int    @default(0)
-  krs   KR[]
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nome        String
+  ordem       Int       @default(0)
+  krs         KR[]
+
+  @@index([workspaceId])
 }
 
 model KR {
-  id     String @id @default(cuid())
-  areaId String
-  area   Area   @relation(fields: [areaId], references: [id], onDelete: Cascade)
-  kr     String @default("")
-  alvo   String @default("")
-  un     String @default("")
-  tag    String @default("")
-  resp   String @default("")
-  ordem  Int    @default(0)
-  // futuro (acompanhamento mensal): realizado, progresso
+  id        String  @id @default(cuid())
+  areaId    String
+  area      Area    @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  kr        String  @default("")
+  alvo      String  @default("")
+  un        String  @default("")
+  tag       String  @default("")
+  resp      String  @default("")
+  ordem     Int     @default(0)
   realizado String?
 
   @@index([areaId])
 }
 
 // ─────────────────────────────────────────────────────────────
-// Personas (Persona & Público)
+// Personas
 // ─────────────────────────────────────────────────────────────
 model Persona {
-  id        String   @id @default(cuid())
-  tag       String   // "P0 · Marca", "P1 · Endereço Fiscal", ...
-  handle    String   @default("")
-  emoji     String   @default("")
-  cover     String   @default("") // css gradient
-  nome      String
-  representa String  @default("")
-  comunica  String   @default("")
-  dores     String[] @default([])
-  canais    String   @default("")
-  gatilho   String   @default("")
-  stats     Json     @default("[]") // [[valor, rótulo], ...]
-  foto      String?  // URL configurável (fallback = emoji)
-  ordem     Int      @default(0)
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tag         String
+  handle      String    @default("")
+  emoji       String    @default("")
+  cover       String    @default("")
+  nome        String
+  representa  String    @default("")
+  comunica    String    @default("")
+  dores       String[]  @default([])
+  canais      String    @default("")
+  gatilho     String    @default("")
+  stats       Json      @default("[]")
+  foto        String?
+  ordem       Int       @default(0)
+
+  @@index([workspaceId])
 }
 
 // ─────────────────────────────────────────────────────────────
 // Concorrência
 // ─────────────────────────────────────────────────────────────
 enum CompCategoria {
-  espaco      // Espaço & EV
-  marca       // Registro de Marca
-  certificado // Certificado Digital
-  cobranca    // Cobrança
+  espaco
+  marca
+  certificado
+  cobranca
 }
 
 model Concorrente {
   id           String        @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   nome         String
-  ig           String        @default("") // @handle
+  ig           String        @default("")
   linkedin     Boolean       @default(false)
   youtube      Boolean       @default(false)
-  dominio      String?       // p/ logo (Clearbit) e link do site
+  dominio      String?
   categoria    CompCategoria
-  iconOverride String?       // URL, emoji, ou "IG:<handle>" (puxar do Instagram)
+  iconOverride String?
   ordem        Int           @default(0)
 
-  @@index([categoria])
+  @@index([workspaceId, categoria])
 }

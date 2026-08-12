@@ -1,3 +1,9 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
+-- CreateEnum
+CREATE TYPE "Role" AS ENUM ('owner', 'member');
+
 -- CreateEnum
 CREATE TYPE "PostStatus" AS ENUM ('rascunho', 'agendado', 'publicado', 'falhou');
 
@@ -8,11 +14,43 @@ CREATE TYPE "FonteTipo" AS ENUM ('csv', 'xlsx', 'pdf');
 CREATE TYPE "CompCategoria" AS ENUM ('espaco', 'marca', 'certificado', 'cobranca');
 
 -- CreateTable
+CREATE TABLE "User" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "nome" TEXT NOT NULL DEFAULT '',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Workspace" (
+    "id" TEXT NOT NULL,
+    "nome" TEXT NOT NULL,
+    "zernioProfileId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Workspace_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Membership" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
+    "role" "Role" NOT NULL DEFAULT 'member',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Membership_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "EnvConfig" (
-    "id" TEXT NOT NULL DEFAULT 'main',
-    "redes" JSONB NOT NULL DEFAULT '{"instagram":true}',
+    "id" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
+    "redes" JSONB NOT NULL DEFAULT '{}',
     "paineis" JSONB NOT NULL DEFAULT '{}',
-    "contas" JSONB NOT NULL DEFAULT '{"instagram":true}',
+    "contas" JSONB NOT NULL DEFAULT '{}',
     "cfgOpen" JSONB NOT NULL DEFAULT '{}',
     "impOpen" BOOLEAN NOT NULL DEFAULT false,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -22,8 +60,9 @@ CREATE TABLE "EnvConfig" (
 
 -- CreateTable
 CREATE TABLE "Perfil" (
-    "id" TEXT NOT NULL DEFAULT 'main',
-    "empresa" TEXT NOT NULL DEFAULT 'Seahub Coworking',
+    "id" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
+    "empresa" TEXT NOT NULL DEFAULT '',
     "segmento" TEXT NOT NULL DEFAULT '',
     "cidade" TEXT NOT NULL DEFAULT '',
     "site" TEXT NOT NULL DEFAULT '',
@@ -39,6 +78,7 @@ CREATE TABLE "Perfil" (
 -- CreateTable
 CREATE TABLE "Post" (
     "id" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
     "data" TIMESTAMP(3) NOT NULL,
     "hora" TEXT NOT NULL DEFAULT '09:00',
     "titulo" TEXT NOT NULL,
@@ -64,6 +104,7 @@ CREATE TABLE "Post" (
 -- CreateTable
 CREATE TABLE "Fonte" (
     "id" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
     "nome" TEXT NOT NULL,
     "tipo" "FonteTipo" NOT NULL,
     "campos" INTEGER NOT NULL DEFAULT 0,
@@ -78,7 +119,8 @@ CREATE TABLE "Fonte" (
 
 -- CreateTable
 CREATE TABLE "Objetivo" (
-    "id" TEXT NOT NULL DEFAULT 'main',
+    "id" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
     "texto" TEXT NOT NULL DEFAULT '',
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -88,6 +130,7 @@ CREATE TABLE "Objetivo" (
 -- CreateTable
 CREATE TABLE "Area" (
     "id" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
     "nome" TEXT NOT NULL,
     "ordem" INTEGER NOT NULL DEFAULT 0,
 
@@ -112,6 +155,7 @@ CREATE TABLE "KR" (
 -- CreateTable
 CREATE TABLE "Persona" (
     "id" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
     "tag" TEXT NOT NULL,
     "handle" TEXT NOT NULL DEFAULT '',
     "emoji" TEXT NOT NULL DEFAULT '',
@@ -132,6 +176,7 @@ CREATE TABLE "Persona" (
 -- CreateTable
 CREATE TABLE "Concorrente" (
     "id" TEXT NOT NULL,
+    "workspaceId" TEXT NOT NULL,
     "nome" TEXT NOT NULL,
     "ig" TEXT NOT NULL DEFAULT '',
     "linkedin" BOOLEAN NOT NULL DEFAULT false,
@@ -145,16 +190,74 @@ CREATE TABLE "Concorrente" (
 );
 
 -- CreateIndex
-CREATE INDEX "Post_data_idx" ON "Post"("data");
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
+CREATE INDEX "Membership_workspaceId_idx" ON "Membership"("workspaceId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Membership_userId_workspaceId_key" ON "Membership"("userId", "workspaceId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "EnvConfig_workspaceId_key" ON "EnvConfig"("workspaceId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Perfil_workspaceId_key" ON "Perfil"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "Post_workspaceId_data_idx" ON "Post"("workspaceId", "data");
 
 -- CreateIndex
 CREATE INDEX "Post_status_idx" ON "Post"("status");
 
 -- CreateIndex
+CREATE INDEX "Fonte_workspaceId_idx" ON "Fonte"("workspaceId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Objetivo_workspaceId_key" ON "Objetivo"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "Area_workspaceId_idx" ON "Area"("workspaceId");
+
+-- CreateIndex
 CREATE INDEX "KR_areaId_idx" ON "KR"("areaId");
 
 -- CreateIndex
-CREATE INDEX "Concorrente_categoria_idx" ON "Concorrente"("categoria");
+CREATE INDEX "Persona_workspaceId_idx" ON "Persona"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "Concorrente_workspaceId_categoria_idx" ON "Concorrente"("workspaceId", "categoria");
+
+-- AddForeignKey
+ALTER TABLE "Membership" ADD CONSTRAINT "Membership_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Membership" ADD CONSTRAINT "Membership_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "EnvConfig" ADD CONSTRAINT "EnvConfig_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Perfil" ADD CONSTRAINT "Perfil_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Post" ADD CONSTRAINT "Post_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Fonte" ADD CONSTRAINT "Fonte_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Objetivo" ADD CONSTRAINT "Objetivo_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Area" ADD CONSTRAINT "Area_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "KR" ADD CONSTRAINT "KR_areaId_fkey" FOREIGN KEY ("areaId") REFERENCES "Area"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Persona" ADD CONSTRAINT "Persona_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Concorrente" ADD CONSTRAINT "Concorrente_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "Workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
