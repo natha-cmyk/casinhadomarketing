@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { supabaseConfigured } from "@/lib/supabase/env";
 
 // Rodapé da sidebar: e-mail do usuário logado + sair. Se o Supabase não estiver
 // configurado (anon key vazia), mostra o status antigo de prévia.
 export function AccountFooter() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
-  const configured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const configured = supabaseConfigured();
 
   useEffect(() => {
     if (!configured) return;

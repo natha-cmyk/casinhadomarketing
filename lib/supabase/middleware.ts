@@ -1,11 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SUPABASE_URL, SUPABASE_ANON } from "./env";
 
 // Renova a sessão e protege rotas. Guarda: se o Supabase não estiver configurado
 // (anon key vazia), libera tudo — evita quebrar o app antes das chaves entrarem.
 export async function updateSession(request: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = SUPABASE_URL;
+  const anon = SUPABASE_ANON;
   if (!url || !anon) return NextResponse.next({ request });
 
   let supabaseResponse = NextResponse.next({ request });
