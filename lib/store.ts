@@ -57,7 +57,7 @@ export interface UIState {
   okr: Okr; posts: PostItem[]; fontes: FonteItem[]; fonteMap: FonteMap | null; perfil: Perfil;
   hydrated: boolean;
   // contas conectadas na Zernio (do profile do workspace)
-  zernioAccounts: { _id: string; platform: string }[];
+  zernioAccounts: { _id: string; platform: string; followersCount?: number; displayName?: string }[];
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
