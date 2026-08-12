@@ -68,6 +68,16 @@ export function connectUrl(platform: string, profileId?: string, redirectUrl?: s
   return zernio<{ authUrl: string }>(`/connect/${encodeURIComponent(platform)}?${q.toString()}`);
 }
 
+// GET /connect/{platform}/ads?profileId=&redirect_url= — conecta conta de anúncio.
+// same-token (facebook/instagram/linkedin/pinterest) copia o token do posting; googleads standalone.
+export function connectAdsUrl(platform: string, profileId?: string, redirectUrl?: string) {
+  const pid = profileId ?? process.env.ZERNIO_PROFILE_ID;
+  const q = new URLSearchParams();
+  if (pid) q.set("profileId", pid);
+  if (redirectUrl) q.set("redirect_url", redirectUrl);
+  return zernio<{ authUrl?: string; alreadyConnected?: boolean }>(`/connect/${encodeURIComponent(platform)}/ads?${q.toString()}`);
+}
+
 // GET /analytics/{platform}/account-insights — séries por conta (máx 90 dias)
 export interface AnalyticsMetric {
   total: number;

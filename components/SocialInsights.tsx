@@ -31,6 +31,9 @@ const pt = (k: string) => METRIC_PT[k] || k.replace(/_/g, " ");
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+// cache de módulo (stale-while-revalidate): re-visitas abrem na hora, revalida em background.
+const INS_CACHE = new Map<string, AnalyticsResponse>();
+
 function dateRange(scope: { period: Period; year: number; month: number; quarter: number }) {
   const { period, year, month, quarter } = scope;
   let since: Date, until: Date;
@@ -64,13 +67,34 @@ export function SocialInsights({ rede }: { rede: string }) {
   useEffect(() => {
     if (!acct || !COM_ANALYTICS.has(platform)) return;
     const { since, until } = dateRange(s);
-    setLoading(true);
+    const key = `${platform}|${acct._id}|${since}|${until}`;
+    let alive = true;
+    // stale-while-revalidate: mostra o cache na hora, revalida em background
+    const cached = INS_CACHE.get(key);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+    } else {
+      setData(null);
+      setLoading(true);
+    }
     setErr(null);
     fetch(`/api/zernio/analytics?platform=${platform}&accountId=${acct._id}&since=${since}&until=${until}`)
       .then((r) => r.json())
-      .then((d) => (d?.error ? setErr(String(d.error)) : setData(d)))
-      .catch((e) => setErr(String(e)))
-      .finally(() => setLoading(false));
+      .then((d) => {
+        if (!alive) return;
+        if (d?.error) {
+          if (!cached) setErr(String(d.error));
+        } else {
+          INS_CACHE.set(key, d);
+          setData(d);
+        }
+      })
+      .catch((e) => alive && !cached && setErr(String(e)))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acct?._id, platform, s.period, s.year, s.month, s.quarter, s.week]);
 

@@ -12,6 +12,15 @@ import { Ic } from "@/components/Ic";
 const ZP: Record<string, string> = { x: "twitter" };
 const zplat = (id: string) => ZP[id] || id;
 
+// ads: id da rede → plataforma aceita por /connect/{platform}/ads (X Ads/OpenAI Ads ficam de fora)
+const AD_CONNECT: Record<string, string> = {
+  metaads: "facebook",
+  googleads: "googleads",
+  linkedinads: "linkedin",
+  tiktokads: "tiktok",
+  pinterestads: "pinterest",
+};
+
 // mapeia o id da rede → nome do glifo em ICONS (lib/nav)
 const ICON_FOR: Record<string, string> = {
   instagram: "ig",
@@ -63,12 +72,18 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
     } catch {}
   }
 
-  async function connect(id: string) {
+  async function connect(id: string, ads = false) {
     setErro(null);
     setBusy(id);
     try {
-      const r = await fetch(`/api/zernio/connect?platform=${encodeURIComponent(zplat(id))}`);
+      const plat = ads ? AD_CONNECT[id] : zplat(id);
+      const r = await fetch(`/api/zernio/connect?platform=${encodeURIComponent(plat)}${ads ? "&ads=1" : ""}`);
       const d = await r.json();
+      if (d.alreadyConnected) {
+        setBusy(null);
+        refresh();
+        return;
+      }
       if (!d.authUrl) {
         setErro(d.error || "Não foi possível iniciar a conexão.");
         setBusy(null);
@@ -111,12 +126,12 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
                     <span className="conx-sq-nome">{r.label}</span>
                     {on ? (
                       <span className="conx-sq-cta on">conectado</span>
-                    ) : r.grupo === "ads" ? (
-                      <span className="conx-sq-cta" style={{ opacity: 0.55, cursor: "default", color: "var(--label-3)" }} title="Conexão de anúncios requer o Ads add-on da Zernio (upgrade)">
+                    ) : r.grupo === "ads" && !AD_CONNECT[r.id] ? (
+                      <span className="conx-sq-cta" style={{ opacity: 0.55, cursor: "default", color: "var(--label-3)" }} title="Conexão via API não suportada por esta plataforma">
                         em breve
                       </span>
                     ) : (
-                      <button className="conx-sq-cta" onClick={() => connect(r.id)} disabled={busy === r.id} type="button">
+                      <button className="conx-sq-cta" onClick={() => connect(r.id, r.grupo === "ads")} disabled={busy === r.id} type="button">
                         {busy === r.id ? "…" : "Conectar"}
                       </button>
                     )}
