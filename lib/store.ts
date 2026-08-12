@@ -56,6 +56,8 @@ export interface UIState {
   // dados editáveis (persistidos no Bloco 4)
   okr: Okr; posts: PostItem[]; fontes: FonteItem[]; fonteMap: FonteMap | null; perfil: Perfil;
   hydrated: boolean;
+  // contas conectadas na Zernio (do profile do workspace)
+  zernioAccounts: { _id: string; platform: string }[];
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
@@ -109,6 +111,7 @@ export const useStore = create<UIState>((set) => ({
   fontes: [], fonteMap: null,
   perfil: { empresa: "", segmento: "", cidade: "", site: "", canais: [], produtos: [], relacao: {} },
   hydrated: false,
+  zernioAccounts: [],
 
   set: (patch) => set(patch),
   hydrate: (d) =>

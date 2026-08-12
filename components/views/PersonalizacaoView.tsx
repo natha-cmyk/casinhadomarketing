@@ -4,6 +4,7 @@
 // Fidelidade 1:1 com casinha-do-marketing.html.
 import { useState } from "react";
 import { PageHead } from "@/components/ui";
+import { ConexoesZernio } from "@/components/ConexoesZernio";
 import { Ic } from "@/components/Ic";
 import { REDES, PANEL_INDICATORS } from "@/lib/seed-data";
 import { useStore, newId, type FonteItem } from "@/lib/store";
@@ -154,6 +155,8 @@ export default function PersonalizacaoView() {
         title="Personalização"
         desc="No primeiro acesso, importe o kit de pré-trabalho do Panteão para pré-preencher o ambiente. Depois, mantenha canais, produtos e indicadores por aqui."
       />
+
+      <ConexoesZernio />
 
       {/* ===== Importe seus dados ===== */}
       <div className="card pad-lg" style={{ marginBottom: 16 }}>

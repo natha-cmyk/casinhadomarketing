@@ -19,6 +19,13 @@ export function Hydrator() {
       const data = await fetchAll();
       if (!alive) return;
       useStore.getState().hydrate(data);
+      // contas conectadas na Zernio (não bloqueia a hidratação)
+      fetch("/api/zernio/accounts")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (alive && d?.accounts) useStore.getState().set({ zernioAccounts: d.accounts });
+        })
+        .catch(() => {});
       unsub = useStore.subscribe((s, p) => {
         if (!s.hydrated) return;
         if (s.redes !== p.redes || s.paineis !== p.paineis || s.contas !== p.contas || s.cfgOpen !== p.cfgOpen || s.impOpen !== p.impOpen)
