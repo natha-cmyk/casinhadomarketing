@@ -79,6 +79,19 @@ function CompCard({ c }: { c: ConcItem }) {
         <input className="comp-in" value={c.ig} placeholder="@instagram" onChange={(e) => update(c.id, { ig: e.target.value })} />
         <input className="comp-in" value={c.dominio || ""} placeholder="dominio.com.br" onChange={(e) => update(c.id, { dominio: e.target.value })} />
         <input className="comp-in" value={c.iconOverride || ""} placeholder="URL da imagem ou emoji" onChange={(e) => update(c.id, { iconOverride: e.target.value })} />
+        <button
+          type="button"
+          className="btn-link"
+          style={{ justifyContent: "center", padding: "6px 10px", fontSize: 12 }}
+          disabled={!c.ig.replace(/[@\s]/g, "")}
+          onClick={() => {
+            const handle = c.ig.replace(/[@\s]/g, "");
+            if (!handle) return;
+            update(c.id, { iconOverride: `https://unavatar.io/instagram/${handle}` });
+          }}
+        >
+          Puxar foto do IG
+        </button>
         <select
           className="comp-in"
           value={c.categoria}
