@@ -16,7 +16,11 @@ import {
 import { MONTHS_FULL, daysInMonth } from "@/lib/scope";
 import { PageHead } from "@/components/ui";
 import { Ic } from "@/components/Ic";
+import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { PostModal } from "./PostModal";
+
+// plataforma Zernio → id da rede (Casinha): twitter → x
+const PLAT_REV: Record<string, string> = { twitter: "x" };
 
 const POST_STATUS: Record<string, { label: string; cor: string }> = {
   rascunho: { label: "Rascunho", cor: "#8E8E93" },
@@ -50,14 +54,13 @@ export function CalendarioView() {
   const s = useStore();
   const {
     posts,
-    contas,
+    zernioAccounts,
     calCanal,
     calPerfil,
     calCV,
     calMonth: month,
     calYear: year,
     set,
-    toggleConta,
     updatePost,
   } = s;
 
@@ -99,9 +102,15 @@ export function CalendarioView() {
     );
   };
 
-  // ── barra "Contas conectadas" (dark) ──
-  const naoAds = REDES.filter((r) => r.grupo !== "ads");
-  const nConn = REDES.filter((r) => contas[r.id]).length;
+  // ── contas conectadas (Zernio) — contagem social/conversas para o badge ──
+  const nConn = new Set(
+    zernioAccounts
+      .map((a) => PLAT_REV[a.platform] || a.platform)
+      .filter((id) => {
+        const r = REDES.find((x) => x.id === id);
+        return r && r.grupo !== "ads";
+      })
+  ).size;
 
   // ── toolbar: contadores por status do mês ──
   const mo = posts.filter((p) => p.y === year && p.m === month);
@@ -161,27 +170,16 @@ export function CalendarioView() {
         }
       />
 
-      {/* Contas conectadas */}
-      <div className="card conta-dark" style={{ marginBottom: 14, padding: "12px 16px" }}>
-        <div className="conta-bar">
-          <div className="conta-lbl">
-            Contas conectadas <span className="badge">{nConn}</span>
+      {/* Contas conectadas — sincronizadas com a Zernio (mesmo visual da Personalização) */}
+      <div className="card pad-lg" style={{ marginBottom: 14 }}>
+        <div className="card-head">
+          <div>
+            <div className="t">Contas conectadas</div>
+            <div className="sub">redes ligadas via Zernio — coloridas quando conectadas, cinza quando não</div>
           </div>
-          <div className="conta-list">
-            {naoAds.map((r) => {
-              const on = !!contas[r.id];
-              return (
-                <div className={`conta ${on ? "on" : ""}`} key={r.id}>
-                  <span className="conta-dot" style={{ background: r.cor }} />
-                  <span className="conta-n">{r.label}</span>
-                  <button className="conta-btn" data-conta={r.id} onClick={() => toggleConta(r.id)}>
-                    {on ? "Desconectar" : "Conectar"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+          <span className="badge">{nConn}</span>
         </div>
+        <ConexoesGrid grupos={["social", "conversas"]} />
       </div>
 
       {/* Toolbar */}

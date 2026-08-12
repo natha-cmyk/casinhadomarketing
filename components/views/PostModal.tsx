@@ -40,7 +40,7 @@ interface Fields {
 export function PostModal() {
   const pm = useStore((st) => st.postModal);
   const posts = useStore((st) => st.posts);
-  const contasConn = useStore((st) => st.contas);
+  const zernioAccounts = useStore((st) => st.zernioAccounts);
   const calMonth = useStore((st) => st.calMonth);
   const calYear = useStore((st) => st.calYear);
   const set = useStore((st) => st.set);
@@ -143,7 +143,13 @@ export function PostModal() {
     close();
   };
 
-  const conn = REDES.filter((r) => r.grupo !== "ads" && contasConn[r.id]);
+  // Contas-alvo = redes REALMENTE conectadas na Zernio (plataforma twitter → x).
+  // Guarda o id da rede em post.contas (mantém o shape usado pela fila/chips do calendário).
+  const platRev: Record<string, string> = { twitter: "x" };
+  const connIds = Array.from(new Set(zernioAccounts.map((a) => platRev[a.platform] || a.platform)));
+  const conn = connIds
+    .map((id) => REDES.find((r) => r.id === id))
+    .filter((r): r is (typeof REDES)[number] => !!r && r.grupo !== "ads");
 
   const sel = (id: string, arr: string[], val: string, onChange: (v: string) => void) => (
     <select className="field-edit" id={id} value={val} onChange={(e) => onChange(e.target.value)}>
@@ -307,8 +313,8 @@ export function PostModal() {
               </div>
             ) : (
               <div className="pm-hint">
-                Nenhuma conta conectada. Conecte na barra &quot;Contas conectadas&quot; (topo do
-                calendário) para agendar publicação automática.
+                Nenhuma conta conectada. Conecte contas em Personalização (ou na barra &quot;Contas
+                conectadas&quot; no topo do calendário) para agendar publicação automática.
               </div>
             )}
             <label className="field-lbl">Status</label>
