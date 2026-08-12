@@ -13,7 +13,7 @@ const CONECTAVEIS = REDES.filter((r) => r.grupo === "social");
 
 export function ConexoesZernio() {
   const accounts = useStore((s) => s.zernioAccounts);
-  const set = useStore((s) => s.set);
+  const setZernioAccounts = useStore((s) => s.setZernioAccounts);
   const [busy, setBusy] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -32,7 +32,7 @@ export function ConexoesZernio() {
     try {
       const r = await fetch("/api/zernio/accounts");
       const d = await r.json();
-      if (d?.accounts) set({ zernioAccounts: d.accounts });
+      if (d?.accounts) setZernioAccounts(d.accounts);
     } catch {}
   }
 

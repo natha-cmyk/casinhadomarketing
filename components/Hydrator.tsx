@@ -23,7 +23,7 @@ export function Hydrator() {
       fetch("/api/zernio/accounts")
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (alive && d?.accounts) useStore.getState().set({ zernioAccounts: d.accounts });
+          if (alive && d?.accounts) useStore.getState().setZernioAccounts(d.accounts);
         })
         .catch(() => {});
       unsub = useStore.subscribe((s, p) => {

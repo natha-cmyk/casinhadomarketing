@@ -88,6 +88,8 @@ export interface UIState {
   setPeriod: (p: Period) => void; setYear: (y: number) => void; setMonth: (m: number) => void;
   setWeek: (w: number) => void; setQuarter: (q: number) => void;
   toggleScenario: () => void; toggleAgent: () => void;
+  // zernio: seta contas conectadas e ATIVA o painel da rede automaticamente
+  setZernioAccounts: (accounts: UIState["zernioAccounts"]) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
@@ -138,6 +140,14 @@ export const useStore = create<UIState>((set) => ({
   zernioAccounts: [],
 
   set: (patch) => set(patch),
+  setZernioAccounts: (accounts) =>
+    set((s) => {
+      // ativa o painel/nav da rede de cada conta conectada (twitter → x)
+      const rev: Record<string, string> = { twitter: "x" };
+      const redes = { ...s.redes };
+      for (const a of accounts) redes[rev[a.platform] || a.platform] = true;
+      return { zernioAccounts: accounts, redes };
+    }),
   hydrate: (d) =>
     set((s) => {
       const patch: Partial<UIState> = { hydrated: true };
