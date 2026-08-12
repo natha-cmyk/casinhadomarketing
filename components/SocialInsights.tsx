@@ -94,15 +94,7 @@ export function SocialInsights({ rede }: { rede: string }) {
 
   const metrics = data?.metrics || {};
   const keys = Object.keys(metrics);
-  const chartKey = keys.find((k) => metrics[k].values?.length) || keys[0];
-  const svg =
-    chartKey && metrics[chartKey]?.values?.length
-      ? lineChart(
-          metrics[chartKey].values.map((v) => v.date.slice(5)),
-          [{ name: pt(chartKey), color: meta?.cor || "#FF001E", data: metrics[chartKey].values.map((v) => v.value), fill: true }],
-          { sel: metrics[chartKey].values.length - 1 }
-        )
-      : null;
+  const comSerie = keys.filter((k) => metrics[k].values?.length);
 
   return (
     <>
@@ -115,21 +107,29 @@ export function SocialInsights({ rede }: { rede: string }) {
       {err && <div className="auth-err">{err}</div>}
       {!loading && !err && (
         <div className="grid" style={{ gap: 16 }}>
+          {/* TODOS os indicadores como KPI (totais no período) */}
           <div className="grid kpis">
             <KpiCard lbl="Seguidores" val={acct.followersCount != null ? fmt(acct.followersCount) : "—"} />
-            {keys.slice(0, 3).map((k) => (
-              <KpiCard key={k} lbl={pt(k)} val={kfmt(metrics[k].total)} />
+            {keys.map((k) => (
+              <KpiCard key={k} lbl={pt(k)} val={kfmt(metrics[k].total)} foot={metrics[k].unit || undefined} />
             ))}
           </div>
-          {svg && (
-            <div className="card">
+          {/* Um gráfico por indicador com série temporal */}
+          {comSerie.map((k) => (
+            <div className="card" key={k}>
               <div className="card-head">
-                <div className="t">{pt(chartKey!)}</div>
-                <span className="badge">período</span>
+                <div className="t">{pt(k)}</div>
+                <span className="badge">no período</span>
               </div>
-              <Chart svg={svg} />
+              <Chart
+                svg={lineChart(
+                  metrics[k].values.map((v) => v.date.slice(5)),
+                  [{ name: pt(k), color: meta?.cor || "#FF001E", data: metrics[k].values.map((v) => v.value), fill: true }],
+                  { sel: metrics[k].values.length - 1 }
+                )}
+              />
             </div>
-          )}
+          ))}
           {keys.length === 0 && (
             <div className="card">Sem métricas no período — a conta pode não ter o add-on de Analytics da Zernio (plano), ou ainda não há dados.</div>
           )}
