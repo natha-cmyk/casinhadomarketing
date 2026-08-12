@@ -12,8 +12,14 @@ const SEAHUB_EMAILS = (process.env.SEAHUB_EMAILS || "seahub@seahubcoworking.page
 // por usuário. O profile Zernio é criado sob demanda no /api/zernio/connect.
 export async function provisionWorkspace(userId: string, email: string): Promise<string> {
   const isSeahub = SEAHUB_EMAILS.includes(email.toLowerCase());
+
+  // FAST PATH: já provisionado → retorna sem lock/transação (evita serializar os
+  // vários requests paralelos do login e o 5s de espera).
+  const fast = await prisma.membership.findFirst({ where: { userId }, orderBy: { createdAt: "asc" } });
+  if (fast) return fast.workspaceId;
+
+  // SLOW PATH (1ª vez): cria com advisory lock (idempotente sob concorrência).
   return prisma.$transaction(async (tx) => {
-    // serializa o provisionamento concorrente deste usuário
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`;
 
     await tx.user.upsert({ where: { id: userId }, update: { email }, create: { id: userId, email } });

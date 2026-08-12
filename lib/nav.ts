@@ -80,8 +80,12 @@ export const META: Record<string, NavItem> = Object.fromEntries(
   NAV.flatMap((g) => g.items).map((i) => [i.id, i])
 );
 
-// painéis que respeitam o filtro temporal (toolbar de período)
-export const TEMPORAL = ["instagram", "ads", "metas", "overview"];
+// painéis que respeitam o filtro temporal (janela de data do analytics social).
+// Só as redes sociais usam período; nas demais os controles ficam OCULTOS.
+export const TEMPORAL = [
+  "instagram", "tiktok", "x", "facebook", "linkedin", "youtube",
+  "threads", "reddit", "pinterest", "bluesky", "snapchat", "googlebusiness",
+];
 export const usesCompare = (v: string) => v === "instagram";
 
 // redes sociais (grupo "Canais") — itens condicionais no sidebar

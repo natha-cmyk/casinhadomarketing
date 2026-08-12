@@ -170,16 +170,6 @@ export default function ConcorrenciaView() {
         </div>
       )}
 
-      <Card style={{ marginTop: 16 }}>
-        <div className="insight" style={{ border: 0, background: "transparent", padding: 0 }}>
-          <div className="ib" style={{ background: "var(--cyan)" }}>
-            <Ic name="vs" />
-          </div>
-          <p>
-            <b>Presença de Instagram, LinkedIn e YouTube</b> vem das casinhas. <b>Site</b> aparece quando há domínio. A aba <b>Geral</b> junta todos; os filtros isolam por linha de negócio.
-          </p>
-        </div>
-      </Card>
     </>
   );
 }

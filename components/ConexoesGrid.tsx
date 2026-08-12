@@ -111,13 +111,12 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
                     <span className="conx-sq-nome">{r.label}</span>
                     {on ? (
                       <span className="conx-sq-cta on">conectado</span>
+                    ) : r.grupo === "ads" ? (
+                      <span className="conx-sq-cta" style={{ opacity: 0.55, cursor: "default", color: "var(--label-3)" }} title="Conexão de anúncios requer o Ads add-on da Zernio (upgrade)">
+                        em breve
+                      </span>
                     ) : (
-                      <button
-                        className="conx-sq-cta"
-                        onClick={() => connect(r.id)}
-                        disabled={busy === r.id}
-                        type="button"
-                      >
+                      <button className="conx-sq-cta" onClick={() => connect(r.id)} disabled={busy === r.id} type="button">
                         {busy === r.id ? "…" : "Conectar"}
                       </button>
                     )}

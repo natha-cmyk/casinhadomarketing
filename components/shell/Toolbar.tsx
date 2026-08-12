@@ -36,7 +36,9 @@ export function Toolbar() {
           {meta?.sub && <small>{meta.sub}</small>}
         </div>
 
-        <div className={`seg${temporal ? "" : " dim"}`}>
+        {temporal && (
+        <>
+        <div className="seg">
           {PERIODS.map((p) => (
             <button key={p.value} className={s.period === p.value ? "on" : ""} onClick={() => s.setPeriod(p.value)} type="button">
               {p.label}
@@ -81,13 +83,15 @@ export function Toolbar() {
           </select>
         )}
 
-        <div className={`seg${temporal ? "" : " dim"}`}>
+        <div className="seg">
           {YEARS.map((y) => (
             <button key={y} className={s.year === y ? "on" : ""} onClick={() => s.setYear(y)} type="button">
               {y}
             </button>
           ))}
         </div>
+        </>
+        )}
 
         {usesCompare(view) && (
           <button className={`tb-toggle${s.scenario ? " on" : ""}`} onClick={s.toggleScenario} type="button">
@@ -98,7 +102,7 @@ export function Toolbar() {
           </button>
         )}
 
-        <span className="updated">{temporal ? scopeLabelText(scope) : "Todos os períodos"}</span>
+        {temporal && <span className="updated">{scopeLabelText(scope)}</span>}
       </div>
 
       {s.scenario && usesCompare(view) && (
