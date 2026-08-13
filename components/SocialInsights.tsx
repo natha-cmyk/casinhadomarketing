@@ -81,14 +81,25 @@ function humanDur(sec: number): string {
 
 // resposta da rota combinada
 interface KeySeries { metric: string; label: string; total: number; values: { date: string; value: number }[] }
+interface ContentSummary {
+  total: number;
+  organic: { count: number; reach: number; engagement: number };
+  paid: { count: number; reach: number; engagement: number };
+  byType: Record<string, number>;
+  organicShare: number | null;
+}
 interface Combined {
   insights: AnalyticsResponse | null;          // metrics{key:{total,values?}}
   followers: AnalyticsResponse | null;          // metrics.follower_count.values
   keySeries: KeySeries | null;
   daily: DailyMetricRow[] | null;               // daily-metrics
   top: PostAnalyticsResp | null;                // posting analytics (top conteúdos)
+  content: ContentSummary | null;               // orgânico vs impulsionado + mix por tipo
+  linkTaps: Record<string, number> | null;      // toques em links do perfil por tipo (IG)
+  stories: number | null;                       // stories ativos (IG)
   demographics: DemographicsResponse | null;
 }
+const TYPE_PT: Record<string, string> = { video: "Reels / vídeos", image: "Imagens", carousel: "Carrosséis", other: "Outros" };
 // resposta da rota de inbox (conversas/DMs)
 interface InboxData {
   volume: InboxVolume | null;
@@ -253,6 +264,10 @@ export function SocialInsights({ rede }: { rede: string }) {
   const daily = data?.daily || null;
   const cmpDaily = cmpData?.daily || null;
   const top = data?.top || null;
+  const content = data?.content || null;
+  const cmpContent = cmpData?.content || null;
+  const linkTaps = data?.linkTaps || null;
+  const stories = data?.stories ?? null;
   const cmpIns = cmpData?.insights || null;
   const cmpFoll = cmpData?.followers || null;
 
@@ -282,6 +297,7 @@ export function SocialInsights({ rede }: { rede: string }) {
   const showFollowerChart = shown("ch_followers");
   const showDemographics = shown("audiencia");
   const showTop = shown("posts");
+  const showMix = shown("content_mix");
   const showInboxChart = shown("inbox_chart");
   const showInboxSrc = shown("inbox_src");
   // gráficos por métrica: só métricas com série E ligadas na config
@@ -356,15 +372,33 @@ export function SocialInsights({ rede }: { rede: string }) {
                   const rt = inbox?.responseTime;
                   const has = rt != null && rt.summary.sampleSize > 0;
                   return (
-                    <KpiCard
-                      key={it.id}
-                      lbl="Tempo de resposta"
-                      val={has ? humanDur(rt!.summary.medianSeconds) : "—"}
-                      foot={has ? "mediana" : "sem dado"}
-                    />
+                    <KpiCard key={it.id} lbl="Tempo de resposta" val={has ? humanDur(rt!.summary.medianSeconds) : "—"} foot={has ? "mediana" : "sem dado"} />
                   );
                 }
+                if (it.bind.key === "leads") {
+                  // leads orgânicos = conversas iniciadas pelo cliente (fonte "contact")
+                  const src = inbox?.sources?.sources?.find((x) => x.source === "contact");
+                  const leads = src ? src.received : inbox?.volume?.summary.received ?? null;
+                  return <KpiCard key={it.id} lbl={it.label} val={leads != null ? fmt(leads) : "—"} foot={leads != null ? "DMs recebidas" : "sem dado"} />;
+                }
                 return null;
+              }
+              if (it.bind.src === "content") {
+                // rendimento orgânico = share de alcance de posts orgânicos
+                const cur = content?.organicShare ?? null;
+                const cmpV = comparando ? cmpContent?.organicShare ?? null : null;
+                return (
+                  <KpiCard key={it.id} lbl={it.label} val={cur == null ? "—" : pctFmt(cur)} foot={cur == null ? "sem dado" : `${fmt(content!.organic.count)} orgânicos · ${fmt(content!.paid.count)} impulsionados`}>
+                    {cmpV != null && cur != null ? <DeltaChip delta={computeDelta(cur, cmpV, true)} scn /> : null}
+                  </KpiCard>
+                );
+              }
+              if (it.bind.src === "linkTaps") {
+                const v = linkTaps ? linkTaps[it.bind.key] ?? 0 : null;
+                return <KpiCard key={it.id} lbl={it.label} val={v != null ? fmt(v) : "—"} foot={v == null ? "sem dado" : undefined} />;
+              }
+              if (it.bind.src === "stories") {
+                return <KpiCard key={it.id} lbl={it.label} val={stories != null ? fmt(stories) : "—"} foot={stories != null ? "últimas 24h" : "sem dado"} />;
               }
               // lacuna (doc) — sem dado
               return <KpiCard key={it.id} lbl={it.label} val="—" foot="sem dado" />;
@@ -378,6 +412,22 @@ export function SocialInsights({ rede }: { rede: string }) {
           {!anyData && (
             <div className="card">
               Sem métricas no período (verifique o add-on Analytics do plano), ou ainda não há dados.
+            </div>
+          )}
+
+          {/* Mix de conteúdo (por tipo de mídia no período) */}
+          {showMix && content && content.total > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <div className="t">Mix de conteúdo</div>
+                <span className="badge">{fmt(content.total)} posts</span>
+              </div>
+              {Object.entries(content.byType)
+                .filter(([, v]) => v > 0)
+                .sort((a, b) => b[1] - a[1])
+                .map(([t, v]) => (
+                  <BarRow key={t} k={TYPE_PT[t] || t} v={v} max={content.total} color={cor} formatted={fmt(v)} />
+                ))}
             </div>
           )}
 

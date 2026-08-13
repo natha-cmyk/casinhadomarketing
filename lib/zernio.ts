@@ -257,6 +257,26 @@ export function postAnalytics(opts: { accountId?: string; platform?: string; fro
   return zernio<PostAnalyticsResp>(`/analytics?${q.toString()}`);
 }
 
+// ── Toques em links do perfil por TIPO (WEBSITE/CALL/EMAIL/TEXT/DIRECTION) — IG ──
+export async function profileLinkTaps(accountId: string, opts?: { since?: string; until?: string }): Promise<Record<string, number>> {
+  const q = new URLSearchParams({ accountId, metrics: "profile_links_taps", breakdown: "contact_button_type" });
+  if (opts?.since) q.set("since", opts.since);
+  if (opts?.until) q.set("until", opts.until);
+  const r = await zernio<AnalyticsResponse & { metrics: Record<string, { total: number; breakdowns?: { dimension: string; value: number }[] }> }>(
+    `/analytics/instagram/account-insights?${q.toString()}`
+  );
+  const out: Record<string, number> = {};
+  for (const b of r.metrics?.profile_links_taps?.breakdowns || []) out[b.dimension] = b.value;
+  return out;
+}
+
+// ── Stories ativos (IG, efêmeros — últimas ~24h) ──
+export interface StoryItem { id: string; mediaType?: string; mediaProductType?: string; permalink?: string }
+export async function listStories(accountId: string): Promise<StoryItem[]> {
+  const r = await zernio<{ data: StoryItem[] }>(`/accounts/${encodeURIComponent(accountId)}/instagram/stories`);
+  return r.data || [];
+}
+
 // ── Inbox analytics (conversas/DMs) ──
 export interface InboxVolume {
   success: boolean; from: string; to: string;

@@ -51,7 +51,10 @@ export type IndBind =
   | { src: "derived"; key: "eng_rate" | "reach_rate" | "save_rate" } // razão calculada
   | { src: "dailyChart"; key: string } // gráfico diário (daily-metrics)
   | { src: "posts" }           // seção "top conteúdos" (posting analytics)
-  | { src: "inbox"; key: "volume" | "response" | "sources" | "chart" } // conversas/DMs
+  | { src: "content"; key: "organicShare" | "mix" } // orgânico vs impulsionado / mix por tipo
+  | { src: "linkTaps"; key: string } // toques em links do perfil por tipo (WEBSITE/CALL/…)
+  | { src: "stories" }         // stories ativos (IG)
+  | { src: "inbox"; key: "volume" | "response" | "sources" | "chart" | "leads" } // conversas/DMs
   | { src: "demographics" }    // seção de audiência (idade/gênero/país/cidade)
   | { src: "none" };           // lacuna: dado não disponível
 
@@ -61,11 +64,11 @@ export interface CatItem {
   bind: IndBind; def: boolean; group: string;
 }
 
-// lacunas nomeadas pela doc (mostradas como "sem dado" — manual/em breve)
+// lacunas nomeadas pela doc (mostradas como "sem dado" — não disponível na API)
 const DOC_GAPS: Record<string, CatItem[]> = {
   instagram: [
-    { id: "organico", label: "Rendimento orgânico", desc: "share não-impulsionado — em breve", kind: "kpi", bind: { src: "none" }, def: true, group: "Alcance & mix" },
-    { id: "splitFollowers", label: "Seguidores vs. não-seguidores", desc: "origem das views — em breve", kind: "kpi", bind: { src: "none" }, def: true, group: "Alcance & mix" },
+    // origem das views por status de seguidor foi descontinuada pelo Meta (2024) — só manual
+    { id: "splitFollowers", label: "Seguidores vs. não-seguidores", desc: "origem das views — indisponível (Meta descontinuou)", kind: "kpi", bind: { src: "none" }, def: true, group: "Alcance & mix" },
   ],
   youtube: [
     { id: "ctr_thumb", label: "CTR da miniatura", desc: "em breve (nível de vídeo)", kind: "kpi", bind: { src: "none" }, def: true, group: "Visualização" },
@@ -93,6 +96,20 @@ export function socialCatalog(panel: string): CatItem[] {
     { id: "der_reach_rate", label: "Alcance sobre a base", desc: "alcance ÷ seguidores", kind: "kpi", bind: { src: "derived", key: "reach_rate" }, def: true, group: "Taxas" },
     { id: "der_save_rate", label: "Taxa de salvamento", desc: "salvos ÷ alcance", kind: "kpi", bind: { src: "derived", key: "save_rate" }, def: false, group: "Taxas" },
   );
+  // conteúdo: rendimento orgânico (orgânico vs impulsionado) + mix por tipo — posting analytics
+  items.push(
+    { id: "organico", label: "Rendimento orgânico", desc: "alcance de posts orgânicos vs impulsionados", kind: "kpi", bind: { src: "content", key: "organicShare" }, def: true, group: "Alcance & mix" },
+    { id: "content_mix", label: "Mix de conteúdo", desc: "reels/vídeos, carrosséis e imagens no período", kind: "section", bind: { src: "content", key: "mix" }, def: true, group: "Conteúdo" },
+  );
+  if (plat === "instagram") {
+    // visitas ao site: dimensão WEBSITE de profile_links_taps (breakdown por tipo)
+    items.push(
+      { id: "link_website", label: "Visitas ao site", desc: "toques no link do site do perfil", kind: "kpi", bind: { src: "linkTaps", key: "WEBSITE" }, def: true, group: "Perfil" },
+      { id: "link_call", label: "Toques em ligar", kind: "kpi", bind: { src: "linkTaps", key: "CALL" }, def: false, group: "Perfil" },
+      { id: "link_email", label: "Toques em e-mail", kind: "kpi", bind: { src: "linkTaps", key: "EMAIL" }, def: false, group: "Perfil" },
+      { id: "stories_count", label: "Stories ativos", desc: "stories publicados nas últimas 24h", kind: "kpi", bind: { src: "stories" }, def: true, group: "Conteúdo" },
+    );
+  }
   // gráficos diários (série que muda por período) — daily-metrics
   items.push(
     { id: "d_reach", label: "Alcance por dia", desc: "série diária", kind: "chart", bind: { src: "dailyChart", key: "reach" }, def: true, group: "Séries diárias" },
@@ -104,6 +121,7 @@ export function socialCatalog(panel: string): CatItem[] {
   // inbox (conversas/DMs)
   if (INBOX_PLATFORMS.has(plat)) {
     items.push(
+      { id: "inbox_leads", label: "Leads orgânicos (DM)", desc: "conversas iniciadas pelo cliente", kind: "kpi", bind: { src: "inbox", key: "leads" }, def: true, group: "Conversas" },
       { id: "inbox_vol", label: "Conversas", desc: "recebidas, enviadas, únicas", kind: "kpi", bind: { src: "inbox", key: "volume" }, def: true, group: "Conversas" },
       { id: "inbox_rt", label: "Tempo de resposta", desc: "mediana das respostas", kind: "kpi", bind: { src: "inbox", key: "response" }, def: true, group: "Conversas" },
       { id: "inbox_chart", label: "Volume de conversas por dia", kind: "chart", bind: { src: "inbox", key: "chart" }, def: false, group: "Conversas" },
