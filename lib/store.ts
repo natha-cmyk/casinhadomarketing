@@ -52,6 +52,12 @@ export interface ManualAd {
   gasto: number; impressoes: number; cliques: number;
   ctr: number; cpc: number; cpm: number; conversoes: number; campanha: string;
 }
+// ── Dados MANUAIS por campanha (o que o Meta não entrega: vendas, receita, etc.) ──
+// vinculados a uma campanha real por (adAccountId, campaignName) + competência (ano/mês)
+export interface ManualCampaign {
+  id: string; adAccountId: string; campaignName: string; ano: number; mes: number; // 0-11
+  vendas: number; receita: number; leadsQualificados: number; obs: string;
+}
 // ── Indicador customizado criado pelo perfil (por painel) ──
 export interface CustomInd {
   id: string; label: string; desc?: string;
@@ -89,12 +95,13 @@ export interface UIState {
     enabled?: boolean; adsStatus?: string; profilePicture?: string; username?: string }[];
   // mídia paga manual + indicadores customizados (persistidos no config)
   manualAds: ManualAd[];
+  manualCampaigns: ManualCampaign[];
   customInd: Record<string, CustomInd[]>;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[] }; customInd?: Record<string, CustomInd[]> } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[] }; customInd?: Record<string, CustomInd[]> } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -110,6 +117,9 @@ export interface UIState {
   // mídia paga manual
   addManualAd: (a: ManualAd) => void; updateManualAd: (id: string, patch: Partial<ManualAd>) => void;
   removeManualAd: (id: string) => void;
+  // dados manuais por campanha
+  addManualCampaign: (c: ManualCampaign) => void; updateManualCampaign: (id: string, patch: Partial<ManualCampaign>) => void;
+  removeManualCampaign: (id: string) => void;
   // indicadores customizados
   addCustomInd: (panel: string, c: CustomInd) => void; removeCustomInd: (panel: string, id: string) => void;
   // config
@@ -168,6 +178,7 @@ export const useStore = create<UIState>((set) => ({
   hydrated: false,
   zernioAccounts: [],
   manualAds: [],
+  manualCampaigns: [],
   customInd: {},
 
   set: (patch) => set(patch),
@@ -175,6 +186,10 @@ export const useStore = create<UIState>((set) => ({
   updateManualAd: (id, patch) =>
     set((s) => ({ manualAds: s.manualAds.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
   removeManualAd: (id) => set((s) => ({ manualAds: s.manualAds.filter((m) => m.id !== id) })),
+  addManualCampaign: (c) => set((s) => ({ manualCampaigns: [...s.manualCampaigns, c] })),
+  updateManualCampaign: (id, patch) =>
+    set((s) => ({ manualCampaigns: s.manualCampaigns.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
+  removeManualCampaign: (id) => set((s) => ({ manualCampaigns: s.manualCampaigns.filter((m) => m.id !== id) })),
   addCustomInd: (panel, c) =>
     set((s) => ({ customInd: { ...s.customInd, [panel]: [...(s.customInd[panel] || []), c] } })),
   removeCustomInd: (panel, id) =>
@@ -204,6 +219,7 @@ export const useStore = create<UIState>((set) => ({
         patch.cfgOpen = d.config.cfgOpen ?? s.cfgOpen;
         patch.impOpen = !!d.config.impOpen;
         if (Array.isArray(d.config.adConfig?.manualChannels)) patch.manualAds = d.config.adConfig!.manualChannels!;
+        if (Array.isArray(d.config.adConfig?.manualCampaigns)) patch.manualCampaigns = d.config.adConfig!.manualCampaigns!;
         if (d.config.customInd) patch.customInd = d.config.customInd;
       }
       if (d.perfil) patch.perfil = d.perfil;

@@ -2,7 +2,7 @@
 // Canais Pagos — dashboard de mídia paga real (Zernio) + canais manuais.
 // Geral no topo (consolidado), cada ad account como painel minimizável, tabela de
 // campanhas, e canal pago manual (completo). Conexões espelham o Calendário.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useStore, newId, type ManualAd } from "@/lib/store";
 import { PageHead, KpiCard, MiniStat } from "@/components/ui";
@@ -20,11 +20,27 @@ interface AdTotals {
   linkClicks: number; leads: number; messaging: number; purchases: number; cpl: number;
   landingViews: number; postEngagement: number; reactions: number; comments: number; videoViews: number;
 }
-interface AdCampaign { name: string; spend: number; impressions: number; clicks: number; ctr: number; leads: number }
+// campanha rica (level=campaign). Campos essenciais sempre presentes; os demais podem faltar
+// (ex.: linhas de "canais manuais" só têm o núcleo) — a expansão degrada com fallback.
+interface AdCampaign {
+  name: string; spend: number; impressions: number; clicks: number; ctr: number; leads: number;
+  objective?: string; cpc?: number; cpm?: number; reach?: number; frequency?: number;
+  inlineLinkClicks?: number; forms?: number; messaging?: number; landingViews?: number; cpl?: number;
+}
 interface AdAccountData {
   zernioAccountId: string; platform: string; id: string; name: string; currency: string;
   totals: AdTotals | null; campaigns: AdCampaign[];
 }
+
+// objective (Meta) → rótulo PT curto
+const OBJETIVO_PT: Record<string, string> = {
+  OUTCOME_LEADS: "Leads", OUTCOME_TRAFFIC: "Tráfego", OUTCOME_ENGAGEMENT: "Engajamento",
+  OUTCOME_SALES: "Vendas", OUTCOME_AWARENESS: "Reconhecimento", OUTCOME_APP_PROMOTION: "App",
+  LINK_CLICKS: "Tráfego", POST_ENGAGEMENT: "Engajamento", PAGE_LIKES: "Curtidas",
+  LEAD_GENERATION: "Leads", CONVERSIONS: "Conversões", REACH: "Alcance",
+  BRAND_AWARENESS: "Reconhecimento", VIDEO_VIEWS: "Vídeo", MESSAGES: "Mensagens", PRODUCT_CATALOG_SALES: "Vendas",
+};
+const objetivoPt = (o?: string) => (o ? OBJETIVO_PT[o] || o.replace(/^OUTCOME_/, "").toLowerCase() : "—");
 
 // cache de módulo (stale-while-revalidate) por intervalo
 const ADS_CACHE = new Map<string, AdAccountData[]>();
@@ -115,8 +131,16 @@ export function AdsView() {
     return () => { alive = false; };
   }, [hasAdsConn, range.since, range.until]);
 
+  const manualCampaigns = useStore((st) => st.manualCampaigns);
+
   // canais manuais no escopo
   const manualInScope = manualAds.filter((m) => scopeMonths.some(([y, mo]) => y === m.ano && mo === m.mes));
+  // dados manuais por campanha no escopo (vendas/receita/leads qualificados)
+  const manualCampInScope = manualCampaigns.filter((m) => scopeMonths.some(([y, mo]) => y === m.ano && mo === m.mes));
+  const manualRes = manualCampInScope.reduce(
+    (acc, m) => ({ vendas: acc.vendas + m.vendas, receita: acc.receita + m.receita, leadsQualificados: acc.leadsQualificados + m.leadsQualificados }),
+    { vendas: 0, receita: 0, leadsQualificados: 0 }
+  );
 
   // consolidado geral (Zernio + manual)
   const geral = emptyTotals();
@@ -124,7 +148,7 @@ export function AdsView() {
     if (!a.totals) return;
     geral.spend += a.totals.spend; geral.impressions += a.totals.impressions; geral.clicks += a.totals.clicks;
     geral.reach += a.totals.reach; geral.linkClicks += a.totals.linkClicks; geral.leads += a.totals.leads;
-    geral.messaging += a.totals.messaging; geral.purchases += a.totals.purchases;
+    geral.messaging += a.totals.messaging; geral.purchases += a.totals.purchases; geral.landingViews += a.totals.landingViews;
   });
   manualInScope.forEach((m) => {
     geral.spend += m.gasto; geral.impressions += m.impressoes; geral.clicks += m.cliques; geral.leads += m.conversoes;
@@ -133,6 +157,7 @@ export function AdsView() {
   geral.cpc = geral.clicks ? geral.spend / geral.clicks : 0;
   geral.cpm = geral.impressions ? (geral.spend / geral.impressions) * 1000 : 0;
   geral.cpl = geral.leads ? geral.spend / geral.leads : 0;
+  geral.frequency = geral.reach ? geral.impressions / geral.reach : 0;
 
   const nothing = !loading && !err && (data || []).length === 0 && manualInScope.length === 0;
 
@@ -211,6 +236,30 @@ export function AdsView() {
               <KpiCard lbl="Leads / conversões" val={fmt(geral.leads)} foot="resultados atribuídos" />
               <KpiCard lbl="Custo por lead" val={geral.cpl ? money(geral.cpl) : "—"} foot="CPL médio" />
               <KpiCard lbl="CTR" val={pctv(geral.ctr)} foot={`${kfmt(geral.impressions)} impressões`} />
+            </div>
+
+            {/* Indicadores agrupados por tema — soma de todas as contas + manual */}
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--hairline)" }}>
+              <ThemeGroup title="Investimento" color="var(--red)">
+                <MiniStat l="Investimento" n={money(geral.spend)} />
+                <MiniStat l="CPC" n={geral.cpc ? money(geral.cpc) : "—"} />
+                <MiniStat l="CPM" n={geral.cpm ? money(geral.cpm) : "—"} />
+              </ThemeGroup>
+              <ThemeGroup title="Alcance" color="var(--cyan)">
+                <MiniStat l="Impressões" n={kfmt(geral.impressions)} />
+                <MiniStat l="Alcance" n={geral.reach ? kfmt(geral.reach) : "—"} />
+                <MiniStat l="Frequência" n={geral.frequency ? fmt(geral.frequency, 1) : "—"} />
+              </ThemeGroup>
+              <ThemeGroup title="Conversão" color="var(--excelente)">
+                <MiniStat l="Leads" n={fmt(geral.leads)} />
+                <MiniStat l="Custo/lead" n={geral.cpl ? money(geral.cpl) : "—"} />
+                <MiniStat l="Conversas" n={fmt(geral.messaging)} />
+                <MiniStat l="Page views (LP)" n={fmt(geral.landingViews)} />
+                {geral.purchases > 0 && <MiniStat l="Compras" n={fmt(geral.purchases)} />}
+                {manualRes.vendas > 0 && <MiniStat l="Vendas (manual)" n={fmt(manualRes.vendas)} />}
+                {manualRes.receita > 0 && <MiniStat l="Receita (manual)" n={money(manualRes.receita)} />}
+                {manualRes.leadsQualificados > 0 && <MiniStat l="Leads qualif. (manual)" n={fmt(manualRes.leadsQualificados)} />}
+              </ThemeGroup>
             </div>
           </div>
 
@@ -335,7 +384,7 @@ function AdAccountPanel({ a, open, onToggle }: { a: AdAccountData; open: boolean
                 </div>
               )}
               {filtered.length > 0
-                ? <CampanhaTable campaigns={filtered} />
+                ? <CampanhaTable campaigns={filtered} adAccountId={a.id} />
                 : <div className="sub" style={{ fontSize: 12.5, color: "var(--label-3)" }}>Nenhuma campanha corresponde a “{q}”.</div>}
             </div>
           )}
@@ -345,29 +394,208 @@ function AdAccountPanel({ a, open, onToggle }: { a: AdAccountData; open: boolean
   );
 }
 
-function CampanhaTable({ campaigns, manual }: { campaigns: AdCampaign[]; manual?: boolean }) {
+// Lista de campanhas em linhas EXPANDÍVEIS. Colunas essenciais sempre visíveis
+// (Campanha · Objetivo · Investimento · CTR · Leads); clicar expande a viz agrupada.
+function CampanhaTable({ campaigns, manual, adAccountId }: { campaigns: AdCampaign[]; manual?: boolean; adAccountId?: string }) {
+  const [open, setOpen] = useState<Record<number, boolean>>({});
+  const colSpan = manual ? 5 : 6;
   return (
     <div className="rel-scroll">
       <table className="rel-tbl ads-tbl">
         <thead>
           <tr>
+            <th style={{ width: 26 }} aria-hidden />
             <th style={{ textAlign: "left" }}>{manual ? "Canal / campanha" : "Campanha"}</th>
-            <th>Investimento</th><th>Impressões</th><th>Cliques</th><th>CTR</th><th>Leads</th>
+            {!manual && <th style={{ textAlign: "left" }}>Objetivo</th>}
+            <th>Investimento</th><th>CTR</th><th>Leads</th>
           </tr>
         </thead>
         <tbody>
-          {campaigns.map((c, i) => (
-            <tr key={i}>
-              <td className="rel-prod" style={{ textAlign: "left", maxWidth: 260, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</td>
-              <td className="tnum">{money(c.spend)}</td>
-              <td className="tnum">{kfmt(c.impressions)}</td>
-              <td className="tnum">{fmt(c.clicks)}</td>
-              <td className="tnum">{pctv(c.ctr)}</td>
-              <td className="tnum">{fmt(c.leads)}</td>
-            </tr>
-          ))}
+          {campaigns.map((c, i) => {
+            const isOpen = !!open[i];
+            return (
+              <Fragment key={i}>
+                <tr onClick={() => setOpen((o) => ({ ...o, [i]: !o[i] }))} style={{ cursor: "pointer" }}>
+                  <td style={{ textAlign: "center" }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                      style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: ".18s", color: "var(--label-3)", verticalAlign: "middle" }}>
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </td>
+                  <td className="rel-prod" style={{ textAlign: "left", maxWidth: 240, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</td>
+                  {!manual && (
+                    <td style={{ textAlign: "left" }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--cyan)", background: "rgba(0,187,197,.10)", padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                        {objetivoPt(c.objective)}
+                      </span>
+                    </td>
+                  )}
+                  <td className="tnum">{money(c.spend)}</td>
+                  <td className="tnum">{pctv(c.ctr)}</td>
+                  <td className="tnum">{fmt(c.leads)}</td>
+                </tr>
+                {isOpen && (
+                  <tr>
+                    <td colSpan={colSpan} style={{ padding: 0, background: "rgba(0,0,0,.02)" }}>
+                      <CampaignExpand c={c} adAccountId={adAccountId} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// destaque por objetivo — mostra primeiro o que importa pra aquele tipo de campanha
+function highlightFor(c: AdCampaign, cpl: number): { l: string; n: React.ReactNode }[] {
+  const o = c.objective || "";
+  if (o === "OUTCOME_LEADS" || o === "LEAD_GENERATION")
+    return [{ l: "Leads", n: fmt(c.leads) }, { l: "Custo/lead", n: cpl ? money(cpl) : "—" }, { l: "Formulários", n: c.forms != null ? fmt(c.forms) : "—" }];
+  if (o === "OUTCOME_ENGAGEMENT" || o === "POST_ENGAGEMENT" || o === "MESSAGES")
+    return [{ l: "Conversas", n: c.messaging != null ? fmt(c.messaging) : "—" }, { l: "Cliques", n: fmt(c.clicks) }, { l: "CTR", n: pctv(c.ctr) }];
+  if (o === "OUTCOME_TRAFFIC" || o === "LINK_CLICKS")
+    return [{ l: "Cliques no link", n: c.inlineLinkClicks != null ? fmt(c.inlineLinkClicks) : fmt(c.clicks) }, { l: "CTR", n: pctv(c.ctr) }, { l: "CPC", n: c.cpc ? money(c.cpc) : "—" }];
+  if (o === "OUTCOME_AWARENESS" || o === "REACH" || o === "BRAND_AWARENESS")
+    return [{ l: "Alcance", n: c.reach ? kfmt(c.reach) : "—" }, { l: "Impressões", n: kfmt(c.impressions) }, { l: "Frequência", n: c.frequency ? fmt(c.frequency, 1) : "—" }];
+  return [{ l: "Investimento", n: money(c.spend) }, { l: "CTR", n: pctv(c.ctr) }, { l: "Leads", n: fmt(c.leads) }];
+}
+
+// conteúdo da linha expandida — grupos temáticos + dados manuais da campanha
+function CampaignExpand({ c, adAccountId }: { c: AdCampaign; adAccountId?: string }) {
+  const s = useStore();
+  const manualCampaigns = useStore((st) => st.manualCampaigns);
+  const removeManualCampaign = useStore((st) => st.removeManualCampaign);
+  const [formOpen, setFormOpen] = useState(false);
+
+  const months = monthsInScope(s);
+  const linked = adAccountId
+    ? manualCampaigns.filter((m) => m.adAccountId === adAccountId && m.campaignName === c.name && months.some(([y, mo]) => y === m.ano && mo === m.mes))
+    : [];
+  const mAgg = linked.reduce(
+    (a, m) => ({ vendas: a.vendas + m.vendas, receita: a.receita + m.receita, leadsQualificados: a.leadsQualificados + m.leadsQualificados }),
+    { vendas: 0, receita: 0, leadsQualificados: 0 }
+  );
+
+  const cpl = c.cpl ?? (c.leads ? c.spend / c.leads : 0);
+  const destaque = highlightFor(c, cpl);
+
+  return (
+    <div style={{ padding: "14px 16px 8px" }}>
+      {/* destaque por objetivo */}
+      <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 14 }}>
+        {destaque.map((d, i) => (
+          <div key={i}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".3px", textTransform: "uppercase", color: "var(--label-3)" }}>{d.l}</div>
+            <div className="tnum" style={{ fontSize: 19, fontWeight: 700, color: "var(--label)", marginTop: 2 }}>{d.n}</div>
+          </div>
+        ))}
+      </div>
+
+      <ThemeGroup title="Investimento" color="var(--red)">
+        <MiniStat l="Investimento" n={money(c.spend)} />
+        <MiniStat l="CPC" n={c.cpc ? money(c.cpc) : "—"} />
+        <MiniStat l="CPM" n={c.cpm ? money(c.cpm) : "—"} />
+      </ThemeGroup>
+      <ThemeGroup title="Alcance" color="var(--cyan)">
+        <MiniStat l="Impressões" n={kfmt(c.impressions)} />
+        <MiniStat l="Alcance" n={c.reach ? kfmt(c.reach) : "—"} />
+        <MiniStat l="Frequência" n={c.frequency ? fmt(c.frequency, 1) : "—"} />
+      </ThemeGroup>
+      <ThemeGroup title="Engajamento" color="var(--ink)">
+        <MiniStat l="Cliques" n={fmt(c.clicks)} />
+        <MiniStat l="Cliques no link" n={c.inlineLinkClicks != null ? fmt(c.inlineLinkClicks) : "—"} />
+      </ThemeGroup>
+      <ThemeGroup title="Conversão" color="var(--excelente)">
+        <MiniStat l="Leads" n={fmt(c.leads)} />
+        <MiniStat l="Custo/lead" n={cpl ? money(cpl) : "—"} />
+        <MiniStat l="Formulários" n={c.forms != null ? fmt(c.forms) : "—"} />
+        <MiniStat l="Conversas" n={c.messaging != null ? fmt(c.messaging) : "—"} />
+        <MiniStat l="Page views (LP)" n={c.landingViews != null ? fmt(c.landingViews) : "—"} />
+      </ThemeGroup>
+
+      {(mAgg.vendas > 0 || mAgg.receita > 0 || mAgg.leadsQualificados > 0) && (
+        <ThemeGroup title="Manual" color="var(--atencao)">
+          {mAgg.vendas > 0 && <MiniStat l="Vendas" n={fmt(mAgg.vendas)} />}
+          {mAgg.receita > 0 && <MiniStat l="Receita" n={money(mAgg.receita)} />}
+          {mAgg.leadsQualificados > 0 && <MiniStat l="Leads qualificados" n={fmt(mAgg.leadsQualificados)} />}
+        </ThemeGroup>
+      )}
+
+      {/* input manual por campanha (só campanhas reais, com ad account) */}
+      {adAccountId && (
+        <div style={{ marginTop: 2 }}>
+          {!formOpen ? (
+            <button className="btn-link ig" type="button" onClick={() => setFormOpen(true)}>+ dados manuais</button>
+          ) : (
+            <ManualCampaignForm adAccountId={adAccountId} campaignName={c.name} onClose={() => setFormOpen(false)} />
+          )}
+          {linked.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {linked.map((m) => (
+                <div className="toggle-row" key={m.id}>
+                  <div className="tinfo">
+                    <b>{MESES[m.mes]}/{m.ano}</b>
+                    <span>
+                      {[
+                        m.vendas ? `${fmt(m.vendas)} vendas` : null,
+                        m.receita ? money(m.receita) : null,
+                        m.leadsQualificados ? `${fmt(m.leadsQualificados)} LQ` : null,
+                      ].filter(Boolean).join(" · ") || "—"}
+                      {m.obs ? ` · ${m.obs}` : ""}
+                    </span>
+                  </div>
+                  <button className="x" type="button" onClick={() => removeManualCampaign(m.id)} aria-label="Remover">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ManualCampaignForm({ adAccountId, campaignName, onClose }: { adAccountId: string; campaignName: string; onClose: () => void }) {
+  const s = useStore();
+  const addManualCampaign = useStore((st) => st.addManualCampaign);
+  const [f, setF] = useState({ ano: s.year, mes: s.month, vendas: 0, receita: 0, leadsQualificados: 0, obs: "" });
+  const nnum = (v: string) => Number(String(v).replace(/\./g, "").replace(",", ".")) || 0;
+
+  function salvar() {
+    addManualCampaign({
+      id: newId("mcamp"), adAccountId, campaignName,
+      ano: f.ano, mes: f.mes,
+      vendas: f.vendas, receita: f.receita, leadsQualificados: f.leadsQualificados, obs: f.obs.trim(),
+    });
+    onClose();
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 8 }}>
+      <div className="card-head" style={{ marginBottom: 8 }}>
+        <div className="t" style={{ fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Dados manuais · {campaignName}</div>
+        <button className="btn-link" type="button" onClick={onClose}>Fechar</button>
+      </div>
+      <div className="pm-hint" style={{ marginBottom: 10 }}>O que o Meta não entrega — vendas, receita e leads qualificados. Entra no consolidado geral.</div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10 }}>
+        <Field lbl="Mês">
+          <select className="field-edit" value={f.mes} onChange={(e) => setF((p) => ({ ...p, mes: Number(e.target.value) }))}>
+            {MESES.map((m, i) => <option key={i} value={i}>{m}</option>)}
+          </select>
+        </Field>
+        <Field lbl="Ano"><input className="field-edit" type="number" value={f.ano} onChange={(e) => setF((p) => ({ ...p, ano: Number(e.target.value) }))} /></Field>
+        <Field lbl="Vendas"><input className="field-edit" inputMode="numeric" onChange={(e) => setF((p) => ({ ...p, vendas: nnum(e.target.value) }))} placeholder="0" /></Field>
+        <Field lbl="Receita (R$)"><input className="field-edit" inputMode="decimal" onChange={(e) => setF((p) => ({ ...p, receita: nnum(e.target.value) }))} placeholder="0,00" /></Field>
+        <Field lbl="Leads qualificados"><input className="field-edit" inputMode="numeric" onChange={(e) => setF((p) => ({ ...p, leadsQualificados: nnum(e.target.value) }))} placeholder="0" /></Field>
+        <Field lbl="Observação"><input className="field-edit" value={f.obs} onChange={(e) => setF((p) => ({ ...p, obs: e.target.value }))} placeholder="opcional" /></Field>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <button className="btn-link ig" type="button" onClick={salvar}>+ Salvar dados</button>
+      </div>
     </div>
   );
 }

@@ -43,7 +43,7 @@ export async function fetchAll(): Promise<HydrationData> {
 export function saveConfig(s: UIState) {
   return putJSON("/api/config", {
     redes: s.redes, paineis: s.paineis, contas: s.contas, cfgOpen: s.cfgOpen, impOpen: s.impOpen,
-    adConfig: { manualChannels: s.manualAds }, customInd: s.customInd,
+    adConfig: { manualChannels: s.manualAds, manualCampaigns: s.manualCampaigns }, customInd: s.customInd,
   });
 }
 export function savePerfil(s: UIState) {

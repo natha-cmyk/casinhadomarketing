@@ -19,17 +19,23 @@ function sumActions(actions: AdInsightRow["actions"], match: (t: string) => bool
   if (!actions) return 0;
   return actions.reduce((s, a) => (match(a.action_type) ? s + num(a.value) : s), 0);
 }
+// predicados de action_type — reusados por total e por campanha (mesma definição = campanhas
+// somam de forma consistente com o total da conta)
+const isLead = (t: string) => t.includes("lead");
+const isForm = (t: string) => t.includes("complete_registration") || t === "lead";
+const isMessaging = (t: string) => t.includes("messaging") && (t.includes("connection") || t.includes("started"));
+const isLandingView = (t: string) => t.includes("landing_page_view");
 
 function totalsFrom(row: AdInsightRow | undefined) {
   if (!row) return null;
   const spend = num(row.spend);
   const impressions = num(row.impressions);
   const clicks = num(row.clicks);
-  const leads = sumActions(row.actions, (t) => t.includes("lead"));
-  const messaging = sumActions(row.actions, (t) => t.includes("messaging") && (t.includes("connection") || t.includes("started")));
+  const leads = sumActions(row.actions, isLead);
+  const messaging = sumActions(row.actions, isMessaging);
   const linkClicks = num(row.inline_link_clicks) || sumActions(row.actions, (t) => t === "link_click");
   const purchases = sumActions(row.actions, (t) => t.includes("purchase"));
-  const landingViews = sumActions(row.actions, (t) => t.includes("landing_page_view"));
+  const landingViews = sumActions(row.actions, isLandingView);
   const postEngagement = sumActions(row.actions, (t) => t === "post_engagement");
   const reactions = sumActions(row.actions, (t) => t === "post_reaction");
   const comments = sumActions(row.actions, (t) => t === "comment");
@@ -71,16 +77,31 @@ export async function GET(req: Request) {
           usable.map(async (act) => {
             const [tot, camp] = await Promise.all([
               adsInsights(conn._id, act.id, { since, until }).then((d) => d.data?.[0]).catch(() => undefined),
-              adsInsights(conn._id, act.id, { since, until, level: "campaign", fields: "campaign_name,impressions,spend,clicks,ctr,actions" })
+              adsInsights(conn._id, act.id, {
+                since, until, level: "campaign",
+                fields: "campaign_name,objective,impressions,spend,clicks,ctr,cpc,cpm,reach,frequency,actions,inline_link_clicks",
+              })
                 .then((d) => d.data || []).catch(() => [] as AdInsightRow[]),
             ]);
             const totals = totalsFrom(tot);
             const campaigns = camp
-              .map((c) => ({
-                name: c.campaign_name || "—",
-                spend: num(c.spend), impressions: num(c.impressions), clicks: num(c.clicks),
-                ctr: num(c.ctr), leads: sumActions(c.actions, (t) => t.includes("lead")),
-              }))
+              .map((c) => {
+                const spend = num(c.spend);
+                const leads = sumActions(c.actions, isLead);
+                return {
+                  name: c.campaign_name || "—",
+                  objective: typeof c.objective === "string" ? c.objective : "",
+                  spend, impressions: num(c.impressions), clicks: num(c.clicks),
+                  ctr: num(c.ctr), cpc: num(c.cpc), cpm: num(c.cpm),
+                  reach: num(c.reach), frequency: num(c.frequency),
+                  inlineLinkClicks: num(c.inline_link_clicks),
+                  leads,
+                  forms: sumActions(c.actions, isForm),
+                  messaging: sumActions(c.actions, isMessaging),
+                  landingViews: sumActions(c.actions, isLandingView),
+                  cpl: leads ? spend / leads : 0,
+                };
+              })
               .filter((c) => c.spend > 0 || c.impressions > 0)
               .sort((a, b) => b.spend - a.spend);
             return {
