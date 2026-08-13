@@ -93,6 +93,9 @@ export interface UIState {
   // contas conectadas na Zernio (do profile do workspace)
   zernioAccounts: { _id: string; platform: string; followersCount?: number; displayName?: string;
     enabled?: boolean; adsStatus?: string; profilePicture?: string; username?: string }[];
+  // conta selecionada por painel/rede (rede → accountId). Suporta multi-conta na mesma
+  // plataforma (ex. Instagram SeaHub + Seabox). Default = primeira conta da rede.
+  selectedAccount: Record<string, string>;
   // mídia paga manual + indicadores customizados (persistidos no config)
   manualAds: ManualAd[];
   manualCampaigns: ManualCampaign[];
@@ -116,6 +119,8 @@ export interface UIState {
   toggleScenario: () => void; toggleAgent: () => void;
   // zernio: seta contas conectadas e ATIVA o painel da rede automaticamente
   setZernioAccounts: (accounts: UIState["zernioAccounts"]) => void;
+  // multi-conta: escolhe qual conta daquela rede o painel exibe
+  setSelectedAccount: (rede: string, accountId: string) => void;
   // mídia paga manual
   addManualAd: (a: ManualAd) => void; updateManualAd: (id: string, patch: Partial<ManualAd>) => void;
   removeManualAd: (id: string) => void;
@@ -181,6 +186,7 @@ export const useStore = create<UIState>((set) => ({
   perfil: { empresa: "", segmento: "", cidade: "", site: "", canais: [], produtos: [], relacao: {} },
   hydrated: false,
   zernioAccounts: [],
+  selectedAccount: {},
   manualAds: [],
   manualCampaigns: [],
   customInd: {},
@@ -214,8 +220,15 @@ export const useStore = create<UIState>((set) => ({
       }
       // só mexe nas redes que têm conta; toggles manuais de redes sem conta ficam intactos
       for (const [id, on] of Object.entries(byRede)) redes[id] = on;
-      return { zernioAccounts: accounts, redes };
+      // limpa seleções apontando para contas que já não existem
+      const ids = new Set(accounts.map((a) => a._id));
+      const selectedAccount = Object.fromEntries(
+        Object.entries(s.selectedAccount).filter(([, accId]) => ids.has(accId))
+      );
+      return { zernioAccounts: accounts, redes, selectedAccount };
     }),
+  setSelectedAccount: (rede, accountId) =>
+    set((s) => ({ selectedAccount: { ...s.selectedAccount, [rede]: accountId } })),
   hydrate: (d) =>
     set((s) => {
       const patch: Partial<UIState> = { hydrated: true };

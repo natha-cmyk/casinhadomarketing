@@ -56,7 +56,10 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
 
   // social conectado = conta da plataforma com posting habilitado (enabled).
   // contas ads-only (ex. Facebook que veio junto do Meta Ads, enabled:false) NÃO contam.
-  const socialConnected = new Set(accounts.filter((a) => a.enabled === true).map((a) => a.platform));
+  // Contagem por plataforma: pode haver 2+ contas da mesma rede (multi-conta).
+  const socialCount = new Map<string, number>();
+  for (const a of accounts) if (a.enabled === true) socialCount.set(a.platform, (socialCount.get(a.platform) || 0) + 1);
+  const socialConnected = new Set(socialCount.keys());
   // ads conectado = existe conta DEDICADA de anúncio (platform = id do quadrado, ex. "metaads").
   // não usa o token social (LinkedIn/Facebook social herdam adsStatus mas não são ads).
   const adsConnected = new Set(
@@ -124,6 +127,8 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
               {redes.map((r) => {
                 // ads: conta dedicada de anúncio (platform = id do quadrado, ex. "metaads");
                 // social: conta com posting habilitado. Sem cruzar um com o outro.
+                const isSocial = r.grupo !== "ads";
+                const nContas = isSocial ? socialCount.get(zplat(r.id)) || 0 : 0;
                 const on = r.grupo === "ads" ? adsConnected.has(r.id) : socialConnected.has(zplat(r.id));
                 return (
                   <div key={r.id} className={`conx-sq${on ? " on" : ""}`}>
@@ -134,7 +139,22 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
                       <Logo r={r} />
                     </span>
                     <span className="conx-sq-nome">{r.label}</span>
-                    {on ? (
+                    {on && isSocial ? (
+                      // conta social conectada: mostra contagem e permite adicionar OUTRA
+                      // conta da mesma rede (o OAuth da Zernio adiciona ao profile).
+                      <div className="conx-sq-conn">
+                        <span className="conx-sq-cta on">conectado{nContas > 1 ? ` · ${nContas}` : ""}</span>
+                        <button
+                          className="conx-sq-add"
+                          onClick={() => connect(r.id)}
+                          disabled={busy === r.id}
+                          type="button"
+                          title="Conectar outra conta desta rede"
+                        >
+                          {busy === r.id ? "…" : "+ conta"}
+                        </button>
+                      </div>
+                    ) : on ? (
                       <span className="conx-sq-cta on">conectado</span>
                     ) : r.grupo === "ads" && !AD_CONNECT[r.id] ? (
                       <span className="conx-sq-cta" style={{ opacity: 0.55, cursor: "default", color: "var(--label-3)" }} title="Conexão via API não suportada por esta plataforma">

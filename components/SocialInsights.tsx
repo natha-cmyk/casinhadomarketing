@@ -200,7 +200,12 @@ export function SocialInsights({ rede }: { rede: string }) {
   const label = meta?.label || rede;
   const cor = meta?.cor || "#FF001E";
   const eyebrow = `CANAIS · ${label.toUpperCase()}`;
-  const acct = s.zernioAccounts.find((a) => a.platform === platform);
+  // multi-conta: pode haver 2+ contas da MESMA plataforma no profile (ex. Instagram
+  // SeaHub + Seabox). A conta exibida é a selecionada no store; default = primeira.
+  const accts = s.zernioAccounts.filter((a) => a.platform === platform);
+  const acct = accts.find((a) => a._id === s.selectedAccount[rede]) || accts[0] || null;
+  const multiAccount = accts.length > 1;
+  const acctLabel = (a: (typeof accts)[number]) => a.username || a.displayName || "conta";
 
   const [data, setData] = useState<Combined | null>(null);
   const [cmpData, setCmpData] = useState<Combined | null>(null);
@@ -800,7 +805,23 @@ export function SocialInsights({ rede }: { rede: string }) {
         title={label}
         desc={desc}
         right={
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {multiAccount && (
+              <div className="seg small si-acct-seg" role="group" aria-label="Conta">
+                {accts.map((a) => (
+                  <button
+                    key={a._id}
+                    type="button"
+                    className={acct?._id === a._id ? "on" : ""}
+                    aria-pressed={acct?._id === a._id}
+                    title={a.displayName || a.username || "conta"}
+                    onClick={() => s.setSelectedAccount(rede, a._id)}
+                  >
+                    {acctLabel(a)}
+                  </button>
+                ))}
+              </div>
+            )}
             {cards.length > 0 && (
               <button
                 type="button"
