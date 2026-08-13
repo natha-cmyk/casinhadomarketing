@@ -1,8 +1,10 @@
 "use client";
-// Dashboard de analytics social por workspace (via Zernio). Serve Instagram e os
-// painéis de rede (canal/[rede]). Dado real quando a conta está conectada; estado
-// vazio quando não. KPIs de todos os indicadores, evolução de seguidores, um gráfico
-// por métrica com série, audiência (demografia, só IG) e COMPARAÇÃO de períodos.
+// Dashboard de analytics social por workspace. Serve Instagram e os painéis de rede
+// (canal/[rede]). Dado real quando a conta está conectada; estado vazio quando não.
+// Renderiza TUDO dirigido pelo catálogo de indicadores (socialCatalog + indShown):
+// KPIs (seguidores, métricas, derivados, inbox), gráficos (evolução de seguidores,
+// séries diárias, volume de conversas), seções (top conteúdos, fontes de inbox,
+// audiência/demografia) e COMPARAÇÃO de períodos.
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
@@ -14,13 +16,28 @@ import { fmt, kfmt } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
 import { REDES } from "@/lib/seed-data";
 import { socialCatalog, indShown } from "@/lib/indicators";
-import type { AnalyticsResponse, DemographicsResponse } from "@/lib/zernio";
+import type {
+  AnalyticsResponse, DemographicsResponse, DailyMetricRow, PostAnalyticsResp,
+  InboxVolume, InboxResponseTime, InboxSourceBreakdown,
+} from "@/lib/zernio";
 
-// id da rede (Casinha) → plataforma da Zernio
+// id da rede (Casinha) → plataforma da integração
 const ZP: Record<string, string> = { x: "twitter" };
 const zplat = (id: string) => ZP[id] || id;
-// plataformas que têm analytics no Zernio
+// plataformas que têm analytics
 const COM_ANALYTICS = new Set(["instagram", "facebook", "tiktok", "youtube", "linkedin", "twitter"]);
+// plataformas com caixa de entrada (inbox)
+const COM_INBOX = new Set(["instagram", "facebook"]);
+
+// URL do perfil público por plataforma (a partir de acct.username)
+const PROFILE_URL: Record<string, (u: string) => string> = {
+  instagram: (u) => `https://instagram.com/${u}`,
+  tiktok: (u) => `https://tiktok.com/@${u}`,
+  facebook: (u) => `https://facebook.com/${u}`,
+  youtube: (u) => `https://youtube.com/@${u}`,
+  twitter: (u) => `https://x.com/${u}`,
+  linkedin: (u) => `https://linkedin.com/company/${u}`,
+};
 
 const METRIC_PT: Record<string, string> = {
   reach: "Alcance", reach_unique: "Alcance", impressions: "Impressões", views: "Visualizações",
@@ -36,6 +53,9 @@ const DIM_PT: Record<string, string> = { age: "Idade", gender: "Gênero", countr
 const DIM_ORDER = ["age", "gender", "country", "city"];
 const GENDER_PT: Record<string, string> = { M: "Masculino", F: "Feminino", U: "Não informado" };
 
+// fontes das conversas (inbox) → PT
+const SOURCE_PT: Record<string, string> = { contact: "Cliente", platform: "Nós", recipient: "Lidas" };
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
@@ -49,19 +69,37 @@ function derived(key: string, m: MetricMap, followers?: number): number | null {
   return null;
 }
 const pctFmt = (frac: number) => (frac * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+// engagementRate de post: pode vir como fração (0.05) ou já como percentual (5,0)
+const erFmt = (v: number) => (v <= 1 ? v * 100 : v).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+// segundos → humano ("6s" / "26min" / "2h")
+function humanDur(sec: number): string {
+  if (!isFinite(sec) || sec <= 0) return "—";
+  if (sec < 60) return `${Math.round(sec)}s`;
+  if (sec < 3600) return `${Math.round(sec / 60)}min`;
+  return `${Math.round(sec / 3600)}h`;
+}
 
 // resposta da rota combinada
 interface KeySeries { metric: string; label: string; total: number; values: { date: string; value: number }[] }
 interface Combined {
-  insights: AnalyticsResponse | null;
-  followers: AnalyticsResponse | null;
+  insights: AnalyticsResponse | null;          // metrics{key:{total,values?}}
+  followers: AnalyticsResponse | null;          // metrics.follower_count.values
   keySeries: KeySeries | null;
+  daily: DailyMetricRow[] | null;               // daily-metrics
+  top: PostAnalyticsResp | null;                // posting analytics (top conteúdos)
   demographics: DemographicsResponse | null;
 }
+// resposta da rota de inbox (conversas/DMs)
+interface InboxData {
+  volume: InboxVolume | null;
+  responseTime: InboxResponseTime | null;
+  sources: InboxSourceBreakdown | null;
+}
 
-// cache de módulo (stale-while-revalidate): re-visitas abrem na hora, revalida em background.
+// caches de módulo (stale-while-revalidate): re-visitas abrem na hora, revalida em background.
 // keyed por platform|accountId|since|until (o mesmo formato serve atual e comparação).
 const INS_CACHE = new Map<string, Combined>();
+const INBOX_CACHE = new Map<string, InboxData>();
 
 function dateRange(scope: { period: Period; year: number; month: number; quarter: number }) {
   const { period, year, month, quarter } = scope;
@@ -107,9 +145,11 @@ export function SocialInsights({ rede }: { rede: string }) {
 
   const [data, setData] = useState<Combined | null>(null);
   const [cmpData, setCmpData] = useState<Combined | null>(null);
+  const [inbox, setInbox] = useState<InboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // fetch combinado (métricas + seguidores + série + daily + top + demografia) + comparação
   useEffect(() => {
     if (!acct || !COM_ANALYTICS.has(platform)) return;
     const cur = dateRange(s);
@@ -163,10 +203,31 @@ export function SocialInsights({ rede }: { rede: string }) {
     s.cmp.period, s.cmp.year, s.cmp.month, s.cmp.quarter, s.cmp.week,
   ]);
 
+  // fetch de inbox (conversas/DMs) — só onde a plataforma tem caixa de entrada. Estado
+  // e cache próprios; período atual (sem comparação).
+  useEffect(() => {
+    if (!acct || !COM_INBOX.has(platform)) { setInbox(null); return; }
+    const cur = dateRange(s);
+    const key = keyOf(platform, acct._id, cur.since, cur.until);
+    let alive = true;
+    const cached = INBOX_CACHE.get(key);
+    if (cached) setInbox(cached);
+    fetch(`/api/zernio/inbox?accountId=${acct._id}&platform=${platform}&since=${cur.since}&until=${cur.until}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: InboxData & { error?: string }) => {
+        if (!alive || d?.error) return;
+        INBOX_CACHE.set(key, d);
+        setInbox(d);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acct?._id, platform, s.period, s.year, s.month, s.quarter, s.week]);
+
   if (!acct) {
     return (
       <>
-        <PageHead eyebrow={eyebrow} title={label} desc="Métricas reais unificadas pela Zernio." />
+        <PageHead eyebrow={eyebrow} title={label} desc="Métricas reais unificadas das contas conectadas." />
         <div className="empty">
           <div className="e-ico" style={{ fontSize: 22 }}>🔌</div>
           <h3>{label} não conectado</h3>
@@ -189,6 +250,9 @@ export function SocialInsights({ rede }: { rede: string }) {
   const ins = data?.insights || null;
   const foll = data?.followers || null;
   const demo = data?.demographics || null;
+  const daily = data?.daily || null;
+  const cmpDaily = cmpData?.daily || null;
+  const top = data?.top || null;
   const cmpIns = cmpData?.insights || null;
   const cmpFoll = cmpData?.followers || null;
 
@@ -206,7 +270,7 @@ export function SocialInsights({ rede }: { rede: string }) {
   const demoDims = demo ? DIM_ORDER.map((dim) => ({ dim, items: demoItems(demo, dim) })).filter((d) => d.items.length) : [];
 
   const desc =
-    `${acct.displayName || "conta conectada"} · dados reais (Zernio) · ${range.since} → ${range.until}` +
+    `${acct.displayName || "conta conectada"} · dados reais das contas conectadas · ${range.since} → ${range.until}` +
     (cmpRange ? ` · comparando ${range.since}→${range.until} vs ${cmpRange.since}→${cmpRange.until}` : "");
 
   // ── indicadores por CONFIG (base da doc + extras + custom); Personalização liga/desliga ──
@@ -216,18 +280,30 @@ export function SocialInsights({ rede }: { rede: string }) {
   const customList = s.customInd[rede] || [];
   const customKpis = customList.filter((c) => c.kind === "kpi");
   const showFollowerChart = shown("ch_followers");
-  const showKeyChart = shown("ch_key");
   const showDemographics = shown("audiencia");
-  const showTop = shown("top");
-  const keySeries = data?.keySeries || null;
-  const cmpKeySeries = cmpData?.keySeries || null;
+  const showTop = shown("posts");
+  const showInboxChart = shown("inbox_chart");
+  const showInboxSrc = shown("inbox_src");
   // gráficos por métrica: só métricas com série E ligadas na config
   const serieKeys = comSerie.filter((k) => shown("m_" + k));
-  const anyData = ins != null || acct.followersCount != null || keySeries != null;
+  // gráficos diários (daily-metrics) ligados
+  const dailyCharts = cat.filter((c) => c.kind === "chart" && c.bind.src === "dailyChart" && shown(c.id));
+  const anyData =
+    ins != null || acct.followersCount != null ||
+    (daily?.length ?? 0) > 0 || (top?.posts?.length ?? 0) > 0;
+
+  const profileUrl = acct.username && PROFILE_URL[platform] ? PROFILE_URL[platform](acct.username) : null;
 
   return (
     <>
-      <PageHead eyebrow={eyebrow} title={label} desc={desc} />
+      <PageHead
+        eyebrow={eyebrow}
+        title={label}
+        desc={desc}
+        right={profileUrl ? (
+          <a className="btn-link" href={profileUrl} target="_blank" rel="noopener">Abrir perfil ↗</a>
+        ) : undefined}
+      />
       {loading && <Spinner texto="Carregando métricas…" />}
       {err && <div className="auth-err">{err}</div>}
       {!loading && !err && (
@@ -264,7 +340,33 @@ export function SocialInsights({ rede }: { rede: string }) {
                   </KpiCard>
                 );
               }
-              // lacuna (doc) — sem dado da Zernio
+              if (it.bind.src === "inbox") {
+                if (it.bind.key === "volume") {
+                  const v = inbox?.volume;
+                  return (
+                    <KpiCard
+                      key={it.id}
+                      lbl="Conversas"
+                      val={v ? fmt(v.summary.uniqueConversations) : "—"}
+                      foot={v ? `${fmt(v.summary.received)} recebidas · ${fmt(v.summary.sent)} enviadas` : "sem dado"}
+                    />
+                  );
+                }
+                if (it.bind.key === "response") {
+                  const rt = inbox?.responseTime;
+                  const has = rt != null && rt.summary.sampleSize > 0;
+                  return (
+                    <KpiCard
+                      key={it.id}
+                      lbl="Tempo de resposta"
+                      val={has ? humanDur(rt!.summary.medianSeconds) : "—"}
+                      foot={has ? "mediana" : "sem dado"}
+                    />
+                  );
+                }
+                return null;
+              }
+              // lacuna (doc) — sem dado
               return <KpiCard key={it.id} lbl={it.label} val="—" foot="sem dado" />;
             })}
             {customKpis.map((c) => {
@@ -301,29 +403,28 @@ export function SocialInsights({ rede }: { rede: string }) {
             </div>
           )}
 
-          {/* Série diária da métrica-chave (muda por período) */}
-          {showKeyChart && keySeries && keySeries.values.length > 0 && (
-            <div className="card">
-              <div className="card-head">
-                <div className="t">{pt(keySeries.metric)} por dia</div>
-                <span className="badge">{comparando ? "atual · comparação" : "no período"}</span>
+          {/* Séries diárias (daily-metrics) — variam por período; só as ligadas */}
+          {daily && daily.length > 0 && dailyCharts.map((it) => {
+            if (it.bind.src !== "dailyChart") return null;
+            const k = it.bind.key;
+            const series: LineSeries[] = [
+              { name: pt(k), color: cor, data: daily.map((r) => (r.metrics as Record<string, number>)[k] ?? 0), fill: true },
+            ];
+            if (comparando && cmpDaily && cmpDaily.length) {
+              series.push({ name: "Comparação", color: cor, data: cmpDaily.slice(0, daily.length).map((r) => (r.metrics as Record<string, number>)[k] ?? 0), dash: true });
+            }
+            return (
+              <div className="card" key={it.id}>
+                <div className="card-head">
+                  <div className="t">{it.label}</div>
+                  <span className="badge">{comparando ? "atual · comparação" : "no período"}</span>
+                </div>
+                <Chart svg={lineChart(daily.map((r) => r.date.slice(5)), series, { sel: daily.length - 1 })} />
               </div>
-              <Chart
-                svg={lineChart(
-                  keySeries.values.map((v) => v.date.slice(5)),
-                  [
-                    { name: pt(keySeries.metric), color: cor, data: keySeries.values.map((v) => v.value), fill: true },
-                    ...(comparando && cmpKeySeries?.values.length
-                      ? [{ name: "Comparação", color: cor, data: cmpKeySeries.values.slice(0, keySeries.values.length).map((v) => v.value), dash: true } as LineSeries]
-                      : []),
-                  ],
-                  { sel: keySeries.values.length - 1 }
-                )}
-              />
-            </div>
-          )}
+            );
+          })}
 
-          {/* Um gráfico por indicador com série temporal (só os ligados) */}
+          {/* Um gráfico por indicador com série temporal (account-insights; só os ligados) */}
           {serieKeys.map((k) => {
             const vals = metrics[k].values;
             const cmpVals = cmpIns?.metrics?.[k]?.values || [];
@@ -343,6 +444,80 @@ export function SocialInsights({ rede }: { rede: string }) {
               </div>
             );
           })}
+
+          {/* Volume de conversas por dia (inbox) */}
+          {showInboxChart && inbox?.volume && inbox.volume.timeseries.length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <div className="t">Volume de conversas por dia</div>
+                <span className="badge">no período</span>
+              </div>
+              <Chart
+                svg={lineChart(
+                  inbox.volume.timeseries.map((t) => t.date.slice(5)),
+                  [
+                    { name: "recebidas", color: cor, data: inbox.volume.timeseries.map((t) => t.received), fill: true },
+                    { name: "enviadas", color: "#8E8E93", data: inbox.volume.timeseries.map((t) => t.sent) },
+                  ],
+                  { sel: inbox.volume.timeseries.length - 1 }
+                )}
+              />
+            </div>
+          )}
+
+          {/* Top conteúdos (posting analytics) — ranking por engajamento */}
+          {showTop && top && top.posts && top.posts.length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <div className="t">Top conteúdos</div>
+                <span className="badge">por engajamento</span>
+              </div>
+              {top.posts.slice(0, 6).map((p) => {
+                const a = p.analytics || {};
+                const txt = (p.content || "").replace(/\s+/g, " ").trim();
+                const short = txt.length > 90 ? txt.slice(0, 90) + "…" : txt || "(sem legenda)";
+                return (
+                  <div className="toggle-row" key={p._id}>
+                    <div className="tinfo" style={{ minWidth: 0, overflow: "hidden" }}>
+                      <b style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{short}</b>
+                      <span style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
+                        {a.engagementRate != null && <span className="badge">{erFmt(a.engagementRate)}</span>}
+                        {a.reach != null && <span className="badge">{kfmt(a.reach)} alcance</span>}
+                        {(a.likes != null || a.comments != null) && (
+                          <span className="badge">{fmt(a.likes ?? 0)} curt. · {fmt(a.comments ?? 0)} coment.</span>
+                        )}
+                      </span>
+                    </div>
+                    {p.platformPostUrl && (
+                      <a className="btn-link" href={p.platformPostUrl} target="_blank" rel="noopener" style={{ padding: "6px 10px" }}>
+                        abrir ↗
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Fontes das conversas (inbox) */}
+          {showInboxSrc && inbox?.sources && inbox.sources.sources.length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <div className="t">Fontes das conversas</div>
+                <span className="badge">no período</span>
+              </div>
+              {(() => {
+                const rows = inbox.sources.sources.map((sr) => ({
+                  label: SOURCE_PT[sr.source] || sr.source,
+                  val: sr.received || sr.sent || sr.read,
+                }));
+                const max = Math.max(1, ...rows.map((r) => r.val));
+                return rows.map((r, i) => (
+                  <BarRow key={i} k={r.label} v={r.val} max={max} color={cor} formatted={fmt(r.val)} />
+                ));
+              })()}
+            </div>
+          )}
 
           {/* Audiência (demografia — só IG, quando ligado e disponível) */}
           {showDemographics && demoDims.length > 0 && (
@@ -369,14 +544,6 @@ export function SocialInsights({ rede }: { rede: string }) {
                   </div>
                 );
               })}
-            </div>
-          )}
-
-          {/* Top conteúdos — lacuna (nível de post, em breve) */}
-          {showTop && (
-            <div className="card">
-              <div className="card-head"><div className="t">Top conteúdos</div><span className="badge">em breve</span></div>
-              <div className="pm-hint">Ranking por desempenho de post chega com o analytics em nível de publicação.</div>
             </div>
           )}
         </div>

@@ -20,7 +20,7 @@ export function ConexoesZernio() {
       <div className="card-head">
         <div>
           <div className="t">Conexões</div>
-          <div className="sub">Conecte as contas do cliente direto por aqui — login na própria rede, sem entrar na Zernio. As métricas aparecem nos painéis depois.</div>
+          <div className="sub">Conecte as contas do cliente direto por aqui — login seguro direto na própria rede. As métricas aparecem nos painéis depois.</div>
         </div>
         <button className="btn-link" onClick={refresh} type="button">Atualizar</button>
       </div>

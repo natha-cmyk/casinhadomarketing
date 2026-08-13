@@ -283,7 +283,7 @@ export default function PersonalizacaoView() {
       {/* ===== Conexões ===== */}
       <PSection
         title="Conexões"
-        sub="Conecte as contas do cliente direto por aqui — login na própria rede, sem entrar na Zernio. As métricas aparecem nos painéis depois."
+        sub="Conecte as contas do cliente direto por aqui — login seguro direto na própria rede. As métricas aparecem nos painéis depois."
         accent="var(--red)"
         action={
           <button className="btn-link" onClick={refreshConx} type="button">
@@ -490,7 +490,7 @@ export default function PersonalizacaoView() {
       {/* ===== Redes & canais ===== */}
       <PSection
         title="Redes & canais"
-        sub="Ative o que você gerencia — conexão via Zernio (OAuth hospedado, 1 clique). Redes sociais habilitam painel."
+        sub="Ative o que você gerencia — conexão de contas (login seguro OAuth, 1 clique). Redes sociais habilitam painel."
         accent="var(--cyan)"
       >
         <div className="ind-panel first">

@@ -77,7 +77,7 @@ function CompCard({ c }: { c: ConcItem }) {
       </div>
       <div style={{ display: "grid", gap: 6 }}>
         <input className="comp-in" value={c.ig} placeholder="@instagram" onChange={(e) => update(c.id, { ig: e.target.value })} />
-        <input className="comp-in" value={c.dominio || ""} placeholder="dominio.com.br" onChange={(e) => update(c.id, { dominio: e.target.value })} />
+        <input className="comp-in" value={c.dominio || ""} placeholder="domínio.com.br" onChange={(e) => update(c.id, { dominio: e.target.value })} />
         <input className="comp-in" value={c.iconOverride || ""} placeholder="URL da imagem ou emoji" onChange={(e) => update(c.id, { iconOverride: e.target.value })} />
         <button
           type="button"

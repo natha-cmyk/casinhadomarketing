@@ -101,7 +101,8 @@ export const ACCOUNT_METRICS: Record<string, string[]> = {
   instagram: ["reach", "views", "accounts_engaged", "total_interactions", "likes", "comments",
     "shares", "saves", "replies", "reposts", "follows_and_unfollows", "profile_links_taps"],
   facebook: ["reach", "views", "total_interactions", "likes", "comments", "shares", "post_engagements"],
-  tiktok: ["views", "likes", "comments", "shares", "reach", "engaged_audience", "profile_views"],
+  // tiktok: contadores lifetime (verificado ao vivo) — sem série
+  tiktok: ["follower_count", "following_count", "likes_count", "video_count", "followers_gained", "followers_lost"],
   youtube: ["views", "likes", "comments", "shares", "subscribers_gained", "subscribers_lost", "watch_time", "average_view_duration"],
   linkedin: ["impressions", "clicks", "likes", "comments", "shares", "engagement", "unique_impressions"],
   twitter: ["impressions", "likes", "replies", "reposts", "profile_visits", "engagements"],
@@ -216,4 +217,72 @@ export function demographics(accountId: string, opts?: { metric?: string; breakd
   return zernio<DemographicsResponse>(`/analytics/instagram/demographics?${q.toString()}`);
 }
 
-// TODO(zernio): POST /posts (publish do calendário) — {content, scheduledFor, timezone, platforms:[{platform,accountId}]}
+// ── Métricas diárias agregadas (derivadas dos posts) — série uniforme por plataforma ──
+// GET /analytics/daily-metrics?accountId=&platform=&fromDate=&toDate= (máx ~90-366 dias)
+export interface DailyMetricRow {
+  date: string; postCount: number;
+  metrics: { impressions: number; reach: number; likes: number; comments: number; shares: number; saves: number; clicks: number; views: number };
+}
+export async function dailyMetrics(accountId: string, platform: string, opts?: { fromDate?: string; toDate?: string }) {
+  const q = new URLSearchParams({ accountId, platform });
+  if (opts?.fromDate) q.set("fromDate", opts.fromDate);
+  if (opts?.toDate) q.set("toDate", opts.toDate);
+  const r = await zernio<{ dailyData: DailyMetricRow[] }>(`/analytics/daily-metrics?${q.toString()}`);
+  return r.dailyData || [];
+}
+
+// ── Analytics por POST (posting analytics) + top conteúdos ──
+// GET /analytics?accountId=&platform=&fromDate=&toDate=&sortBy=&limit=&order=
+export interface PostAnalyticsItem {
+  _id: string; content: string; publishedAt: string; platform: string; platformPostUrl?: string;
+  analytics: {
+    impressions?: number; reach?: number; likes?: number; comments?: number; shares?: number;
+    saves?: number; clicks?: number; views?: number; follows?: number; engagementRate?: number;
+    igReelsAvgWatchTime?: number; videoDurationSeconds?: number;
+  };
+}
+export interface PostAnalyticsResp {
+  overview: { totalPosts: number; publishedPosts: number; scheduledPosts: number; lastSync?: string };
+  posts: PostAnalyticsItem[];
+}
+export function postAnalytics(opts: { accountId?: string; platform?: string; fromDate?: string; toDate?: string; sortBy?: string; order?: string; limit?: number }) {
+  const q = new URLSearchParams();
+  if (opts.accountId) q.set("accountId", opts.accountId);
+  if (opts.platform) q.set("platform", opts.platform);
+  if (opts.fromDate) q.set("fromDate", opts.fromDate);
+  if (opts.toDate) q.set("toDate", opts.toDate);
+  q.set("sortBy", opts.sortBy || "engagement");
+  q.set("order", opts.order || "desc");
+  q.set("limit", String(opts.limit ?? 10));
+  return zernio<PostAnalyticsResp>(`/analytics?${q.toString()}`);
+}
+
+// ── Inbox analytics (conversas/DMs) ──
+export interface InboxVolume {
+  success: boolean; from: string; to: string;
+  summary: { received: number; sent: number; read: number; failed: number; uniqueConversations: number };
+  timeseries: { date: string; sent: number; received: number; read: number; failed: number }[];
+  byPlatform: { platform: string; sent: number; received: number }[];
+}
+export interface InboxResponseTime {
+  success: boolean;
+  summary: { sampleSize: number; medianSeconds: number; p90Seconds: number; meanSeconds: number; fastestSeconds: number; slowestSeconds: number };
+  histogram: { bucket: string; count: number }[];
+}
+export interface InboxSourceBreakdown {
+  success: boolean;
+  sources: { source: string; received: number; sent: number; read: number }[];
+}
+function inboxQS(opts?: { fromDate?: string; toDate?: string; accountId?: string; platform?: string }) {
+  const q = new URLSearchParams();
+  if (opts?.fromDate) q.set("fromDate", opts.fromDate);
+  if (opts?.toDate) q.set("toDate", opts.toDate);
+  if (opts?.accountId) q.set("accountId", opts.accountId);
+  if (opts?.platform) q.set("platform", opts.platform);
+  return q.toString();
+}
+export const inboxVolume = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxVolume>(`/analytics/inbox/volume?${inboxQS(o)}`);
+export const inboxResponseTime = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxResponseTime>(`/analytics/inbox/response-time?${inboxQS(o)}`);
+export const inboxSourceBreakdown = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxSourceBreakdown>(`/analytics/inbox/source-breakdown?${inboxQS(o)}`);
+
+// TODO(publish): POST /posts (publish do calendário) — {content, scheduledFor, timezone, platforms:[{platform,accountId}]}

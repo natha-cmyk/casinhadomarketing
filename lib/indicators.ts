@@ -10,16 +10,21 @@ const PANEL_PLATFORM: Record<string, string> = {
   youtube: "youtube", linkedin: "linkedin", x: "twitter",
 };
 
-// métricas reais por plataforma (espelha ACCOUNT_METRICS do lib/zernio; instagram verificado ao vivo)
+// métricas reais por plataforma (espelha ACCOUNT_METRICS do lib/zernio; instagram e tiktok verificados ao vivo)
 const PLATFORM_METRICS: Record<string, string[]> = {
   instagram: ["reach", "views", "accounts_engaged", "total_interactions", "likes", "comments",
     "shares", "saves", "replies", "reposts", "follows_and_unfollows", "profile_links_taps"],
   facebook: ["reach", "views", "total_interactions", "likes", "comments", "shares", "post_engagements"],
-  tiktok: ["views", "likes", "comments", "shares", "reach", "engaged_audience", "profile_views"],
+  tiktok: ["follower_count", "following_count", "likes_count", "video_count", "followers_gained", "followers_lost"],
   youtube: ["views", "likes", "comments", "shares", "subscribers_gained", "subscribers_lost", "watch_time", "average_view_duration"],
   linkedin: ["impressions", "clicks", "likes", "comments", "shares", "engagement", "unique_impressions"],
   twitter: ["impressions", "likes", "replies", "reposts", "profile_visits", "engagements"],
 };
+
+// plataformas com caixa de entrada (inbox analytics)
+const INBOX_PLATFORMS = new Set(["instagram", "facebook"]);
+// métricas diárias uniformes (daily-metrics, derivadas dos posts)
+const DAILY_METRICS = ["reach", "impressions", "views", "likes", "comments", "shares", "saves"];
 
 // rótulos PT das métricas
 export const METRIC_LABEL: Record<string, string> = {
@@ -33,6 +38,8 @@ export const METRIC_LABEL: Record<string, string> = {
   subscribers_lost: "Inscritos perdidos", watch_time: "Tempo de exibição",
   average_view_duration: "Duração média", engaged_audience: "Audiência engajada",
   profile_views: "Visitas ao perfil", post_engagements: "Engajamento de posts",
+  follower_count: "Seguidores", following_count: "Seguindo", likes_count: "Curtidas (total)",
+  video_count: "Vídeos", followers_gained: "Seguidores ganhos", followers_lost: "Seguidores perdidos",
 };
 export const metricLabel = (k: string) => METRIC_LABEL[k] || k.replace(/_/g, " ");
 
@@ -42,8 +49,11 @@ export type IndBind =
   | { src: "followerChart" }   // gráfico de evolução de seguidores
   | { src: "metric"; key: string } // insights.metrics[key]
   | { src: "derived"; key: "eng_rate" | "reach_rate" | "save_rate" } // razão calculada
+  | { src: "dailyChart"; key: string } // gráfico diário (daily-metrics)
+  | { src: "posts" }           // seção "top conteúdos" (posting analytics)
+  | { src: "inbox"; key: "volume" | "response" | "sources" | "chart" } // conversas/DMs
   | { src: "demographics" }    // seção de audiência (idade/gênero/país/cidade)
-  | { src: "none" };           // lacuna: a Zernio não entrega esse indicador
+  | { src: "none" };           // lacuna: dado não disponível
 
 export interface CatItem {
   id: string; label: string; desc?: string;
@@ -61,10 +71,6 @@ const DOC_GAPS: Record<string, CatItem[]> = {
     { id: "ctr_thumb", label: "CTR da miniatura", desc: "em breve (nível de vídeo)", kind: "kpi", bind: { src: "none" }, def: true, group: "Visualização" },
   ],
 };
-const TOP_GAP = (group = "Conteúdo"): CatItem => ({
-  id: "top", label: "Top conteúdos", desc: "ranking por desempenho — em breve (nível de post)",
-  kind: "section", bind: { src: "none" }, def: false, group,
-});
 
 // catálogo COMPLETO de um painel social (default ON = base rica; tudo toggleável)
 export function socialCatalog(panel: string): CatItem[] {
@@ -87,13 +93,30 @@ export function socialCatalog(panel: string): CatItem[] {
     { id: "der_reach_rate", label: "Alcance sobre a base", desc: "alcance ÷ seguidores", kind: "kpi", bind: { src: "derived", key: "reach_rate" }, def: true, group: "Taxas" },
     { id: "der_save_rate", label: "Taxa de salvamento", desc: "salvos ÷ alcance", kind: "kpi", bind: { src: "derived", key: "save_rate" }, def: false, group: "Taxas" },
   );
+  // gráficos diários (série que muda por período) — daily-metrics
+  items.push(
+    { id: "d_reach", label: "Alcance por dia", desc: "série diária", kind: "chart", bind: { src: "dailyChart", key: "reach" }, def: true, group: "Séries diárias" },
+    { id: "d_impressions", label: "Impressões por dia", kind: "chart", bind: { src: "dailyChart", key: "impressions" }, def: false, group: "Séries diárias" },
+    { id: "d_likes", label: "Curtidas por dia", kind: "chart", bind: { src: "dailyChart", key: "likes" }, def: false, group: "Séries diárias" },
+  );
+  // top conteúdos (posting analytics) — REAL
+  items.push({ id: "posts", label: "Top conteúdos", desc: "ranking por engajamento", kind: "section", bind: { src: "posts" }, def: true, group: "Conteúdo" });
+  // inbox (conversas/DMs)
+  if (INBOX_PLATFORMS.has(plat)) {
+    items.push(
+      { id: "inbox_vol", label: "Conversas", desc: "recebidas, enviadas, únicas", kind: "kpi", bind: { src: "inbox", key: "volume" }, def: true, group: "Conversas" },
+      { id: "inbox_rt", label: "Tempo de resposta", desc: "mediana das respostas", kind: "kpi", bind: { src: "inbox", key: "response" }, def: true, group: "Conversas" },
+      { id: "inbox_chart", label: "Volume de conversas por dia", kind: "chart", bind: { src: "inbox", key: "chart" }, def: false, group: "Conversas" },
+      { id: "inbox_src", label: "Fontes das conversas", kind: "section", bind: { src: "inbox", key: "sources" }, def: false, group: "Conversas" },
+    );
+  }
   if (plat === "instagram") {
     items.push({ id: "audiencia", label: "Audiência (demografia)", desc: "idade, gênero, país, cidade", kind: "section", bind: { src: "demographics" }, def: true, group: "Audiência" });
   }
   for (const g of DOC_GAPS[panel] || []) items.push(g);
-  items.push(TOP_GAP());
   return items;
 }
+void DAILY_METRICS;
 
 export const isSocialPanel = (panel: string) => !!PANEL_PLATFORM[panel];
 

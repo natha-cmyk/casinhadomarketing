@@ -28,7 +28,7 @@ export function AccountFooter() {
     return (
       <div className="sb-foot">
         <span className="dot" />
-        Prévia · dados reais via Zernio
+        Prévia · dados reais
       </div>
     );
   }

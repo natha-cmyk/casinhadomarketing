@@ -125,7 +125,7 @@ export function AdsView() {
       <PageHead
         eyebrow="COMERCIAL · AQUISIÇÃO"
         title="Canais Pagos"
-        desc="Investimento, CPL e desempenho de campanhas — mídia paga conectada (Zernio) + canais informados à mão."
+        desc="Investimento, CPL e desempenho de campanhas — mídia paga conectada + canais informados à mão."
         right={
           <button className="btn-link ig" onClick={() => setShowManual((v) => !v)} type="button">
             <Ic name="upload" /> Canal manual

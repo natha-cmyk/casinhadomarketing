@@ -349,7 +349,7 @@ export function CalendarioView() {
             <circle cx="12" cy="12" r="9" />
             <path d="M12 8h.01M11 12h1v4h1" />
           </svg>{" "}
-          A publicação automática roda via <b>Zernio</b> (API unificada, OAuth hospedado — sem app review de cada
+          A publicação automática roda pela <b>plataforma</b> (API unificada, login seguro OAuth — sem app review de cada
           rede). Aqui &quot;Publicar agora&quot; simula o disparo mudando o status.
         </div>
       </div>

@@ -47,7 +47,7 @@ export function PainelView() {
       ) : (
         <div className="grid" style={{ gap: 16 }}>
           <div className="grid kpis">
-            <KpiCard lbl="Contas conectadas" val={fmt(accounts.length)} foot="via Zernio" />
+            <KpiCard lbl="Contas conectadas" val={fmt(accounts.length)} foot="sociais, conversas e ads" />
             <KpiCard lbl="Seguidores (total)" val={totalSeg ? fmt(totalSeg) : "—"} foot="somados nas redes" />
           </div>
           <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
