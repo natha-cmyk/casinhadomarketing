@@ -284,6 +284,7 @@ export function SocialInsights({ rede }: { rede: string }) {
   const top = data?.top || null;
   const content = data?.content || null;
   const linkTaps = data?.linkTaps || null;
+  const demo = data?.demographics || null;
   const stories = data?.stories ?? null;
   const cmpIns = cmpData?.insights || null;
   const cmpFoll = cmpData?.followers || null;
@@ -390,6 +391,10 @@ export function SocialInsights({ rede }: { rede: string }) {
   }
   const heatMax = Math.max(0, ...heatGrid.flat());
   const hasHeat = !!bestTime && bestTime.length > 0 && heatMax > 0;
+
+  // ── Audiência (demografia IG): idade/gênero/país/cidade ──
+  const demoDims = demo ? DIM_ORDER.map((dim) => ({ dim, items: demoItems(demo, dim) })).filter((d) => d.items.length) : [];
+  const showDemo = shown("audiencia") && demoDims.length > 0;
 
   return (
     <>
@@ -674,6 +679,36 @@ export function SocialInsights({ rede }: { rede: string }) {
               )}
             </div>
           </div>
+
+          {/* Audiência — demografia (idade/gênero/país/cidade) */}
+          {showDemo && (
+            <div className="card pad-lg">
+              <div className="card-head">
+                <div><div className="t">Audiência</div><div className="sub">quem segue o perfil · por seguidores</div></div>
+              </div>
+              <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 18 }}>
+                {demoDims.map(({ dim, items }) => {
+                  const tops = [...items].sort((a, b) => b.value - a.value).slice(0, 6);
+                  const mx = Math.max(1, ...tops.map((t) => t.value));
+                  return (
+                    <div key={dim}>
+                      <div className="sub" style={{ fontWeight: 600, marginBottom: 6 }}>{DIM_PT[dim] || dim}</div>
+                      {tops.map((t, i) => (
+                        <BarRow
+                          key={i}
+                          k={dim === "gender" ? GENDER_PT[t.dimension] || t.dimension : t.dimension}
+                          v={t.value}
+                          max={mx}
+                          color={cor}
+                          formatted={fmt(t.value)}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
     </>
