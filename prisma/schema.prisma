@@ -69,6 +69,8 @@ model EnvConfig {
   contas      Json      @default("{}") // { redeId: { on, accountId } } — contas Zernio conectadas
   cfgOpen     Json      @default("{}")
   impOpen     Boolean   @default(false)
+  adConfig    Json      @default("{}") // { manualChannels: [...], adAccounts: {…} } — mídia paga
+  customInd   Json      @default("{}") // { painel: [ {id,label,metric,...} ] } — indicadores criados pelo perfil
   updatedAt   DateTime  @updatedAt
 }
 

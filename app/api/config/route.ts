@@ -25,6 +25,8 @@ export async function PUT(req: Request) {
       contas: b.contas ?? {},
       cfgOpen: b.cfgOpen ?? {},
       impOpen: !!b.impOpen,
+      adConfig: b.adConfig ?? {},
+      customInd: b.customInd ?? {},
     };
     const c = await prisma.envConfig.upsert({
       where: { workspaceId: ws },

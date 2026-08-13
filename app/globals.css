@@ -564,3 +564,8 @@ svg.chartI{cursor:crosshair}
 .cc-conx-ico{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff}
 .cc-conx-ico svg{width:15px;height:15px}
 .cc-conx-none{font-size:12px;color:var(--label-3)}
+
+/* Tabela de campanhas (Canais Pagos) — números à direita */
+.ads-tbl th { text-align: right; white-space: nowrap; }
+.ads-tbl th:first-child { text-align: left; }
+.ads-tbl td.tnum { text-align: right; font-variant-numeric: tabular-nums; }

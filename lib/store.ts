@@ -46,6 +46,19 @@ export interface Perfil {
   canais: string[]; produtos: string[]; relacao: Record<string, boolean>;
 }
 
+// ── Mídia paga MANUAL (canal pago informado à mão) ──
+export interface ManualAd {
+  id: string; nome: string; plataforma: string; ano: number; mes: number; // 0-11
+  gasto: number; impressoes: number; cliques: number;
+  ctr: number; cpc: number; cpm: number; conversoes: number; campanha: string;
+}
+// ── Indicador customizado criado pelo perfil (por painel) ──
+export interface CustomInd {
+  id: string; label: string; desc?: string;
+  metric?: string; // chave de métrica Zernio a vincular (opcional)
+  kind: "kpi" | "chart";
+}
+
 let __id = 0;
 const uid = (p: string) => `${p}_${++__id}`;
 
@@ -74,11 +87,14 @@ export interface UIState {
   // contas conectadas na Zernio (do profile do workspace)
   zernioAccounts: { _id: string; platform: string; followersCount?: number; displayName?: string;
     enabled?: boolean; adsStatus?: string; profilePicture?: string; username?: string }[];
+  // mídia paga manual + indicadores customizados (persistidos no config)
+  manualAds: ManualAd[];
+  customInd: Record<string, CustomInd[]>;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[] }; customInd?: Record<string, CustomInd[]> } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -91,6 +107,11 @@ export interface UIState {
   toggleScenario: () => void; toggleAgent: () => void;
   // zernio: seta contas conectadas e ATIVA o painel da rede automaticamente
   setZernioAccounts: (accounts: UIState["zernioAccounts"]) => void;
+  // mídia paga manual
+  addManualAd: (a: ManualAd) => void; updateManualAd: (id: string, patch: Partial<ManualAd>) => void;
+  removeManualAd: (id: string) => void;
+  // indicadores customizados
+  addCustomInd: (panel: string, c: CustomInd) => void; removeCustomInd: (panel: string, id: string) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
@@ -139,8 +160,18 @@ export const useStore = create<UIState>((set) => ({
   perfil: { empresa: "", segmento: "", cidade: "", site: "", canais: [], produtos: [], relacao: {} },
   hydrated: false,
   zernioAccounts: [],
+  manualAds: [],
+  customInd: {},
 
   set: (patch) => set(patch),
+  addManualAd: (a) => set((s) => ({ manualAds: [...s.manualAds, a] })),
+  updateManualAd: (id, patch) =>
+    set((s) => ({ manualAds: s.manualAds.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
+  removeManualAd: (id) => set((s) => ({ manualAds: s.manualAds.filter((m) => m.id !== id) })),
+  addCustomInd: (panel, c) =>
+    set((s) => ({ customInd: { ...s.customInd, [panel]: [...(s.customInd[panel] || []), c] } })),
+  removeCustomInd: (panel, id) =>
+    set((s) => ({ customInd: { ...s.customInd, [panel]: (s.customInd[panel] || []).filter((c) => c.id !== id) } })),
   setZernioAccounts: (accounts) =>
     set((s) => {
       // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).
@@ -165,6 +196,8 @@ export const useStore = create<UIState>((set) => ({
         patch.contas = d.config.contas ?? s.contas;
         patch.cfgOpen = d.config.cfgOpen ?? s.cfgOpen;
         patch.impOpen = !!d.config.impOpen;
+        if (Array.isArray(d.config.adConfig?.manualChannels)) patch.manualAds = d.config.adConfig!.manualChannels!;
+        if (d.config.customInd) patch.customInd = d.config.customInd;
       }
       if (d.perfil) patch.perfil = d.perfil;
       if (d.okr && d.okr.areas) patch.okr = d.okr;
