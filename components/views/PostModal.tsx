@@ -4,13 +4,56 @@
 import { useState } from "react";
 import { useStore, newId, type PostItem } from "@/lib/store";
 import {
-  CANAIS_POST,
-  PERFIS_POST,
+  CANAL_POST_COLORS,
   PILARES_POST,
   FORMATOS_POST,
   FUNIL_POST,
   REDES,
 } from "@/lib/seed-data";
+
+// plataforma Zernio → id da rede (Casinha): twitter → x
+const PLAT_REV: Record<string, string> = { twitter: "x" };
+// Canais manuais de conteúdo (não são contas conectadas de rede, mas seguem como opções).
+const MANUAIS_POST = ["WhatsApp (grupos)", "Lista de transmissão", "Blog"];
+
+type ZAccount = {
+  platform: string;
+  displayName?: string;
+  username?: string;
+  enabled?: boolean;
+  adsStatus?: string;
+};
+
+// Redes REALMENTE conectadas (social/conversas) derivadas das contas Zernio (twitter→x).
+function redesConectadas(accounts: ZAccount[]): (typeof REDES)[number][] {
+  const ids = Array.from(new Set(accounts.map((a) => PLAT_REV[a.platform] || a.platform)));
+  return ids
+    .map((id) => REDES.find((r) => r.id === id))
+    .filter((r): r is (typeof REDES)[number] => !!r && r.grupo !== "ads");
+}
+
+// Canais conectados = redes conectadas + canais manuais de conteúdo. Cada um com sua cor.
+function canaisConectados(accounts: ZAccount[]): { nome: string; cor: string }[] {
+  const redes = redesConectadas(accounts).map((r) => ({ nome: r.label, cor: r.cor }));
+  const manuais = MANUAIS_POST.map((nome) => ({ nome, cor: CANAL_POST_COLORS[nome] || "#8E8E93" }));
+  return [...redes, ...manuais];
+}
+
+// Perfis conectados = um por conta conectada (displayName/username). Preparado p/ multi-conta.
+function perfisConectados(accounts: ZAccount[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const a of accounts) {
+    const id = PLAT_REV[a.platform] || a.platform;
+    const rede = REDES.find((r) => r.id === id);
+    if (rede && rede.grupo === "ads") continue;
+    const nome = (a.displayName || a.username || rede?.label || a.platform || "").trim();
+    if (!nome || seen.has(nome)) continue;
+    seen.add(nome);
+    out.push(nome);
+  }
+  return out;
+}
 
 const POST_STATUS: Record<string, { label: string; cor: string }> = {
   rascunho: { label: "Rascunho", cor: "#8E8E93" },
@@ -48,6 +91,10 @@ export function PostModal() {
   const updatePost = useStore((st) => st.updatePost);
   const deletePost = useStore((st) => st.deletePost);
 
+  // Fonte única (auto-sincroniza quando novas contas conectam):
+  const canais = canaisConectados(zernioAccounts);
+  const perfis = perfisConectados(zernioAccounts);
+
   const existing = pm && pm.mode === "edit" ? posts.find((x) => x.id === pm.id) : undefined;
 
   // Estado seed: post existente (edição) ou defaults do blueprint (novo).
@@ -83,9 +130,9 @@ export function PostModal() {
       data: String(d).padStart(2, "0") + "/" + String(m + 1).padStart(2, "0") + "/" + y,
       hora: "09:00",
       titulo: "",
-      canal: "Instagram",
+      canal: canais[0]?.nome ?? "Instagram",
       formato: "Reels",
-      perfil: "Seahub",
+      perfil: perfis[0] ?? "",
       colab: "",
       pilar: "Espaços",
       funil: "Topo",
@@ -143,13 +190,17 @@ export function PostModal() {
     close();
   };
 
-  // Contas-alvo = redes REALMENTE conectadas na Zernio (plataforma twitter → x).
+  // Canais-alvo de publicação = redes REALMENTE conectadas na Zernio (twitter → x).
   // Guarda o id da rede em post.contas (mantém o shape usado pela fila/chips do calendário).
-  const platRev: Record<string, string> = { twitter: "x" };
-  const connIds = Array.from(new Set(zernioAccounts.map((a) => platRev[a.platform] || a.platform)));
-  const conn = connIds
-    .map((id) => REDES.find((r) => r.id === id))
-    .filter((r): r is (typeof REDES)[number] => !!r && r.grupo !== "ads");
+  const conn = redesConectadas(zernioAccounts);
+
+  // Opções dos seletores vêm dos canais/perfis conectados; preserva o valor atual (edição).
+  const canalOptions =
+    f.canal && !canais.some((c) => c.nome === f.canal)
+      ? [f.canal, ...canais.map((c) => c.nome)]
+      : canais.map((c) => c.nome);
+  const perfilOptions = f.perfil && !perfis.includes(f.perfil) ? [f.perfil, ...perfis] : perfis;
+  const colabOptions = f.colab && !perfis.includes(f.colab) ? [f.colab, ...perfis] : perfis;
 
   const sel = (id: string, arr: string[], val: string, onChange: (v: string) => void) => (
     <select className="field-edit" id={id} value={val} onChange={(e) => onChange(e.target.value)}>
@@ -208,7 +259,7 @@ export function PostModal() {
           <div className="pm-row">
             <div>
               <label className="field-lbl">Canal</label>
-              {sel("pmCanal", CANAIS_POST, f.canal, (v) => upd({ canal: v }))}
+              {sel("pmCanal", canalOptions, f.canal, (v) => upd({ canal: v }))}
             </div>
             <div>
               <label className="field-lbl">Formato</label>
@@ -218,7 +269,17 @@ export function PostModal() {
           <div className="pm-row">
             <div>
               <label className="field-lbl">Perfil</label>
-              {sel("pmPerfil", PERFIS_POST, f.perfil, (v) => upd({ perfil: v }))}
+              <select
+                className="field-edit"
+                id="pmPerfil"
+                value={f.perfil}
+                onChange={(e) => upd({ perfil: e.target.value })}
+              >
+                {perfilOptions.length === 0 && <option value="">— nenhum perfil conectado —</option>}
+                {perfilOptions.map((o) => (
+                  <option key={o}>{o}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="field-lbl">Perfil colaborador</label>
@@ -229,7 +290,7 @@ export function PostModal() {
                 onChange={(e) => upd({ colab: e.target.value })}
               >
                 <option value="">— nenhum —</option>
-                {PERFIS_POST.map((x) => (
+                {colabOptions.map((x) => (
                   <option key={x}>{x}</option>
                 ))}
               </select>
@@ -286,7 +347,7 @@ export function PostModal() {
           </div>
           <div className="pm-sched">
             <div className="pm-sched-h">Agendamento & publicação</div>
-            <label className="field-lbl">Publicar em (contas conectadas)</label>
+            <label className="field-lbl">Publicar em (canais conectados)</label>
             {conn.length ? (
               <div className="pm-contas">
                 {conn.map((r) => {
@@ -313,8 +374,8 @@ export function PostModal() {
               </div>
             ) : (
               <div className="pm-hint">
-                Nenhuma conta conectada. Conecte contas em Personalização (ou na barra &quot;Contas
-                conectadas&quot; no topo do calendário) para agendar publicação automática.
+                Nenhum canal conectado. Conecte canais em Personalização (ou na barra &quot;Canais
+                conectados&quot; no topo do calendário) para agendar publicação automática.
               </div>
             )}
             <label className="field-lbl">Status</label>

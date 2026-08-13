@@ -1,8 +1,8 @@
 "use client";
 // Painel (overview) por workspace: visão geral RICA de cada canal conectado.
-// KPIs-herói agregados da empresa no topo + um card estruturado por canal (o mesmo
-// olhar analítico do painel de conta). Respeita o período da toolbar (since/until).
-// Empty state preservado: nada conectado → CTA p/ Personalização. Sem números fixos.
+// KPIs-herói agregados da empresa no topo + produção de conteúdo + um card estruturado
+// por canal (o mesmo olhar analítico do painel de conta). Respeita o período da toolbar
+// (since/until). Empty state preservado: nada conectado → CTA p/ Personalização. Sem números fixos.
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
@@ -15,6 +15,8 @@ import { daysInMonth, type Period } from "@/lib/scope";
 
 const redeCor = (p: string) =>
   REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.cor || "#121111";
+const redeLabel = (p: string) =>
+  REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.label || p;
 
 interface AccountSummary {
   platform: string;
@@ -22,6 +24,7 @@ interface AccountSummary {
   username?: string;
   followersCount: number | null;
   metrics: Record<string, number>;
+  posts?: number | null; // posts publicados no período (produção de conteúdo)
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -101,6 +104,14 @@ export function PainelView() {
   const anyReach = list.some((a) => a.metrics?.reach != null || a.metrics?.impressions != null);
   const anyInter = list.some((a) => a.metrics?.total_interactions != null);
 
+  // produção de conteúdo: total de posts publicados no período + breakdown por rede
+  const anyPosts = list.some((a) => a.posts != null);
+  const totalPosts = sum(list.map((a) => a.posts || 0));
+  const postsByRede = list
+    .filter((a) => (a.posts ?? 0) > 0)
+    .map((a) => ({ platform: a.platform, label: redeLabel(a.platform), cor: redeCor(a.platform), posts: a.posts as number }))
+    .sort((a, b) => b.posts - a.posts);
+
   const isEmpty = !loading && list.length === 0 && !hasStoreConnected;
 
   return (
@@ -135,6 +146,53 @@ export function PainelView() {
             <KpiCard lbl="Interações no período" val={anyInter ? kfmt(totalInter) : "—"} foot="engajamento bruto" />
           </div>
 
+          {/* Produção de conteúdo — a Casinha também acompanha o que foi publicado */}
+          {anyPosts && (
+            <div className="card" style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--label-3)", textTransform: "uppercase" }}>
+                    Produção de conteúdo
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
+                    <span className="tnum" style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-1px", lineHeight: 1, color: "var(--label)" }}>
+                      {fmt(totalPosts)}
+                    </span>
+                    <span style={{ fontSize: 13, color: "var(--label-2)", fontWeight: 500 }}>
+                      {totalPosts === 1 ? "post publicado no período" : "posts publicados no período"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {/* mini-breakdown por rede */}
+              {postsByRede.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {postsByRede.map((r) => (
+                    <span
+                      key={r.platform}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 7,
+                        padding: "6px 11px 6px 9px",
+                        borderRadius: 999,
+                        background: `color-mix(in srgb, ${r.cor} 9%, #fff)`,
+                        border: `1px solid color-mix(in srgb, ${r.cor} 22%, transparent)`,
+                        fontSize: 12.5,
+                        color: "var(--label-2)",
+                        fontWeight: 500,
+                      }}
+                    >
+                      <span aria-hidden style={{ width: 8, height: 8, borderRadius: "50%", background: r.cor, flex: "0 0 8px" }} />
+                      {r.label}
+                      <span className="tnum" style={{ fontWeight: 700, color: "var(--label)" }}>{fmt(r.posts)}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Um card estruturado por canal, ordenado por relevância */}
           <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))" }}>
             {ordered.map((a) => (
@@ -145,6 +203,7 @@ export function PainelView() {
                 username={a.username}
                 followersCount={a.followersCount}
                 metrics={a.metrics || {}}
+                posts={a.posts}
                 cor={redeCor(a.platform)}
               />
             ))}

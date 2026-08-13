@@ -4,8 +4,6 @@
 import { useEffect, useState } from "react";
 import { useStore, type PostItem } from "@/lib/store";
 import {
-  CANAIS_POST,
-  PERFIS_POST,
   CANAL_POST_COLORS,
   FERIADOS,
   EVENTOS,
@@ -21,6 +19,48 @@ import { PostModal } from "./PostModal";
 
 // plataforma Zernio → id da rede (Casinha): twitter → x
 const PLAT_REV: Record<string, string> = { twitter: "x" };
+
+// Canais manuais de conteúdo (não são contas conectadas de rede, mas seguem como opções).
+const MANUAIS_POST = ["WhatsApp (grupos)", "Lista de transmissão", "Blog"];
+
+type ZAccount = {
+  platform: string;
+  displayName?: string;
+  username?: string;
+  enabled?: boolean;
+  adsStatus?: string;
+};
+
+// Redes REALMENTE conectadas (social/conversas) derivadas das contas Zernio (twitter→x).
+function redesConectadas(accounts: ZAccount[]): (typeof REDES)[number][] {
+  const ids = Array.from(new Set(accounts.map((a) => PLAT_REV[a.platform] || a.platform)));
+  return ids
+    .map((id) => REDES.find((r) => r.id === id))
+    .filter((r): r is (typeof REDES)[number] => !!r && r.grupo !== "ads");
+}
+
+// Canais conectados = redes conectadas + canais manuais de conteúdo. Cada um com sua cor.
+function canaisConectados(accounts: ZAccount[]): { nome: string; cor: string }[] {
+  const redes = redesConectadas(accounts).map((r) => ({ nome: r.label, cor: r.cor }));
+  const manuais = MANUAIS_POST.map((nome) => ({ nome, cor: CANAL_POST_COLORS[nome] || "#8E8E93" }));
+  return [...redes, ...manuais];
+}
+
+// Perfis conectados = um por conta conectada (displayName/username). Preparado p/ multi-conta.
+function perfisConectados(accounts: ZAccount[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const a of accounts) {
+    const id = PLAT_REV[a.platform] || a.platform;
+    const rede = REDES.find((r) => r.id === id);
+    if (rede && rede.grupo === "ads") continue;
+    const nome = (a.displayName || a.username || rede?.label || a.platform || "").trim();
+    if (!nome || seen.has(nome)) continue;
+    seen.add(nome);
+    out.push(nome);
+  }
+  return out;
+}
 
 const POST_STATUS: Record<string, { label: string; cor: string }> = {
   rascunho: { label: "Rascunho", cor: "#8E8E93" },
@@ -64,6 +104,12 @@ export function CalendarioView() {
     updatePost,
   } = s;
 
+  // Fonte única (auto-sincroniza quando novas contas conectam):
+  const canais = canaisConectados(zernioAccounts);
+  const perfis = perfisConectados(zernioAccounts);
+  const canalCor = (nome: string) =>
+    canais.find((c) => c.nome === nome)?.cor ?? CANAL_POST_COLORS[nome] ?? "#8E8E93";
+
   // Escape fecha o modal (blueprint 1880).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -82,8 +128,9 @@ export function CalendarioView() {
 
   const postChip = (p: PostItem) => {
     const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
-    const c = CANAL_POST_COLORS[p.canal] || "#8E8E93";
-    const acc = (p.contas || []).length ? ` → ${(p.contas || []).length} conta(s)` : "";
+    const c = canalCor(p.canal);
+    const nc = (p.contas || []).length;
+    const acc = nc ? ` → ${nc} ${nc === 1 ? "canal" : "canais"}` : "";
     return (
       <button
         key={p.id}
@@ -102,10 +149,8 @@ export function CalendarioView() {
     );
   };
 
-  // ── contas conectadas (Zernio) — redes social/conversas conectadas ──
-  const connRedes = Array.from(new Set(zernioAccounts.map((a) => PLAT_REV[a.platform] || a.platform)))
-    .map((id) => REDES.find((x) => x.id === id))
-    .filter((r): r is (typeof REDES)[number] => !!r && r.grupo !== "ads");
+  // ── canais conectados (Zernio) — redes social/conversas conectadas ──
+  const connRedes = redesConectadas(zernioAccounts);
   const nConn = connRedes.length;
   const [contasOpen, setContasOpen] = useState(false);
 
@@ -155,7 +200,7 @@ export function CalendarioView() {
       <PageHead
         eyebrow="Operação · Conteúdo"
         title="Calendário de conteúdo"
-        desc="Planeje, agende e publique — Instagram, TikTok, LinkedIn e YouTube (contas conectadas) + WhatsApp, lista de transmissão e blog. Clique num dia para criar; num post para editar."
+        desc="Planeje, agende e publique — Instagram, TikTok, LinkedIn e YouTube (canais conectados) + WhatsApp, lista de transmissão e blog. Clique num dia para criar; num post para editar."
         right={
           <button
             className="btn-link ig"
@@ -167,11 +212,11 @@ export function CalendarioView() {
         }
       />
 
-      {/* Contas conectadas — minimizada por padrão (só ícones); expande no clique */}
+      {/* Canais conectados — minimizada por padrão (só ícones); expande no clique */}
       <div className={`card pad-lg${contasOpen ? " open" : ""}`} style={{ marginBottom: 14 }}>
         <div className="card-head" style={{ marginBottom: contasOpen ? 14 : 0, cursor: "pointer" }} onClick={() => setContasOpen((o) => !o)}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
-            <div className="t">Contas conectadas</div>
+            <div className="t">Canais conectados</div>
             {!contasOpen &&
               (connRedes.length ? (
                 <div className="cc-conx-mini">
@@ -220,8 +265,8 @@ export function CalendarioView() {
           onChange={(e) => set({ calCanal: e.target.value })}
         >
           <option value="todos">Todos os canais</option>
-          {CANAIS_POST.map((c) => (
-            <option key={c}>{c}</option>
+          {canais.map((c) => (
+            <option key={c.nome}>{c.nome}</option>
           ))}
         </select>
         <select
@@ -231,7 +276,7 @@ export function CalendarioView() {
           onChange={(e) => set({ calPerfil: e.target.value })}
         >
           <option value="todos">Todos os perfis</option>
-          {PERFIS_POST.map((p) => (
+          {perfis.map((p) => (
             <option key={p}>{p}</option>
           ))}
         </select>
@@ -283,10 +328,10 @@ export function CalendarioView() {
           })}
         </div>
         <div className="cc-legend">
-          {CANAIS_POST.map((c) => (
-            <span className="cc-lg" key={c}>
-              <span className="pc-dot" style={{ background: CANAL_POST_COLORS[c] }} />
-              {c}
+          {canais.map((c) => (
+            <span className="cc-lg" key={c.nome}>
+              <span className="pc-dot" style={{ background: c.cor }} />
+              {c.nome}
             </span>
           ))}
         </div>
@@ -297,7 +342,7 @@ export function CalendarioView() {
         <div className="card-head">
           <div>
             <div className="t">Fila de agendamentos</div>
-            <div className="sub">próximas publicações automáticas nas contas conectadas</div>
+            <div className="sub">próximas publicações automáticas nos canais conectados</div>
           </div>
           <span className="badge">{agTot.length}</span>
         </div>
@@ -320,7 +365,7 @@ export function CalendarioView() {
                         ) : null;
                       })
                     ) : (
-                      <span className="fila-none">sem conta</span>
+                      <span className="fila-none">sem canal</span>
                     )}
                   </span>
                   {/* TODO(zernio): "Publicar agora" simula o disparo mudando o status. */}
@@ -333,7 +378,7 @@ export function CalendarioView() {
           </ul>
         ) : (
           <div className="pm-hint" style={{ marginTop: 8 }}>
-            Nenhum post agendado. Defina o status &quot;Agendado&quot; num post e escolha as contas.
+            Nenhum post agendado. Defina o status &quot;Agendado&quot; num post e escolha os canais.
           </div>
         )}
         <div className="tfoot-note" style={{ marginTop: 12 }}>

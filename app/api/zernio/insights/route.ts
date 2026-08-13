@@ -72,6 +72,8 @@ export async function GET(req: Request) {
     const isIG = platform === "instagram";
     // plataformas com posting/série (account-insights com série, daily-metrics, posts, best-time)
     const hasPosting = platform === "instagram" || platform === "facebook" || platform === "tiktok";
+    // produção de conteúdo (posts publicados): tb youtube/linkedin têm posts, mesmo sem série diária
+    const hasContent = hasPosting || platform === "youtube" || platform === "linkedin";
     // demografia disponível: instagram + youtube
     const hasDemo = platform === "instagram" || platform === "youtube";
 
@@ -94,7 +96,7 @@ export async function GET(req: Request) {
       hasPosting ? followerHistory(platform, accountId, range).catch(() => null) : Promise.resolve(null),
       hasPosting ? keyMetricSeries(platform, accountId, range).catch(() => null) : Promise.resolve(null),
       hasPosting ? dailyMetrics(accountId, platform, { fromDate: since, toDate: until }).catch(() => null) : Promise.resolve(null),
-      hasPosting ? postAnalytics({ accountId, platform, fromDate: since, toDate: until, sortBy: "engagement", limit: 100 }).catch(() => null) : Promise.resolve(null),
+      hasContent ? postAnalytics({ accountId, platform, fromDate: since, toDate: until, sortBy: "engagement", limit: 100 }).catch(() => null) : Promise.resolve(null),
       isIG ? profileLinkTaps(accountId, range).catch(() => null) : Promise.resolve(null),
       isIG ? listStories(accountId).then((s) => s.length).catch(() => null) : Promise.resolve(null),
       hasPosting ? bestTime(accountId, platform, { fromDate: since, toDate: until }).catch(() => null) : Promise.resolve(null),
