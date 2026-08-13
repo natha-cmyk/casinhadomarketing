@@ -13,6 +13,7 @@ import { lineChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
 import { REDES } from "@/lib/seed-data";
+import { socialCatalog, indShown } from "@/lib/indicators";
 import type { AnalyticsResponse, DemographicsResponse } from "@/lib/zernio";
 
 // id da rede (Casinha) → plataforma da Zernio
@@ -195,6 +196,19 @@ export function SocialInsights({ rede }: { rede: string }) {
     `${acct.displayName || "conta conectada"} · dados reais (Zernio) · ${range.since} → ${range.until}` +
     (cmpRange ? ` · comparando ${range.since}→${range.until} vs ${cmpRange.since}→${cmpRange.until}` : "");
 
+  // ── indicadores por CONFIG (base da doc + extras + custom); Personalização liga/desliga ──
+  const cat = socialCatalog(rede);
+  const shown = (id: string, custom = false) => indShown(s.paineis, rede, id, custom);
+  const kpiCat = cat.filter((c) => c.kind === "kpi" && shown(c.id));
+  const customList = s.customInd[rede] || [];
+  const customKpis = customList.filter((c) => c.kind === "kpi");
+  const showFollowerChart = shown("ch_followers");
+  const showDemographics = shown("audiencia");
+  const showTop = shown("top");
+  // gráficos por métrica: só métricas com série E ligadas na config
+  const serieKeys = comSerie.filter((k) => shown("m_" + k));
+  const anyData = ins != null || acct.followersCount != null;
+
   return (
     <>
       <PageHead eyebrow={eyebrow} title={label} desc={desc} />
@@ -202,35 +216,46 @@ export function SocialInsights({ rede }: { rede: string }) {
       {err && <div className="auth-err">{err}</div>}
       {!loading && !err && (
         <div className="grid" style={{ gap: 16 }}>
-          {/* TODOS os indicadores como KPI (totais no período) */}
+          {/* Indicadores (KPI) conforme a configuração do painel */}
           <div className="grid kpis">
-            <KpiCard lbl="Seguidores" val={acct.followersCount != null ? fmt(acct.followersCount) : "—"}>
-              {comparando && cmpFollLast != null && curFollLast != null ? (
-                <DeltaChip delta={computeDelta(curFollLast, cmpFollLast, true)} scn />
-              ) : null}
-            </KpiCard>
-            {keys.map((k) => (
-              <KpiCard key={k} lbl={pt(k)} val={kfmt(metrics[k].total)} foot={metrics[k].unit || undefined}>
-                {comparando && cmpIns?.metrics?.[k] ? (
-                  <DeltaChip delta={computeDelta(metrics[k].total, cmpIns.metrics[k].total, true)} scn />
-                ) : null}
-              </KpiCard>
-            ))}
+            {kpiCat.map((it) => {
+              if (it.bind.src === "follower") {
+                return (
+                  <KpiCard key={it.id} lbl="Seguidores" val={acct.followersCount != null ? fmt(acct.followersCount) : "—"} foot={acct.followersCount == null ? "sem dado" : undefined}>
+                    {comparando && cmpFollLast != null && curFollLast != null ? (
+                      <DeltaChip delta={computeDelta(curFollLast, cmpFollLast, true)} scn />
+                    ) : null}
+                  </KpiCard>
+                );
+              }
+              if (it.bind.src === "metric") {
+                const k = it.bind.key;
+                const m = metrics[k];
+                return (
+                  <KpiCard key={it.id} lbl={it.label} val={m ? kfmt(m.total) : "—"} foot={m ? m.unit || undefined : "sem dado"}>
+                    {comparando && m && cmpIns?.metrics?.[k] ? (
+                      <DeltaChip delta={computeDelta(m.total, cmpIns.metrics[k].total, true)} scn />
+                    ) : null}
+                  </KpiCard>
+                );
+              }
+              // lacuna (doc) — sem dado da Zernio
+              return <KpiCard key={it.id} lbl={it.label} val="—" foot="sem dado" />;
+            })}
+            {customKpis.map((c) => {
+              const m = c.metric ? metrics[c.metric] : undefined;
+              return <KpiCard key={c.id} lbl={c.label} val={m ? kfmt(m.total) : "—"} foot={m ? undefined : c.metric ? "sem dado" : "manual"} />;
+            })}
           </div>
 
-          {ins && keys.length === 0 && (
+          {!anyData && (
             <div className="card">
               Sem métricas no período (verifique o add-on Analytics do plano), ou ainda não há dados.
             </div>
           )}
-          {!ins && (
-            <div className="card">
-              Sem métricas no período (verifique o add-on Analytics do plano).
-            </div>
-          )}
 
           {/* Evolução de seguidores */}
-          {follVals.length > 0 && (
+          {showFollowerChart && follVals.length > 0 && (
             <div className="card">
               <div className="card-head">
                 <div className="t">Evolução de seguidores</div>
@@ -251,8 +276,8 @@ export function SocialInsights({ rede }: { rede: string }) {
             </div>
           )}
 
-          {/* Um gráfico por indicador com série temporal */}
-          {comSerie.map((k) => {
+          {/* Um gráfico por indicador com série temporal (só os ligados) */}
+          {serieKeys.map((k) => {
             const vals = metrics[k].values;
             const cmpVals = cmpIns?.metrics?.[k]?.values || [];
             const series: LineSeries[] = [
@@ -272,8 +297,8 @@ export function SocialInsights({ rede }: { rede: string }) {
             );
           })}
 
-          {/* Audiência (demografia — só quando disponível) */}
-          {demoDims.length > 0 && (
+          {/* Audiência (demografia — só IG, quando ligado e disponível) */}
+          {showDemographics && demoDims.length > 0 && (
             <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 16 }}>
               {demoDims.map(({ dim, items }) => {
                 const top = [...items].sort((a, b) => b.value - a.value).slice(0, 8);
@@ -297,6 +322,14 @@ export function SocialInsights({ rede }: { rede: string }) {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Top conteúdos — lacuna (nível de post, em breve) */}
+          {showTop && (
+            <div className="card">
+              <div className="card-head"><div className="t">Top conteúdos</div><span className="badge">em breve</span></div>
+              <div className="pm-hint">Ranking por desempenho de post chega com o analytics em nível de publicação.</div>
             </div>
           )}
         </div>

@@ -7,8 +7,10 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import { PageHead } from "@/components/ui";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { Ic } from "@/components/Ic";
-import { REDES, PANEL_INDICATORS } from "@/lib/seed-data";
-import { useStore, newId, type FonteItem } from "@/lib/store";
+import { REDES, PANEL_INDICATORS, type IndGroup } from "@/lib/seed-data";
+import { SOCIAL_IDS, META } from "@/lib/nav";
+import { socialIndGroups, indShown, isSocialPanel, socialCatalog } from "@/lib/indicators";
+import { useStore, newId, type FonteItem, type CustomInd } from "@/lib/store";
 
 /* ===== helpers CSV (blueprint 1292-1306) ===== */
 function parseCSV(text: string): { cols: string[]; rows: string[][]; total: number } {
@@ -159,6 +161,9 @@ export default function PersonalizacaoView() {
   const setInd = useStore((s) => s.setInd);
   const paineis = useStore((s) => s.paineis);
   const setPainelInd = useStore((s) => s.setPainelInd);
+  const customInd = useStore((s) => s.customInd);
+  const addCustomInd = useStore((s) => s.addCustomInd);
+  const removeCustomInd = useStore((s) => s.removeCustomInd);
   const cfgOpen = useStore((s) => s.cfgOpen);
   const toggleCfgOpen = useStore((s) => s.toggleCfgOpen);
   const fontes = useStore((s) => s.fontes);
@@ -179,27 +184,40 @@ export default function PersonalizacaoView() {
     } catch {}
   }
 
-  /* ===== shownInd (blueprint 1233) ===== */
+  /* ===== indicadores: base da doc / catálogo social + custom ===== */
+  // grupos do painel: redes sociais usam o catálogo Zernio; demais, PANEL_INDICATORS da doc
+  function groupsFor(panel: string): IndGroup[] {
+    return isSocialPanel(panel) ? socialIndGroups(panel) : PANEL_INDICATORS[panel] || [];
+  }
   function shownInd(panel: string, id: string): boolean {
-    if (panel === "instagram") return ind[id] !== false;
+    if (isSocialPanel(panel)) return indShown(paineis, panel, id);
     const p = paineis[panel];
     return !p || p[id] !== false;
   }
   function togglePanelInd(panel: string, id: string) {
-    if (panel === "instagram") setInd(id, !shownInd(panel, id));
-    else setPainelInd(panel, id, !shownInd(panel, id));
+    // usa setInd só nos painéis não-sociais legados do Instagram (compat); social vai por paineis
+    setPainelInd(panel, id, !shownInd(panel, id));
   }
   function panelIndCount(panel: string): string {
     let on = 0,
       tot = 0;
-    (PANEL_INDICATORS[panel] || []).forEach((gp) =>
+    groupsFor(panel).forEach((gp) =>
       gp.i.forEach((it) => {
         tot++;
         if (shownInd(panel, it.id)) on++;
       })
     );
+    (customInd[panel] || []).forEach(() => { tot++; on++; });
     return on + "/" + tot;
   }
+  // métricas Zernio disponíveis pra vincular num indicador custom (só painéis sociais)
+  function metricOptions(panel: string): { key: string; label: string }[] {
+    if (!isSocialPanel(panel)) return [];
+    return socialCatalog(panel)
+      .filter((c) => c.bind.src === "metric")
+      .map((c) => ({ key: (c.bind as { key: string }).key, label: c.label }));
+  }
+  void ind; void setInd;
 
   /* ===== import de arquivos (blueprint 1307-1328) ===== */
   function handleKitFile(file?: File | null) {
@@ -506,62 +524,45 @@ export default function PersonalizacaoView() {
           label="Painel"
           open={!!cfgOpen.overview}
           count={panelIndCount("overview")}
+          groups={groupsFor("overview")}
+          custom={customInd.overview || []}
+          metricOpts={metricOptions("overview")}
           shownInd={shownInd}
           onToggleOpen={() => toggleCfgOpen("overview")}
           onToggleInd={togglePanelInd}
+          onAddCustom={addCustomInd}
+          onRemoveCustom={removeCustomInd}
         />
-        {redes.instagram && (
+        {SOCIAL_IDS.filter((id) => redes[id]).map((id) => (
           <CfgAccordion
-            panel="instagram"
-            label="Instagram"
-            open={!!cfgOpen.instagram}
-            count={panelIndCount("instagram")}
+            key={id}
+            panel={id}
+            label={META[id]?.label || id}
+            open={!!cfgOpen[id]}
+            count={panelIndCount(id)}
+            groups={groupsFor(id)}
+            custom={customInd[id] || []}
+            metricOpts={metricOptions(id)}
             shownInd={shownInd}
-            onToggleOpen={() => toggleCfgOpen("instagram")}
+            onToggleOpen={() => toggleCfgOpen(id)}
             onToggleInd={togglePanelInd}
+            onAddCustom={addCustomInd}
+            onRemoveCustom={removeCustomInd}
           />
-        )}
-        {redes.tiktok && (
-          <CfgAccordion
-            panel="tiktok"
-            label="TikTok"
-            open={!!cfgOpen.tiktok}
-            count={panelIndCount("tiktok")}
-            shownInd={shownInd}
-            onToggleOpen={() => toggleCfgOpen("tiktok")}
-            onToggleInd={togglePanelInd}
-          />
-        )}
-        {redes.linkedin && (
-          <CfgAccordion
-            panel="linkedin"
-            label="LinkedIn"
-            open={!!cfgOpen.linkedin}
-            count={panelIndCount("linkedin")}
-            shownInd={shownInd}
-            onToggleOpen={() => toggleCfgOpen("linkedin")}
-            onToggleInd={togglePanelInd}
-          />
-        )}
-        {redes.youtube && (
-          <CfgAccordion
-            panel="youtube"
-            label="YouTube"
-            open={!!cfgOpen.youtube}
-            count={panelIndCount("youtube")}
-            shownInd={shownInd}
-            onToggleOpen={() => toggleCfgOpen("youtube")}
-            onToggleInd={togglePanelInd}
-          />
-        )}
+        ))}
         <CfgAccordion
           panel="metas"
           label="Metas"
           open={!!cfgOpen.metas}
           count={panelIndCount("metas")}
+          groups={groupsFor("metas")}
+          custom={customInd.metas || []}
+          metricOpts={metricOptions("metas")}
           shownInd={shownInd}
           onToggleOpen={() => toggleCfgOpen("metas")}
           onToggleInd={togglePanelInd}
+          onAddCustom={addCustomInd}
+          onRemoveCustom={removeCustomInd}
         />
       </PSection>
     </>
@@ -646,26 +647,46 @@ function RedeToggle({ rede, on, onToggle }: { rede: (typeof REDES)[number]; on: 
   );
 }
 
-/* ===== cfgAccordion (blueprint 1237-1243) ===== */
+/* ===== cfgAccordion — toggles da base (doc/catálogo) + indicadores custom ===== */
 function CfgAccordion({
   panel,
   label,
   open,
   count,
+  groups,
+  custom,
+  metricOpts,
   shownInd,
   onToggleOpen,
   onToggleInd,
+  onAddCustom,
+  onRemoveCustom,
 }: {
   panel: string;
   label: string;
   open: boolean;
   count: string;
+  groups: IndGroup[];
+  custom: CustomInd[];
+  metricOpts: { key: string; label: string }[];
   shownInd: (panel: string, id: string) => boolean;
   onToggleOpen: () => void;
   onToggleInd: (panel: string, id: string) => void;
+  onAddCustom: (panel: string, c: CustomInd) => void;
+  onRemoveCustom: (panel: string, id: string) => void;
 }) {
-  const groups = PANEL_INDICATORS[panel];
-  if (!groups) return null;
+  const [novo, setNovo] = useState("");
+  const [metric, setMetric] = useState("");
+  if (!groups.length && !metricOpts.length) return null;
+
+  function add() {
+    const lbl = novo.trim();
+    if (!lbl) return;
+    onAddCustom(panel, { id: newId("cind"), label: lbl, kind: "kpi", metric: metric || undefined });
+    setNovo("");
+    setMetric("");
+  }
+
   return (
     <div className={`acc ${open ? "open" : ""}`}>
       <button className="acc-h" onClick={onToggleOpen} type="button">
@@ -703,6 +724,37 @@ function CfgAccordion({
               })}
             </div>
           ))}
+
+          {/* Indicadores criados pelo perfil */}
+          <div className="ind-grp">
+            <div className="ind-h">Meus indicadores</div>
+            {custom.map((c) => (
+              <div className="toggle-row" key={c.id}>
+                <div className="tinfo">
+                  <b>{c.label}</b>
+                  <span>{c.metric ? `vinculado · ${metricOpts.find((m) => m.key === c.metric)?.label || c.metric}` : "manual"}</span>
+                </div>
+                <button className="x" onClick={() => onRemoveCustom(panel, c.id)} aria-label={`Remover ${c.label}`} type="button">✕</button>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                className="chip-input"
+                style={{ flex: "1 1 160px" }}
+                placeholder="+ novo indicador"
+                value={novo}
+                onChange={(e) => setNovo(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+              />
+              {metricOpts.length > 0 && (
+                <select className="field-edit" style={{ flex: "0 1 170px" }} value={metric} onChange={(e) => setMetric(e.target.value)} aria-label="Vincular métrica">
+                  <option value="">manual (sem vínculo)</option>
+                  {metricOpts.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                </select>
+              )}
+              <button className="btn-link ig" onClick={add} type="button">Adicionar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
