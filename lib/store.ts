@@ -19,10 +19,14 @@ export interface Okr { objetivo: string; areas: AreaItem[] }
 export interface PostItem extends SeedPost {}
 
 // ── Persona editável (persistida por workspace) ──
+// `detalhes` trata a persona como pessoa real (consumo, gostos, atividades).
+export interface PersonaDetalhes {
+  nomeProprio?: string; consome?: string[]; gosta?: string[]; naoGosta?: string[]; atividades?: string[];
+}
 export interface PersonaItem {
   id: string; tag: string; handle: string; emoji: string; cover: string; nome: string;
   representa: string; comunica: string; dores: string[]; canais: string; gatilho: string;
-  stats: [string, string][]; foto?: string; ordem: number;
+  stats: [string, string][]; foto?: string; detalhes?: PersonaDetalhes; ordem: number;
 }
 
 // ── Concorrente editável (persistido por workspace) ──

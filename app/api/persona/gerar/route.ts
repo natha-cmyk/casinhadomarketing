@@ -155,6 +155,25 @@ export async function POST(req: Request) {
     if (topCities[0]) stats.push([topCities[0], "Top cidade"]);
     if (pais) stats.push([pais, "País"]);
 
+    // detalhes (persona como pessoa real) — derivados da demografia real + segmento.
+    // Texto qualitativo pra o construtor pré-preencher; nada de números inventados.
+    const seg = (perfil?.segmento || "").trim();
+    const consome: string[] = [`Conteúdo no ${rede}`];
+    if (seg) consome.push(`Assuntos sobre ${seg}`);
+    if (topCities[0]) consome.push(`Referências locais de ${topCities[0]}`);
+    const gosta = ["Provas de valor claras e diretas", "Conteúdo objetivo e visual", "Sentir que a solução é pra ela"];
+    const naoGosta = ["Promessas exageradas", "Processos burocráticos", "Comunicação genérica"];
+    const atividades: string[] = [`Acompanha marcas pelo ${rede}`];
+    if (faixa) atividades.push(`Faixa ${faixa} anos, rotina conectada`);
+    if (topCities.length) atividades.push(`Vive/circula em ${topCities.join(", ")}`);
+    const detalhes = {
+      nomeProprio: nome,
+      consome,
+      gosta,
+      naoGosta,
+      atividades,
+    };
+
     return NextResponse.json({
       persona: {
         nome,
@@ -163,6 +182,7 @@ export async function POST(req: Request) {
         dores: doresFromSegmento(perfil?.segmento),
         canais: rede,
         stats,
+        detalhes,
       },
       meta: { platform, rede, accountId },
     });

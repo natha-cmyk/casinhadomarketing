@@ -4,6 +4,19 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 
+interface PersonaDetalhes {
+  nomeProprio?: string; consome?: string[]; gosta?: string[]; naoGosta?: string[]; atividades?: string[];
+}
+// normaliza o JSON de `detalhes` (tolerante a null / formatos antigos)
+function normDetalhes(v: unknown): PersonaDetalhes {
+  const d = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const arr = (x: unknown) => (Array.isArray(x) ? x.map(String) : undefined);
+  return {
+    nomeProprio: typeof d.nomeProprio === "string" ? d.nomeProprio : undefined,
+    consome: arr(d.consome), gosta: arr(d.gosta), naoGosta: arr(d.naoGosta), atividades: arr(d.atividades),
+  };
+}
+
 export async function GET() {
   try {
     const ws = await getActiveWorkspaceId();
@@ -12,7 +25,8 @@ export async function GET() {
     const personas = rows.map((p) => ({
       id: p.id, tag: p.tag, handle: p.handle, emoji: p.emoji, cover: p.cover, nome: p.nome,
       representa: p.representa, comunica: p.comunica, dores: p.dores, canais: p.canais, gatilho: p.gatilho,
-      stats: (p.stats as [string, string][]) ?? [], foto: p.foto ?? undefined, ordem: p.ordem,
+      stats: (p.stats as [string, string][]) ?? [], foto: p.foto ?? undefined,
+      detalhes: normDetalhes(p.detalhes), ordem: p.ordem,
     }));
     return NextResponse.json({ personas });
   } catch {
@@ -23,7 +37,7 @@ export async function GET() {
 interface PersonaIn {
   id: string; tag: string; handle: string; emoji: string; cover: string; nome: string;
   representa: string; comunica: string; dores: string[]; canais: string; gatilho: string;
-  stats: [string, string][]; foto?: string; ordem: number;
+  stats: [string, string][]; foto?: string; detalhes?: PersonaDetalhes; ordem: number;
 }
 
 export async function PUT(req: Request) {
@@ -41,7 +55,9 @@ export async function PUT(req: Request) {
         representa: p.representa ?? "", comunica: p.comunica ?? "", dores: Array.isArray(p.dores) ? p.dores : [],
         canais: p.canais ?? "", gatilho: p.gatilho ?? "",
         stats: (Array.isArray(p.stats) ? p.stats : []) as unknown as Prisma.InputJsonValue,
-        foto: p.foto ?? null, ordem: p.ordem ?? 0,
+        foto: p.foto ?? null,
+        detalhes: normDetalhes(p.detalhes) as unknown as Prisma.InputJsonValue,
+        ordem: p.ordem ?? 0,
       };
       await prisma.persona.upsert({
         where: { id: p.id },

@@ -213,6 +213,8 @@ model Persona {
   gatilho     String    @default("")
   stats       Json      @default("[]")
   foto        String?
+  // persona como pessoa real: { nomeProprio, consome[], gosta[], naoGosta[], atividades[] }
+  detalhes    Json      @default("{}")
   ordem       Int       @default(0)
 
   @@index([workspaceId])
