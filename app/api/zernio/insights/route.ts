@@ -1,8 +1,11 @@
 // GET /api/zernio/insights?platform=&accountId=&since=&until=
-// Combinado: account-insights + follower-history + demographics (IG) numa chamada.
+// Combinado: account-insights (todas métricas) + follower-history + série diária da
+// métrica-chave (reach/views/impressions) + demographics (IG) numa chamada.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
-import { accountInsightsFull, followerHistory, demographics } from "@/lib/zernio";
+import { accountInsightsFull, followerHistory, keyMetricSeries, demographics } from "@/lib/zernio";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
@@ -16,13 +19,14 @@ export async function GET(req: Request) {
     const since = q.get("since") ?? undefined;
     const until = q.get("until") ?? undefined;
 
-    const [insights, followers, demo] = await Promise.all([
+    const [insights, followers, keySeries, demo] = await Promise.all([
       accountInsightsFull(platform, accountId, { since, until }).catch(() => null),
       followerHistory(platform, accountId, { since, until }).catch(() => null),
+      keyMetricSeries(platform, accountId, { since, until }).catch(() => null),
       platform === "instagram" ? demographics(accountId).catch(() => null) : Promise.resolve(null),
     ]);
 
-    return NextResponse.json({ insights, followers, demographics: demo });
+    return NextResponse.json({ insights, followers, keySeries, demographics: demo });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 502 });
   }

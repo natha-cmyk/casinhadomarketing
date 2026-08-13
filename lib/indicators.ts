@@ -41,6 +41,7 @@ export type IndBind =
   | { src: "follower" }        // KPI de seguidores (acct.followersCount / série)
   | { src: "followerChart" }   // gráfico de evolução de seguidores
   | { src: "metric"; key: string } // insights.metrics[key]
+  | { src: "derived"; key: "eng_rate" | "reach_rate" | "save_rate" } // razão calculada
   | { src: "demographics" }    // seção de audiência (idade/gênero/país/cidade)
   | { src: "none" };           // lacuna: a Zernio não entrega esse indicador
 
@@ -72,6 +73,7 @@ export function socialCatalog(panel: string): CatItem[] {
   const items: CatItem[] = [
     { id: "seguidores", label: "Seguidores", desc: "base total + evolução", kind: "kpi", bind: { src: "follower" }, def: true, group: "Crescimento" },
     { id: "ch_followers", label: "Evolução de seguidores", desc: "série diária", kind: "chart", bind: { src: "followerChart" }, def: true, group: "Crescimento" },
+    { id: "ch_key", label: "Série diária", desc: "métrica-chave por dia (varia por período)", kind: "chart", bind: { src: "none" }, def: true, group: "Crescimento" },
   ];
   for (const key of PLATFORM_METRICS[plat] || []) {
     items.push({
@@ -79,6 +81,12 @@ export function socialCatalog(panel: string): CatItem[] {
       bind: { src: "metric", key }, def: true, group: "Indicadores",
     });
   }
+  // razões calculadas (marketing) — sem novo dado, mas muito úteis
+  items.push(
+    { id: "der_eng_rate", label: "Taxa de engajamento", desc: "interações ÷ alcance", kind: "kpi", bind: { src: "derived", key: "eng_rate" }, def: true, group: "Taxas" },
+    { id: "der_reach_rate", label: "Alcance sobre a base", desc: "alcance ÷ seguidores", kind: "kpi", bind: { src: "derived", key: "reach_rate" }, def: true, group: "Taxas" },
+    { id: "der_save_rate", label: "Taxa de salvamento", desc: "salvos ÷ alcance", kind: "kpi", bind: { src: "derived", key: "save_rate" }, def: false, group: "Taxas" },
+  );
   if (plat === "instagram") {
     items.push({ id: "audiencia", label: "Audiência (demografia)", desc: "idade, gênero, país, cidade", kind: "section", bind: { src: "demographics" }, def: true, group: "Audiência" });
   }

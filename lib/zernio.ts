@@ -110,13 +110,31 @@ export const ACCOUNT_METRICS: Record<string, string[]> = {
 export function accountInsights(
   platform: string,
   accountId: string,
-  opts?: { metrics?: string; since?: string; until?: string }
+  opts?: { metrics?: string; since?: string; until?: string; metricType?: "total_value" | "time_series" }
 ) {
   const q = new URLSearchParams({ accountId });
   if (opts?.metrics) q.set("metrics", opts.metrics);
   if (opts?.since) q.set("since", opts.since);
   if (opts?.until) q.set("until", opts.until);
+  if (opts?.metricType) q.set("metricType", opts.metricType);
   return zernio<AnalyticsResponse>(`/analytics/${encodeURIComponent(platform)}/account-insights?${q.toString()}`);
+}
+
+// métricas que suportam série diária (time_series) por plataforma — o resto é total-only
+const TIMESERIES_METRIC: Record<string, string> = {
+  instagram: "reach", facebook: "reach", tiktok: "views", youtube: "views", linkedin: "impressions", twitter: "impressions",
+};
+// série diária da métrica-chave da plataforma (pro gráfico que muda por período)
+export async function keyMetricSeries(platform: string, accountId: string, opts?: { since?: string; until?: string }) {
+  const metric = TIMESERIES_METRIC[platform];
+  if (!metric) return null;
+  try {
+    const r = await accountInsights(platform, accountId, { ...opts, metrics: metric, metricType: "time_series" });
+    const m = r.metrics?.[metric];
+    return m?.values?.length ? { metric, label: metric, values: m.values, total: m.total } : null;
+  } catch {
+    return null;
+  }
 }
 
 // puxa o conjunto completo de métricas conhecidas; se a lista rejeitar (métrica inválida

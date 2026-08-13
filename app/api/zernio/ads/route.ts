@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { listAccounts, listAdAccounts, adsInsights, type AdInsightRow } from "@/lib/zernio";
 
+export const dynamic = "force-dynamic";
+
 // plataformas de posting que expõem ad accounts (Meta cobre facebook/instagram)
 const ADS_PLATFORMS = new Set(["facebook", "instagram"]);
 
@@ -27,11 +29,17 @@ function totalsFrom(row: AdInsightRow | undefined) {
   const messaging = sumActions(row.actions, (t) => t.includes("messaging") && (t.includes("connection") || t.includes("started")));
   const linkClicks = num(row.inline_link_clicks) || sumActions(row.actions, (t) => t === "link_click");
   const purchases = sumActions(row.actions, (t) => t.includes("purchase"));
+  const landingViews = sumActions(row.actions, (t) => t.includes("landing_page_view"));
+  const postEngagement = sumActions(row.actions, (t) => t === "post_engagement");
+  const reactions = sumActions(row.actions, (t) => t === "post_reaction");
+  const comments = sumActions(row.actions, (t) => t === "comment");
+  const videoViews = sumActions(row.actions, (t) => t.includes("video_view"));
   return {
     spend, impressions, clicks,
     ctr: num(row.ctr), cpc: num(row.cpc), cpm: num(row.cpm),
     reach: num(row.reach), frequency: num(row.frequency),
     linkClicks, leads, messaging, purchases,
+    landingViews, postEngagement, reactions, comments, videoViews,
     cpl: leads ? spend / leads : 0,
   };
 }
@@ -87,9 +95,13 @@ export async function GET(req: Request) {
       })
     );
 
-    // só ad accounts com algum investimento/impressão no período (evita ruído de contas vazias)
-    const flat = perConn.flat().filter((a) => a.totals && (a.totals.spend > 0 || a.totals.impressions > 0));
-    return NextResponse.json({ ok: true, accounts: flat });
+    // dedup por ad account id (facebook + instagram da mesma conexão Meta listam os mesmos act_)
+    const byId = new Map<string, (typeof perConn)[number][number]>();
+    for (const a of perConn.flat()) {
+      if (!a.totals || (a.totals.spend <= 0 && a.totals.impressions <= 0)) continue;
+      if (!byId.has(a.id)) byId.set(a.id, a);
+    }
+    return NextResponse.json({ ok: true, accounts: [...byId.values()] });
   } catch (e) {
     return NextResponse.json({ ok: false, error: String(e), accounts: [] }, { status: 502 });
   }

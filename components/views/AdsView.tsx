@@ -18,6 +18,7 @@ interface AdTotals {
   spend: number; impressions: number; clicks: number;
   ctr: number; cpc: number; cpm: number; reach: number; frequency: number;
   linkClicks: number; leads: number; messaging: number; purchases: number; cpl: number;
+  landingViews: number; postEngagement: number; reactions: number; comments: number; videoViews: number;
 }
 interface AdCampaign { name: string; spend: number; impressions: number; clicks: number; ctr: number; leads: number }
 interface AdAccountData {
@@ -60,6 +61,7 @@ function monthsInScope(scope: { period: Period; year: number; month: number; qua
 const emptyTotals = (): AdTotals => ({
   spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0, cpm: 0, reach: 0, frequency: 0,
   linkClicks: 0, leads: 0, messaging: 0, purchases: 0, cpl: 0,
+  landingViews: 0, postEngagement: 0, reactions: 0, comments: 0, videoViews: 0,
 });
 
 export function AdsView() {
@@ -85,7 +87,7 @@ export function AdsView() {
     const cached = ADS_CACHE.get(key);
     if (cached) { setData(cached); setLoading(false); } else { setLoading(true); }
     setErr(null);
-    fetch(`/api/zernio/ads?since=${range.since}&until=${range.until}`)
+    fetch(`/api/zernio/ads?since=${range.since}&until=${range.until}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
@@ -228,6 +230,11 @@ export function AdsView() {
                       <KpiCard lbl="CPC" val={t.cpc ? money(t.cpc) : "—"} />
                       <KpiCard lbl="CPM" val={t.cpm ? money(t.cpm) : "—"} />
                       <KpiCard lbl="Frequência" val={fmt(t.frequency, 1)} />
+                      <KpiCard lbl="Page views (LP)" val={fmt(t.landingViews)} />
+                      <KpiCard lbl="Engaj. de posts" val={fmt(t.postEngagement)} />
+                      <KpiCard lbl="Reações" val={fmt(t.reactions)} />
+                      <KpiCard lbl="Comentários" val={fmt(t.comments)} />
+                      <KpiCard lbl="Views de vídeo" val={fmt(t.videoViews)} />
                       <KpiCard lbl="Compras" val={fmt(t.purchases)} />
                     </div>
                     {a.campaigns.length > 0 && <CampanhaTable campaigns={a.campaigns} />}

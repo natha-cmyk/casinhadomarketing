@@ -39,10 +39,23 @@ const GENDER_PT: Record<string, string> = { M: "Masculino", F: "Feminino", U: "N
 const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+// razões calculadas (retornam fração; null se falta base)
+type MetricMap = Record<string, { total: number }>;
+function derived(key: string, m: MetricMap, followers?: number): number | null {
+  const g = (k: string) => m[k]?.total ?? null;
+  if (key === "eng_rate") { const i = g("total_interactions"), r = g("reach"); return i != null && r ? i / r : null; }
+  if (key === "reach_rate") { const r = g("reach"); return r != null && followers ? r / followers : null; }
+  if (key === "save_rate") { const s = g("saves"), r = g("reach"); return s != null && r ? s / r : null; }
+  return null;
+}
+const pctFmt = (frac: number) => (frac * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+
 // resposta da rota combinada
+interface KeySeries { metric: string; label: string; total: number; values: { date: string; value: number }[] }
 interface Combined {
   insights: AnalyticsResponse | null;
   followers: AnalyticsResponse | null;
+  keySeries: KeySeries | null;
   demographics: DemographicsResponse | null;
 }
 
@@ -120,7 +133,7 @@ export function SocialInsights({ rede }: { rede: string }) {
     setErr(null);
 
     const fetchOne = (since: string, until: string): Promise<Combined & { error?: string }> =>
-      fetch(`/api/zernio/insights?platform=${platform}&accountId=${acct._id}&since=${since}&until=${until}`).then((r) => r.json());
+      fetch(`/api/zernio/insights?platform=${platform}&accountId=${acct._id}&since=${since}&until=${until}`, { cache: "no-store" }).then((r) => r.json());
 
     Promise.all([
       fetchOne(cur.since, cur.until),
@@ -203,11 +216,14 @@ export function SocialInsights({ rede }: { rede: string }) {
   const customList = s.customInd[rede] || [];
   const customKpis = customList.filter((c) => c.kind === "kpi");
   const showFollowerChart = shown("ch_followers");
+  const showKeyChart = shown("ch_key");
   const showDemographics = shown("audiencia");
   const showTop = shown("top");
+  const keySeries = data?.keySeries || null;
+  const cmpKeySeries = cmpData?.keySeries || null;
   // gráficos por métrica: só métricas com série E ligadas na config
   const serieKeys = comSerie.filter((k) => shown("m_" + k));
-  const anyData = ins != null || acct.followersCount != null;
+  const anyData = ins != null || acct.followersCount != null || keySeries != null;
 
   return (
     <>
@@ -236,6 +252,15 @@ export function SocialInsights({ rede }: { rede: string }) {
                     {comparando && m && cmpIns?.metrics?.[k] ? (
                       <DeltaChip delta={computeDelta(m.total, cmpIns.metrics[k].total, true)} scn />
                     ) : null}
+                  </KpiCard>
+                );
+              }
+              if (it.bind.src === "derived") {
+                const cur = derived(it.bind.key, metrics, acct.followersCount);
+                const cmpV = comparando ? derived(it.bind.key, cmpIns?.metrics || {}, acct.followersCount) : null;
+                return (
+                  <KpiCard key={it.id} lbl={it.label} val={cur == null ? "—" : pctFmt(cur)} foot={cur == null ? "sem dado" : undefined}>
+                    {cmpV != null && cur != null ? <DeltaChip delta={computeDelta(cur, cmpV, true)} scn /> : null}
                   </KpiCard>
                 );
               }
@@ -271,6 +296,28 @@ export function SocialInsights({ rede }: { rede: string }) {
                       : []),
                   ],
                   { sel: follVals.length - 1 }
+                )}
+              />
+            </div>
+          )}
+
+          {/* Série diária da métrica-chave (muda por período) */}
+          {showKeyChart && keySeries && keySeries.values.length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <div className="t">{pt(keySeries.metric)} por dia</div>
+                <span className="badge">{comparando ? "atual · comparação" : "no período"}</span>
+              </div>
+              <Chart
+                svg={lineChart(
+                  keySeries.values.map((v) => v.date.slice(5)),
+                  [
+                    { name: pt(keySeries.metric), color: cor, data: keySeries.values.map((v) => v.value), fill: true },
+                    ...(comparando && cmpKeySeries?.values.length
+                      ? [{ name: "Comparação", color: cor, data: cmpKeySeries.values.slice(0, keySeries.values.length).map((v) => v.value), dash: true } as LineSeries]
+                      : []),
+                  ],
+                  { sel: keySeries.values.length - 1 }
                 )}
               />
             </div>
