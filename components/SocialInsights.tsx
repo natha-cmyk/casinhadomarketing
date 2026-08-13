@@ -5,7 +5,7 @@
 // "Desempenho no tempo" com SELETOR de métrica (série diária cronológica), mix de
 // conteúdo, seguidores, engajamento por tipo, rendimento orgânico, atividade & audiência,
 // conversas, top conteúdos e heatmap de melhores horários. COMPARAÇÃO de períodos preservada.
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { PageHead, KpiCard, DeltaChip, BarRow, MiniStat } from "@/components/ui";
@@ -114,10 +114,17 @@ interface InboxData {
 const INS_CACHE = new Map<string, Combined>();
 const INBOX_CACHE = new Map<string, InboxData>();
 
-function dateRange(scope: { period: Period; year: number; month: number; quarter: number }) {
-  const { period, year, month, quarter } = scope;
+function dateRange(scope: { period: Period; year: number; month: number; quarter: number; week: number }) {
+  const { period, year, month, quarter, week } = scope;
   let since: Date, until: Date;
-  if (period === "trimestre") {
+  if (period === "semana") {
+    // janela = os 7 dias da semana selecionada dentro do mês (W1=1–7, W2=8–14, W3=15–21, W4=22–fim)
+    const last = daysInMonth(year, month);
+    const startDay = week * 7 + 1;
+    const endDay = Math.min(startDay + 6, last);
+    since = new Date(year, month, startDay);
+    until = new Date(year, month, endDay);
+  } else if (period === "trimestre") {
     since = new Date(year, quarter * 3, 1);
     until = new Date(year, quarter * 3 + 2, daysInMonth(year, quarter * 3 + 2));
   } else if (period === "ano") {
@@ -176,8 +183,8 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [inbox, setInbox] = useState<InboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // ASSINATURA: métrica selecionada do card "Desempenho no tempo" (série diária cronológica)
-  const [perfMetric, setPerfMetric] = useState<string>("reach");
+  // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
+  const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
 
   // fetch combinado (métricas + seguidores + série + daily + top + demografia) + comparação
   useEffect(() => {
@@ -332,12 +339,23 @@ export function SocialInsights({ rede }: { rede: string }) {
   const hasInbox = COM_INBOX.has(platform);
   const accountsEngaged = metrics.accounts_engaged?.total ?? null;
 
-  // ── card "Desempenho no tempo" (assinatura): seletor de métrica → série diária cronológica ──
+  // ── card "Desempenho no tempo" (assinatura): MULTI-seleção → cruza indicadores na mesma série ──
   const PERF_OPTS: { v: string; l: string }[] = [
     { v: "reach", l: "Alcance" }, { v: "impressions", l: "Impressões" }, { v: "views", l: "Visualizações" },
     { v: "likes", l: "Curtidas" }, { v: "comments", l: "Comentários" }, { v: "shares", l: "Compart." }, { v: "saves", l: "Salvos" },
   ];
-  const perfLabel = PERF_OPTS.find((o) => o.v === perfMetric)?.l || "Alcance";
+  // cor distinta por métrica (paleta pequena, mapeada por chave)
+  const PERF_COLORS: Record<string, string> = {
+    reach: "#FF001E", views: "#00BBC5", impressions: "#8E5BE0",
+    likes: "#FF9F0A", comments: "#2FB457", shares: "#111111", saves: "#E6689C",
+  };
+  const perfLbl = (v: string) => PERF_OPTS.find((o) => o.v === v)?.l || v;
+  const perfColor = (v: string) => PERF_COLORS[v] || cor;
+  // clicar adiciona/remove; sempre mantém ≥1 métrica ativa
+  const togglePerf = (v: string) =>
+    setPerfMetrics((prev) =>
+      prev.includes(v) ? (prev.length > 1 ? prev.filter((x) => x !== v) : prev) : [...prev, v]
+    );
   const dget = (r: DailyMetricRow, k: string) => (r.metrics as Record<string, number>)[k] ?? 0;
   const showPerf = !!daily && daily.length > 0;
 
@@ -444,44 +462,69 @@ export function SocialInsights({ rede }: { rede: string }) {
             </KpiCard>
           </div>
 
-          {/* Desempenho no tempo (assinatura) + Mix de conteúdo */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 16, marginBottom: 16 }}>
-            {showPerf ? (
-              <div className="card pad-lg">
-                <div className="card-head">
-                  <div>
-                    <div className="t">Desempenho no tempo</div>
-                    <div className="sub">Série diária · {perfLabel}</div>
-                  </div>
-                  <div className="seg small" role="group" aria-label="Métrica" style={{ flexWrap: "wrap" }}>
-                    {PERF_OPTS.map((o) => (
-                      <button key={o.v} type="button" className={perfMetric === o.v ? "on" : ""} onClick={() => setPerfMetric(o.v)}>
+          {/* Desempenho no tempo (assinatura) — largura total, MULTI-métrica (cruza indicadores) */}
+          {showPerf && (
+            <div className="card pad-lg tcard" style={{ marginBottom: 16, "--tcard-accent": "var(--cyan)" } as CSSProperties}>
+              <div className="card-head">
+                <div>
+                  <div className="t">Desempenho no tempo</div>
+                  <div className="sub">Série diária · {perfMetrics.map(perfLbl).join(" + ")}</div>
+                </div>
+                <div className="seg small perf-seg" role="group" aria-label="Métricas (cruze indicadores)" style={{ flexWrap: "wrap" }}>
+                  {PERF_OPTS.map((o) => {
+                    const on = perfMetrics.includes(o.v);
+                    return (
+                      <button
+                        key={o.v}
+                        type="button"
+                        className={on ? "on" : ""}
+                        aria-pressed={on}
+                        onClick={() => togglePerf(o.v)}
+                        style={on ? ({ "--chip-accent": perfColor(o.v) } as CSSProperties) : undefined}
+                      >
                         {o.l}
                       </button>
-                    ))}
-                  </div>
-                </div>
-                <Chart
-                  svg={lineChart(
-                    daily!.map((r) => r.date.slice(5)),
-                    [
-                      { name: perfLabel, color: cor, data: daily!.map((r) => dget(r, perfMetric)), fill: true },
-                      ...(comparando && cmpDaily && cmpDaily.length
-                        ? [{ name: "Comparação", color: cor, data: cmpDaily.slice(0, daily!.length).map((r) => dget(r, perfMetric)), dash: true } as LineSeries]
-                        : []),
-                    ],
-                    { h: 250, sel: daily!.length - 1 }
-                  )}
-                />
-                <div className="legend">
-                  <span><i style={{ background: cor }} />{perfLabel}</span>
-                  {comparando && cmpDaily && cmpDaily.length ? <span><i className="dash" style={{ borderTopColor: cor }} />Comparação</span> : null}
+                    );
+                  })}
                 </div>
               </div>
-            ) : <div />}
+              <Chart
+                svg={lineChart(
+                  daily!.map((r) => r.date.slice(5)),
+                  [
+                    ...perfMetrics.map((m) => ({
+                      name: perfLbl(m),
+                      color: perfColor(m),
+                      data: daily!.map((r) => dget(r, m)),
+                      fill: perfMetrics.length === 1,
+                    } as LineSeries)),
+                    ...(comparando && cmpDaily && cmpDaily.length
+                      ? [{
+                          name: `Comparação · ${perfLbl(perfMetrics[0])}`,
+                          color: perfColor(perfMetrics[0]),
+                          data: cmpDaily.slice(0, daily!.length).map((r) => dget(r, perfMetrics[0])),
+                          dash: true,
+                        } as LineSeries]
+                      : []),
+                  ],
+                  { h: 250, sel: daily!.length - 1 }
+                )}
+              />
+              <div className="legend">
+                {perfMetrics.map((m) => (
+                  <span key={m}><i style={{ background: perfColor(m) }} />{perfLbl(m)}</span>
+                ))}
+                {comparando && cmpDaily && cmpDaily.length
+                  ? <span><i className="dash" style={{ borderTopColor: perfColor(perfMetrics[0]) }} />Comparação · {perfLbl(perfMetrics[0])}</span>
+                  : null}
+              </div>
+            </div>
+          )}
 
-            {showMix && content ? (
-              <div className="card pad-lg">
+          {/* Cards secundários — fluem e preenchem sem vão (auto-fit: 1 card sozinho ocupa a linha) */}
+          <div className="si-flow">
+            {showMix && content && (
+              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
                 <div className="card-head">
                   <div className="t">Mix de conteúdo</div>
                   {mixTop && <span className="badge">Vencedor: {mixTop}</span>}
@@ -499,40 +542,36 @@ export function SocialInsights({ rede }: { rede: string }) {
                   <div style={{ fontSize: 12, color: "var(--label-3)", marginTop: 10 }}>Stories ativos: {fmt(stories)}</div>
                 )}
               </div>
-            ) : <div />}
-          </div>
+            )}
 
-          {/* Seguidores */}
-          {showSeg && (
-            <div className="card pad-lg" style={{ marginBottom: 16 }}>
-              <div className="card-head"><div className="t">Seguidores</div></div>
-              <div className="mini">
-                <MiniStat l="Novos seguidores" n={novos != null ? fmt(novos) : "—"} />
-                <MiniStat l="Deixaram de seguir" n={saida != null ? fmt(saida) : "—"} />
-                <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} />
-                <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} />
-              </div>
-              {showFollChart && (
-                <div style={{ marginTop: 14 }}>
-                  <Chart svg={lineChart(
-                    follVals.map((v) => v.date.slice(5)),
-                    [
-                      { name: "Seguidores", color: cor, data: follVals.map((v) => v.value), fill: true },
-                      ...(comparando && cmpFollVals.length
-                        ? [{ name: "Comparação", color: cor, data: cmpFollVals.slice(0, follVals.length).map((v) => v.value), dash: true } as LineSeries]
-                        : []),
-                    ],
-                    { h: 200, sel: follVals.length - 1 }
-                  )} />
+            {showSeg && (
+              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--cyan)" } as CSSProperties}>
+                <div className="card-head"><div className="t">Seguidores</div></div>
+                <div className="mini">
+                  <MiniStat l="Novos seguidores" n={novos != null ? fmt(novos) : "—"} />
+                  <MiniStat l="Deixaram de seguir" n={saida != null ? fmt(saida) : "—"} />
+                  <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} />
+                  <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} />
                 </div>
-              )}
-            </div>
-          )}
+                {showFollChart && (
+                  <div style={{ marginTop: 14 }}>
+                    <Chart svg={lineChart(
+                      follVals.map((v) => v.date.slice(5)),
+                      [
+                        { name: "Seguidores", color: cor, data: follVals.map((v) => v.value), fill: true },
+                        ...(comparando && cmpFollVals.length
+                          ? [{ name: "Comparação", color: cor, data: cmpFollVals.slice(0, follVals.length).map((v) => v.value), dash: true } as LineSeries]
+                          : []),
+                      ],
+                      { h: 200, sel: follVals.length - 1 }
+                    )} />
+                  </div>
+                )}
+              </div>
+            )}
 
-          {/* Engajamento por tipo + Rendimento orgânico */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-            {engTypeRows.length > 0 ? (
-              <div className="card pad-lg">
+            {engTypeRows.length > 0 && (
+              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--red)" } as CSSProperties}>
                 <div className="card-head">
                   <div>
                     <div className="t">Engajamento por tipo</div>
@@ -543,10 +582,10 @@ export function SocialInsights({ rede }: { rede: string }) {
                   <BarRow key={r.key} k={r.k} v={metrics[r.key].total} max={engTypeMax} color="var(--cyan)" formatted={fmt(metrics[r.key].total)} />
                 ))}
               </div>
-            ) : <div />}
+            )}
 
-            {showOrganic && content ? (
-              <div className="card pad-lg">
+            {showOrganic && content && (
+              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--red)" } as CSSProperties}>
                 <div className="card-head">
                   <div>
                     <div className="t">Rendimento orgânico</div>
@@ -569,50 +608,48 @@ export function SocialInsights({ rede }: { rede: string }) {
                     : "Sem alcance orgânico registrado neste período."}</p>
                 </div>
               </div>
-            ) : <div />}
+            )}
+
+            {showActivity && (
+              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
+                <div className="card-head"><div className="t">Atividade &amp; audiência</div></div>
+                <div className="mini">
+                  {accountsEngaged != null && <MiniStat l="Atividades no perfil" n={fmt(accountsEngaged)} />}
+                  <MiniStat l="Visitas ao site" n={linkTaps?.WEBSITE != null ? fmt(linkTaps.WEBSITE) : "—"} />
+                  {shown("link_call") && <MiniStat l="Toques em ligar" n={linkTaps?.CALL != null ? fmt(linkTaps.CALL) : "—"} />}
+                  {shown("link_email") && <MiniStat l="Toques em e-mail" n={linkTaps?.EMAIL != null ? fmt(linkTaps.EMAIL) : "—"} />}
+                </div>
+              </div>
+            )}
+
+            {showConv && (
+              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--excelente)" } as CSSProperties}>
+                <div className="card-head"><div className="t">Conversas</div></div>
+                <div className="mini">
+                  <MiniStat l="Leads (DM)" n={inboxLeads != null ? fmt(inboxLeads) : "—"} />
+                  <MiniStat l="Conversas" n={inbox?.volume ? fmt(inbox.volume.summary.uniqueConversations) : "—"} />
+                  <MiniStat l="Tempo de resposta" n={inbox?.responseTime && inbox.responseTime.summary.sampleSize > 0 ? humanDur(inbox.responseTime.summary.medianSeconds) : "—"} />
+                </div>
+                {showConvChart && inbox?.volume && (
+                  <div style={{ marginTop: 14 }}>
+                    <Chart svg={lineChart(
+                      inbox.volume.timeseries.map((t) => t.date.slice(5)),
+                      [
+                        { name: "recebidas", color: cor, data: inbox.volume.timeseries.map((t) => t.received), fill: true },
+                        { name: "enviadas", color: "#8E8E93", data: inbox.volume.timeseries.map((t) => t.sent) },
+                      ],
+                      { h: 200, sel: inbox.volume.timeseries.length - 1 }
+                    )} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Atividade & audiência */}
-          {showActivity && (
-            <div className="card pad-lg" style={{ marginBottom: 16 }}>
-              <div className="card-head"><div className="t">Atividade &amp; audiência</div></div>
-              <div className="mini">
-                {accountsEngaged != null && <MiniStat l="Atividades no perfil" n={fmt(accountsEngaged)} />}
-                <MiniStat l="Visitas ao site" n={linkTaps?.WEBSITE != null ? fmt(linkTaps.WEBSITE) : "—"} />
-                {shown("link_call") && <MiniStat l="Toques em ligar" n={linkTaps?.CALL != null ? fmt(linkTaps.CALL) : "—"} />}
-                {shown("link_email") && <MiniStat l="Toques em e-mail" n={linkTaps?.EMAIL != null ? fmt(linkTaps.EMAIL) : "—"} />}
-              </div>
-            </div>
-          )}
-
-          {/* Conversas */}
-          {showConv && (
-            <div className="card pad-lg" style={{ marginBottom: 16 }}>
-              <div className="card-head"><div className="t">Conversas</div></div>
-              <div className="mini">
-                <MiniStat l="Leads (DM)" n={inboxLeads != null ? fmt(inboxLeads) : "—"} />
-                <MiniStat l="Conversas" n={inbox?.volume ? fmt(inbox.volume.summary.uniqueConversations) : "—"} />
-                <MiniStat l="Tempo de resposta" n={inbox?.responseTime && inbox.responseTime.summary.sampleSize > 0 ? humanDur(inbox.responseTime.summary.medianSeconds) : "—"} />
-              </div>
-              {showConvChart && inbox?.volume && (
-                <div style={{ marginTop: 14 }}>
-                  <Chart svg={lineChart(
-                    inbox.volume.timeseries.map((t) => t.date.slice(5)),
-                    [
-                      { name: "recebidas", color: cor, data: inbox.volume.timeseries.map((t) => t.received), fill: true },
-                      { name: "enviadas", color: "#8E8E93", data: inbox.volume.timeseries.map((t) => t.sent) },
-                    ],
-                    { h: 200, sel: inbox.volume.timeseries.length - 1 }
-                  )} />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Top conteúdos do período + Melhores horários */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 16 }}>
-            {showTop && top?.posts ? (
-              <div className="card pad-lg">
+          {/* Top conteúdos + Melhores horários — auto-fit (sem coluna vazia quando só um renderiza) */}
+          <div className="si-flow-sm">
+            {showTop && top?.posts && (
+              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
                 <div className="card-head">
                   <div>
                     <div className="t">Top conteúdos do período</div>
@@ -651,9 +688,9 @@ export function SocialInsights({ rede }: { rede: string }) {
                   })}
                 </div>
               </div>
-            ) : <div />}
+            )}
 
-            <div className="card pad-lg">
+            <div className="card pad-lg tcard" style={{ "--tcard-accent": "#8E5BE0" } as CSSProperties}>
               <div className="card-head">
                 <div>
                   <div className="t">Melhores horários</div>
@@ -680,19 +717,19 @@ export function SocialInsights({ rede }: { rede: string }) {
             </div>
           </div>
 
-          {/* Audiência — demografia (idade/gênero/país/cidade) */}
+          {/* Audiência — demografia (idade/gênero/país/cidade), cada dimensão num sub-card próprio */}
           {showDemo && (
-            <div className="card pad-lg">
+            <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
               <div className="card-head">
                 <div><div className="t">Audiência</div><div className="sub">quem segue o perfil · por seguidores</div></div>
               </div>
-              <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 18 }}>
+              <div className="si-demo">
                 {demoDims.map(({ dim, items }) => {
                   const tops = [...items].sort((a, b) => b.value - a.value).slice(0, 6);
                   const mx = Math.max(1, ...tops.map((t) => t.value));
                   return (
-                    <div key={dim}>
-                      <div className="sub" style={{ fontWeight: 600, marginBottom: 6 }}>{DIM_PT[dim] || dim}</div>
+                    <div key={dim} className="si-dim">
+                      <h5>{DIM_PT[dim] || dim}</h5>
                       {tops.map((t, i) => (
                         <BarRow
                           key={i}

@@ -589,3 +589,20 @@ svg.chartI{cursor:crosshair}
 .toppost .tp-badges{display:flex;gap:8px;flex:0 0 auto;font-size:11px;color:var(--label-2);font-variant-numeric:tabular-nums}
 .toppost a{font-size:11px;color:var(--cyan);font-weight:600;text-decoration:none;flex:0 0 auto}
 @media (prefers-color-scheme:dark){ .narr{background:linear-gradient(180deg,#1c1c1e,#151517)} }
+
+/* ===== SocialInsights — barra temática + agrupamento fluido (sem colunas vazias) ===== */
+/* acento de cor à esquerda por tema (fundo branco preservado) */
+.tcard{position:relative;border-left:3px solid var(--tcard-accent,transparent)}
+/* grupos que fluem e preenchem: um card sozinho ocupa a largura total (auto-fit) */
+.si-flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-bottom:16px}
+.si-flow-sm{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:16px}
+.si-flow:empty,.si-flow-sm:empty{display:none;margin:0}
+/* Audiência: cada dimensão num sub-card próprio, com respiro e sem ultrapassar a barreira */
+.si-demo{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.si-dim{border:1px solid var(--hairline);border-radius:var(--r-md);padding:12px 14px;background:var(--surface);min-width:0}
+.si-dim h5{font-size:12px;font-weight:700;color:var(--label-2);margin:0 0 8px}
+.si-dim .bar-row{grid-template-columns:78px 1fr 44px;gap:8px}
+.si-dim .bar-row .k{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si-dim .bar-row .v{font-size:12px}
+/* chip multi-seleção ativo do "Desempenho no tempo": herda o acento da métrica */
+.perf-seg button.on{background:#fff;color:var(--label);box-shadow:inset 0 0 0 1px var(--chip-accent,var(--hairline-2)),0 1px 3px rgba(0,0,0,.10)}

@@ -54,7 +54,14 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
-  const connected = new Set(accounts.map((a) => a.platform));
+  // social conectado = conta da plataforma com posting habilitado (enabled).
+  // contas ads-only (ex. Facebook que veio junto do Meta Ads, enabled:false) NÃO contam.
+  const socialConnected = new Set(accounts.filter((a) => a.enabled === true).map((a) => a.platform));
+  // ads conectado = existe conta DEDICADA de anúncio (platform = id do quadrado, ex. "metaads").
+  // não usa o token social (LinkedIn/Facebook social herdam adsStatus mas não são ads).
+  const adsConnected = new Set(
+    accounts.filter((a) => a.adsStatus === "connected" || a.adsStatus === "active").map((a) => a.platform)
+  );
 
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
@@ -115,13 +122,9 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
             <div className="conx-block-h">{GROUP_LABEL[g]}</div>
             <div className="conx-grid2">
               {redes.map((r) => {
-                // ads: conectado = existe conta da plataforma-alvo com ads ativo; social: conta da plataforma
-                const on =
-                  r.grupo === "ads"
-                    ? accounts.some(
-                        (a) => a.platform === AD_CONNECT[r.id] && (a.adsStatus === "connected" || a.adsStatus === "active")
-                      )
-                    : connected.has(zplat(r.id));
+                // ads: conta dedicada de anúncio (platform = id do quadrado, ex. "metaads");
+                // social: conta com posting habilitado. Sem cruzar um com o outro.
+                const on = r.grupo === "ads" ? adsConnected.has(r.id) : socialConnected.has(zplat(r.id));
                 return (
                   <div key={r.id} className={`conx-sq${on ? " on" : ""}`}>
                     <span

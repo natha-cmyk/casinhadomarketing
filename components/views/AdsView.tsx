@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useStore, newId, type ManualAd } from "@/lib/store";
-import { PageHead, KpiCard } from "@/components/ui";
+import { PageHead, KpiCard, MiniStat } from "@/components/ui";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { Ic } from "@/components/Ic";
 import { Spinner } from "@/components/Spinner";
@@ -33,6 +33,22 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 // CTR já vem em pontos percentuais (1.19 = 1,19%); pct() espera fração, então dividimos
 const pctv = (percent: number) => pct((Number(percent) || 0) / 100);
+// ISO (YYYY-MM-DD) → dd/mm, para a narrativa
+const ddmm = (isoStr: string) => `${isoStr.slice(8, 10)}/${isoStr.slice(5, 7)}`;
+
+// frase automática do consolidado — só inclui orações com dado (>0)
+function narrativaGeral(g: AdTotals, since: string, until: string): string | null {
+  const parts: string[] = [];
+  if (g.spend > 0) parts.push(`investiu ${money(g.spend)} em mídia paga`);
+  if (g.leads > 0) parts.push(`gerou ${fmt(g.leads)} leads${g.cpl > 0 ? ` a ${money(g.cpl)} cada` : ""}`);
+  if (g.ctr > 0) parts.push(`registrou CTR de ${pctv(g.ctr)}`);
+  if (g.impressions > 0) parts.push(`somou ${kfmt(g.impressions)} impressões`);
+  if (!parts.length) return null;
+  const body = parts.length === 1
+    ? parts[0]
+    : parts.slice(0, -1).join(", ") + " e " + parts[parts.length - 1];
+  return `No período de ${ddmm(since)} a ${ddmm(until)}, a empresa ${body}.`;
+}
 
 function dateRange(scope: { period: Period; year: number; month: number; quarter: number }) {
   const { period, year, month, quarter } = scope;
@@ -179,74 +195,38 @@ export function AdsView() {
 
       {!loading && !err && (geral.spend > 0 || geral.impressions > 0) && (
         <>
-          {/* Geral */}
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div className="card-head">
+          {/* Narrativa geral + KPIs-herói (acento vermelho) */}
+          <div className="card pad-lg" style={{ marginBottom: 16, borderLeft: "3px solid var(--red)" }}>
+            <div className="card-head" style={{ marginBottom: 12 }}>
               <div className="t">Investimento geral da empresa</div>
-              <span className="badge">{range.since} → {range.until}</span>
+              <span className="badge">{ddmm(range.since)} → {ddmm(range.until)}</span>
             </div>
+            {narrativaGeral(geral, range.since, range.until) && (
+              <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "var(--label-1)", margin: "0 0 16px", maxWidth: 720 }}>
+                {narrativaGeral(geral, range.since, range.until)}
+              </p>
+            )}
             <div className="grid kpis">
-              <KpiCard lbl="Investimento" val={money(geral.spend)} />
-              <KpiCard lbl="Leads / conversões" val={fmt(geral.leads)} />
-              <KpiCard lbl="Custo por lead" val={geral.cpl ? money(geral.cpl) : "—"} />
-              <KpiCard lbl="Impressões" val={kfmt(geral.impressions)} />
-              <KpiCard lbl="Cliques" val={fmt(geral.clicks)} />
-              <KpiCard lbl="CTR" val={pctv(geral.ctr)} />
-              <KpiCard lbl="CPC" val={geral.cpc ? money(geral.cpc) : "—"} />
-              <KpiCard lbl="CPM" val={geral.cpm ? money(geral.cpm) : "—"} />
+              <KpiCard lbl="Investimento" val={money(geral.spend)} foot="mídia paga no período" />
+              <KpiCard lbl="Leads / conversões" val={fmt(geral.leads)} foot="resultados atribuídos" />
+              <KpiCard lbl="Custo por lead" val={geral.cpl ? money(geral.cpl) : "—"} foot="CPL médio" />
+              <KpiCard lbl="CTR" val={pctv(geral.ctr)} foot={`${kfmt(geral.impressions)} impressões`} />
             </div>
           </div>
 
-          {/* Painéis por ad account (minimizados) */}
-          {(data || []).map((a) => {
-            const t = a.totals || emptyTotals();
-            const open = !!openAcct[a.id];
-            return (
-              <div className={`card pad-lg${open ? " open" : ""}`} key={a.id} style={{ marginBottom: 12 }}>
-                <div className="card-head" style={{ marginBottom: open ? 14 : 0, cursor: "pointer" }} onClick={() => setOpenAcct((o) => ({ ...o, [a.id]: !o[a.id] }))}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-                    <span className="cc-conx-ico" style={{ background: "#1877F2" }}><Ic name="facebook" /></span>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="t" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</div>
-                      <div className="sub">Meta Ads · {a.currency} · {money(t.spend)} · {fmt(t.leads)} leads</div>
-                    </div>
-                  </div>
-                  <span className="badge">{a.campaigns.length} camp.</span>
-                  <svg className="acc-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ transform: open ? "rotate(180deg)" : "none", transition: ".18s", color: "var(--label-3)" }}>
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </div>
-                {open && (
-                  <>
-                    <div className="grid kpis" style={{ marginBottom: 14 }}>
-                      <KpiCard lbl="Investimento" val={money(t.spend)} />
-                      <KpiCard lbl="Leads" val={fmt(t.leads)} />
-                      <KpiCard lbl="Custo/lead" val={t.cpl ? money(t.cpl) : "—"} />
-                      <KpiCard lbl="Conversas" val={fmt(t.messaging)} />
-                      <KpiCard lbl="Impressões" val={kfmt(t.impressions)} />
-                      <KpiCard lbl="Alcance" val={kfmt(t.reach)} />
-                      <KpiCard lbl="Cliques no link" val={fmt(t.linkClicks)} />
-                      <KpiCard lbl="CTR" val={pctv(t.ctr)} />
-                      <KpiCard lbl="CPC" val={t.cpc ? money(t.cpc) : "—"} />
-                      <KpiCard lbl="CPM" val={t.cpm ? money(t.cpm) : "—"} />
-                      <KpiCard lbl="Frequência" val={fmt(t.frequency, 1)} />
-                      <KpiCard lbl="Page views (LP)" val={fmt(t.landingViews)} />
-                      <KpiCard lbl="Engaj. de posts" val={fmt(t.postEngagement)} />
-                      <KpiCard lbl="Reações" val={fmt(t.reactions)} />
-                      <KpiCard lbl="Comentários" val={fmt(t.comments)} />
-                      <KpiCard lbl="Views de vídeo" val={fmt(t.videoViews)} />
-                      <KpiCard lbl="Compras" val={fmt(t.purchases)} />
-                    </div>
-                    {a.campaigns.length > 0 && <CampanhaTable campaigns={a.campaigns} />}
-                  </>
-                )}
-              </div>
-            );
-          })}
+          {/* Painéis por ad account — indicadores agrupados por tema */}
+          {(data || []).map((a) => (
+            <AdAccountPanel
+              key={a.id}
+              a={a}
+              open={!!openAcct[a.id]}
+              onToggle={() => setOpenAcct((o) => ({ ...o, [a.id]: !o[a.id] }))}
+            />
+          ))}
 
           {/* Canais manuais */}
           {manualInScope.length > 0 && (
-            <div className="card" style={{ marginTop: 4 }}>
+            <div className="card" style={{ marginTop: 4, borderLeft: "3px solid var(--atencao)" }}>
               <div className="card-head"><div className="t">Canais manuais</div><span className="badge">{manualInScope.length}</span></div>
               <CampanhaTable
                 manual
@@ -261,6 +241,107 @@ export function AdsView() {
         </>
       )}
     </>
+  );
+}
+
+// bloco temático: título colorido + border-left do tema + MiniStats num .mini
+function ThemeGroup({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
+  return (
+    <div style={{ borderLeft: `3px solid ${color}`, paddingLeft: 12, marginBottom: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color, letterSpacing: ".3px", textTransform: "uppercase", marginBottom: 8 }}>
+        {title}
+      </div>
+      <div className="mini">{children}</div>
+    </div>
+  );
+}
+
+// painel de uma ad account — minimizável; expandido mostra indicadores agrupados por tema
+// + narrativa própria + tabela de campanhas com filtro de busca
+function AdAccountPanel({ a, open, onToggle }: { a: AdAccountData; open: boolean; onToggle: () => void }) {
+  const t = a.totals || emptyTotals();
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+  const filtered = query ? a.campaigns.filter((c) => c.name.toLowerCase().includes(query)) : a.campaigns;
+
+  return (
+    <div className={`card pad-lg${open ? " open" : ""}`} style={{ marginBottom: 12 }}>
+      <div className="card-head" style={{ marginBottom: open ? 14 : 0, cursor: "pointer" }} onClick={onToggle}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+          <span className="cc-conx-ico" style={{ background: "#1877F2" }}><Ic name="facebook" /></span>
+          <div style={{ minWidth: 0 }}>
+            <div className="t" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</div>
+            <div className="sub">Meta Ads · {a.currency} · {money(t.spend)} · {fmt(t.leads)} leads</div>
+          </div>
+        </div>
+        <span className="badge">{a.campaigns.length} camp.</span>
+        <svg className="acc-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ transform: open ? "rotate(180deg)" : "none", transition: ".18s", color: "var(--label-3)" }}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </div>
+      {open && (
+        <>
+          {/* narrativa da conta */}
+          <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--label-2)", margin: "0 0 14px" }}>
+            <b style={{ color: "var(--label-1)" }}>{a.name}</b> investiu {money(t.spend)} e trouxe {fmt(t.leads)} leads
+            {t.cpl > 0 ? <> (CPL {money(t.cpl)})</> : null}.
+          </p>
+
+          {/* indicadores agrupados por tema */}
+          <ThemeGroup title="Investimento" color="var(--red)">
+            <MiniStat l="Investimento" n={money(t.spend)} />
+            <MiniStat l="CPC" n={t.cpc ? money(t.cpc) : "—"} />
+            <MiniStat l="CPM" n={t.cpm ? money(t.cpm) : "—"} />
+          </ThemeGroup>
+
+          <ThemeGroup title="Alcance" color="var(--cyan)">
+            <MiniStat l="Impressões" n={kfmt(t.impressions)} />
+            <MiniStat l="Alcance" n={kfmt(t.reach)} />
+            <MiniStat l="Frequência" n={fmt(t.frequency, 1)} />
+          </ThemeGroup>
+
+          <ThemeGroup title="Engajamento" color="var(--ink)">
+            <MiniStat l="Engaj. de posts" n={fmt(t.postEngagement)} />
+            <MiniStat l="Reações" n={fmt(t.reactions)} />
+            <MiniStat l="Comentários" n={fmt(t.comments)} />
+            <MiniStat l="Views de vídeo" n={fmt(t.videoViews)} />
+          </ThemeGroup>
+
+          <ThemeGroup title="Conversão" color="var(--excelente)">
+            <MiniStat l="Leads" n={fmt(t.leads)} />
+            <MiniStat l="Custo/lead" n={t.cpl ? money(t.cpl) : "—"} />
+            <MiniStat l="Conversas" n={fmt(t.messaging)} />
+            <MiniStat l="Page views (LP)" n={fmt(t.landingViews)} />
+            <MiniStat l="Compras" n={fmt(t.purchases)} />
+          </ThemeGroup>
+
+          {/* tabela de campanhas com filtro */}
+          {a.campaigns.length > 0 && (
+            <div style={{ marginTop: 4 }}>
+              <div className="card-head" style={{ marginBottom: 10 }}>
+                <div className="t" style={{ fontSize: 13 }}>Campanhas</div>
+                <input
+                  className="field-edit"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Filtrar campanhas…"
+                  style={{ maxWidth: 240 }}
+                  aria-label="Filtrar campanhas por nome"
+                />
+              </div>
+              {query && (
+                <div className="sub" style={{ fontSize: 12, color: "var(--label-3)", marginBottom: 8 }}>
+                  {filtered.length} de {a.campaigns.length} campanhas
+                </div>
+              )}
+              {filtered.length > 0
+                ? <CampanhaTable campaigns={filtered} />
+                : <div className="sub" style={{ fontSize: 12.5, color: "var(--label-3)" }}>Nenhuma campanha corresponde a “{q}”.</div>}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
