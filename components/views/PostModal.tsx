@@ -3,6 +3,7 @@
 // Modal de criação/edição de post do calendário de conteúdo.
 import { useState } from "react";
 import { useStore, newId, type PostItem } from "@/lib/store";
+import { savePosts } from "@/lib/api";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -97,6 +98,10 @@ export function PostModal() {
 
   const existing = pm && pm.mode === "edit" ? posts.find((x) => x.id === pm.id) : undefined;
 
+  // Estado do disparo real (agendar/publicar via Zernio).
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
+
   // Estado seed: post existente (edição) ou defaults do blueprint (novo).
   const [f, setF] = useState<Fields>(() => {
     if (pm && pm.mode === "edit" && existing) {
@@ -152,12 +157,13 @@ export function PostModal() {
 
   const close = () => set({ postModal: null });
 
-  const doSave = (forceStatus?: string) => {
+  // Monta os campos do post a partir do formulário (com status opcional forçado).
+  const buildBase = (forceStatus?: string) => {
     const dp = f.data.split("/").map((s) => parseInt(s, 10));
     const d = dp[0] || 1;
     const m = (dp[1] || calMonth + 1) - 1;
     const y = dp[2] || calYear;
-    const base = {
+    return {
       hora: f.hora,
       titulo: f.titulo || "(sem título)",
       canal: f.canal,
@@ -176,13 +182,61 @@ export function PostModal() {
       m,
       d,
     };
+  };
+
+  // Persiste no store (cria ou atualiza) e devolve o id do post.
+  const persist = (forceStatus?: string): string => {
+    const base = buildBase(forceStatus);
     if (pm.mode === "edit" && pm.id) {
       updatePost(pm.id, base);
-    } else {
-      const post: PostItem = { id: newId("post"), ...base };
-      addPost(post);
+      return pm.id;
     }
+    const id = newId("post");
+    addPost({ id, ...base } as PostItem);
+    return id;
+  };
+
+  const doSave = (forceStatus?: string) => {
+    persist(forceStatus);
     close();
+  };
+
+  // Disparo REAL: agenda (publishNow=false) ou publica na hora (publishNow=true) via Zernio.
+  const doPublish = async (publishNow: boolean) => {
+    if (busy) return;
+    if (!conn.length || f.contas.length === 0) {
+      setMsg({ kind: "err", text: 'Escolha ao menos um canal conectado em "Publicar em" antes de agendar.' });
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    // grava no store já como "agendado" (a rota devolve o status final e volta a atualizar)
+    const id = persist(publishNow ? undefined : "agendado");
+    try {
+      await savePosts(useStore.getState()); // garante o post no banco p/ a rota ler
+      const r = await fetch("/api/posts/publish", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ postId: id, publishNow }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) {
+        setBusy(false);
+        setMsg({ kind: "err", text: j?.error || "Falha ao agendar. Tente novamente." });
+        return;
+      }
+      updatePost(id, { status: j.status || (publishNow ? "publicado" : "agendado") });
+      setBusy(false);
+      const ign =
+        Array.isArray(j.canaisIgnorados) && j.canaisIgnorados.length
+          ? ` · ignorados (sem publicação): ${j.canaisIgnorados.join(", ")}`
+          : "";
+      setMsg({ kind: "ok", text: (j.status === "publicado" ? "Publicado" : "Agendado") + " com sucesso" + ign });
+      setTimeout(() => set({ postModal: null }), 1000); // set é ação da store — seguro após unmount
+    } catch {
+      setBusy(false);
+      setMsg({ kind: "err", text: "Erro de rede ao agendar. Tente novamente." });
+    }
   };
 
   const doDelete = () => {
@@ -346,7 +400,15 @@ export function PostModal() {
             </div>
           </div>
           <div className="pm-sched">
-            <div className="pm-sched-h">Agendamento & publicação</div>
+            <div className="pm-sched-h">
+              Agendamento &amp; publicação
+              {existing?.status === "publicado" && (
+                <span className="pm-pubtag">publicado ✓ {existing.hora || ""}</span>
+              )}
+              {existing?.status === "agendado" && (
+                <span className="pm-schedtag">agendado · {existing.hora || "--:--"}</span>
+              )}
+            </div>
             <label className="field-lbl">Publicar em (canais conectados)</label>
             {conn.length ? (
               <div className="pm-contas">
@@ -391,6 +453,7 @@ export function PostModal() {
                 </option>
               ))}
             </select>
+            {msg && <div className={`pm-msg pm-msg-${msg.kind}`}>{msg.text}</div>}
           </div>
         </div>
         <div className="pm-foot">
@@ -402,15 +465,18 @@ export function PostModal() {
             <span></span>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="btn-link" id="pmCancel" onClick={close}>
+            <button className="btn-link" id="pmCancel" onClick={close} disabled={busy}>
               Cancelar
             </button>
-            {/* TODO(zernio): disparo real de publicação */}
-            <button className="btn-link pm-pub" id="pmPublish" onClick={() => doSave("publicado")}>
-              Publicar agora
-            </button>
-            <button className="btn-link ig" id="pmSave" onClick={() => doSave()}>
+            <button className="btn-link" id="pmSave" onClick={() => doSave()} disabled={busy}>
               Salvar
+            </button>
+            {/* Disparo real via Zernio (POST /posts) */}
+            <button className="btn-link pm-pub" id="pmPublish" onClick={() => doPublish(true)} disabled={busy}>
+              {busy ? "Enviando…" : "Publicar agora"}
+            </button>
+            <button className="btn-link ig" id="pmSchedule" onClick={() => doPublish(false)} disabled={busy}>
+              {busy ? "Agendando…" : "Agendar publicação"}
             </button>
           </div>
         </div>

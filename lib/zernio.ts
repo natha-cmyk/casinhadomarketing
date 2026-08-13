@@ -371,7 +371,64 @@ export const inboxVolume = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxVo
 export const inboxResponseTime = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxResponseTime>(`/analytics/inbox/response-time?${inboxQS(o)}`);
 export const inboxSourceBreakdown = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxSourceBreakdown>(`/analytics/inbox/source-breakdown?${inboxQS(o)}`);
 
-// TODO(publish): POST /posts (publish do calendário) — {content, scheduledFor, timezone, platforms:[{platform,accountId}]}
+// ── Publicação / agendamento (POST /posts) ─────────────────────────────────
+// Contrato CONFIRMADO ao vivo (OpenAPI Zernio 1.0.4). Body:
+//   { title?, content?, mediaItems?,
+//     platforms: [{ platform, accountId, customContent?, scheduledFor? }],  // required p/ não-draft
+//     scheduledFor? (ISO date-time), publishNow? (bool, default false), isDraft? (bool),
+//     timezone? (default "UTC"), tags?, hashtags? }
+// Sem scheduledFor/publishNow/isDraft o post vira DRAFT automaticamente.
+// Retorno 201: { post: { _id, status, scheduledFor?, publishedAt?, platforms:[{platform,status,platformPostUrl?}] }, message }.
+//   status: draft | scheduled | published | failed.
+// Dedup por conteúdo (24h) devolve 409; falta de permissão da conta → 4xx/5xx com corpo.
+export interface ZernioPostPlatform {
+  platform: string;
+  accountId: string;
+  customContent?: string;
+  scheduledFor?: string;
+}
+export interface ZernioPublishInput {
+  content?: string;
+  title?: string;
+  platforms: ZernioPostPlatform[];
+  scheduledFor?: string;
+  publishNow?: boolean;
+  isDraft?: boolean;
+  timezone?: string;
+  tags?: string[];
+  hashtags?: string[];
+  mediaItems?: unknown[];
+}
+export interface ZernioPost {
+  _id: string;
+  status: string; // draft | scheduled | published | failed
+  scheduledFor?: string;
+  publishedAt?: string;
+  platforms?: { platform: string; status?: string; platformPostUrl?: string }[];
+  [k: string]: unknown;
+}
+// Cria/agenda/publica um post. Uma chamada cobre N plataformas.
+export function publishPost(input: ZernioPublishInput) {
+  return zernio<{ post: ZernioPost; message?: string; existingPost?: ZernioPost }>("/posts", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// GET /posts — lista posts (default: agendados) do profile, p/ reconciliar a fila local com a Zernio.
+export interface ZernioListedPost extends ZernioPost {
+  title?: string;
+  content?: string;
+  timezone?: string;
+}
+export async function getScheduledPosts(opts?: { profileId?: string; status?: string; limit?: number }) {
+  const q = new URLSearchParams();
+  if (opts?.profileId) q.set("profileId", opts.profileId);
+  q.set("status", opts?.status || "scheduled"); // draft | scheduled | published | failed
+  q.set("limit", String(opts?.limit ?? 100));
+  const r = await zernio<{ posts: ZernioListedPost[]; pagination?: unknown }>(`/posts?${q.toString()}`);
+  return r.posts || [];
+}
 
 // ── Google Business (Perfil da Empresa / GBP) ───────────────────────────────
 // Verificado ao vivo (conta Seahub). A conta googlebusiness da Zernio representa UMA

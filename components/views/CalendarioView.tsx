@@ -71,6 +71,32 @@ const POST_STATUS: Record<string, { label: string; cor: string }> = {
 
 const calKey = (y: number, m: number, d: number) => y + "-" + (m + 1) + "-" + d;
 
+// ── Modo apresentação ──────────────────────────────────────────────
+const WD_FULL = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+type ApPeriodo = "mes" | "quinzena" | "semana";
+// Janelas [diaInicio, diaFim] dentro do mês, conforme o período escolhido.
+function apWindows(periodo: ApPeriodo, year: number, month: number): [number, number][] {
+  const dim = daysInMonth(year, month);
+  if (periodo === "mes") return [[1, dim]];
+  if (periodo === "quinzena") return dim > 15 ? [[1, 15], [16, dim]] : [[1, dim]];
+  // semana: alinhada a Dom–Sáb, recortada pelo mês
+  const wins: [number, number][] = [];
+  let start = 1;
+  while (start <= dim) {
+    const dow = new Date(year, month, start).getDay();
+    const end = Math.min(start + (6 - dow), dim);
+    wins.push([start, end]);
+    start = end + 1;
+  }
+  return wins;
+}
+function apWindowLabel(periodo: ApPeriodo, win: [number, number], month: number): string {
+  const mes = MONTHS_FULL[month];
+  if (periodo === "mes") return mes;
+  if (periodo === "quinzena") return `${win[0]}–${win[1]} de ${mes}`;
+  return `Semana · ${win[0]}–${win[1]} de ${mes}`;
+}
+
 // feriados móveis do ano (Carnaval, Sexta-feira Santa, Corpus Christi) → [dd/mm, nome]
 function feriadosMoveis(y: number): [string, string][] {
   return Object.entries(FERIADOS)
@@ -145,6 +171,11 @@ export function CalendarioView() {
         <span className="pc-dot" style={{ background: c }} />
         <span className="pc-h">{p.hora || ""}</span>
         <span className="pc-t">{p.titulo}</span>
+        {p.status === "publicado" && (
+          <span className="pc-check" title={`Publicado ${p.hora || ""}`}>
+            ✓
+          </span>
+        )}
       </button>
     );
   };
@@ -153,6 +184,35 @@ export function CalendarioView() {
   const connRedes = redesConectadas(zernioAccounts);
   const nConn = connRedes.length;
   const [contasOpen, setContasOpen] = useState(false);
+
+  // ── modo apresentação (cronograma de produção por período) ──
+  const [apOpen, setApOpen] = useState(false);
+  const [apPeriodo, setApPeriodo] = useState<ApPeriodo>("mes");
+  const [apOff, setApOff] = useState(0);
+  const [apHidden, setApHidden] = useState<Set<string>>(new Set()); // canais desligados nos chips
+
+  const abrirApresentacao = () => {
+    // abre na janela que contém "hoje" (se o mês exibido for o atual)
+    const wins = apWindows(apPeriodo, year, month);
+    const hoje = new Date();
+    let off = 0;
+    if (hoje.getFullYear() === year && hoje.getMonth() === month) {
+      const dd = hoje.getDate();
+      off = Math.max(0, wins.findIndex(([a, b]) => dd >= a && dd <= b));
+    }
+    setApOff(off);
+    setApOpen(true);
+  };
+
+  // Escape fecha a apresentação
+  useEffect(() => {
+    if (!apOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setApOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [apOpen]);
 
   // ── toolbar: contadores por status do mês ──
   const mo = posts.filter((p) => p.y === year && p.m === month);
@@ -202,13 +262,22 @@ export function CalendarioView() {
         title="Calendário de conteúdo"
         desc="Planeje, agende e publique — Instagram, TikTok, LinkedIn e YouTube (canais conectados) + WhatsApp, lista de transmissão e blog. Clique num dia para criar; num post para editar."
         right={
-          <button
-            className="btn-link ig"
-            id="newPostBtn"
-            onClick={() => set({ postModal: { mode: "new", y: year, m: month, d: 1 } })}
-          >
-            <Ic name="upload" /> Novo post
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn-link" id="apresentarBtn" onClick={abrirApresentacao}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="4" width="18" height="12" rx="2" />
+                <path d="M8 20h8M12 16v4" />
+              </svg>
+              Apresentar
+            </button>
+            <button
+              className="btn-link ig"
+              id="newPostBtn"
+              onClick={() => set({ postModal: { mode: "new", y: year, m: month, d: 1 } })}
+            >
+              <Ic name="upload" /> Novo post
+            </button>
+          </div>
         }
       />
 
@@ -430,6 +499,145 @@ export function CalendarioView() {
           ))}
         </ul>
       </div>
+
+      {/* Modo apresentação — cronograma de produção por período */}
+      {apOpen &&
+        (() => {
+          const wins = apWindows(apPeriodo, year, month);
+          const off = Math.min(apOff, wins.length - 1);
+          const win = wins[off] || [1, daysInMonth(year, month)];
+          const canaisVisiveis = (nome: string) => !apHidden.has(nome);
+          // dias da janela com posts visíveis (só canais ligados)
+          const dias: { d: number; dow: number; posts: PostItem[] }[] = [];
+          for (let d = win[0]; d <= win[1]; d++) {
+            const dp = posts
+              .filter((p) => p.y === year && p.m === month && p.d === d && canaisVisiveis(p.canal))
+              .sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+            if (dp.length) dias.push({ d, dow: new Date(year, month, d).getDay(), posts: dp });
+          }
+          const totalPosts = dias.reduce((n, x) => n + x.posts.length, 0);
+          return (
+            <div className="ap-back" role="dialog" aria-modal="true">
+              <div className="ap-shell">
+                <header className="ap-head">
+                  <div className="ap-head-l">
+                    <div className="ap-eyebrow">Cronograma de produção · {MONTHS_FULL[month]} {year}</div>
+                    <h2 className="ap-title">{apWindowLabel(apPeriodo, win, month)}</h2>
+                    <div className="ap-sub">
+                      {totalPosts} {totalPosts === 1 ? "publicação planejada" : "publicações planejadas"}
+                    </div>
+                  </div>
+                  <button className="ap-close" aria-label="Fechar apresentação" onClick={() => setApOpen(false)}>
+                    ✕
+                  </button>
+                </header>
+
+                <div className="ap-controls">
+                  <div className="ap-seg">
+                    {([["mes", "Mês"], ["quinzena", "Quinzena"], ["semana", "Semana"]] as [ApPeriodo, string][]).map(
+                      ([v, l]) => (
+                        <button
+                          key={v}
+                          className={apPeriodo === v ? "on" : ""}
+                          onClick={() => {
+                            setApPeriodo(v);
+                            setApOff(0);
+                          }}
+                        >
+                          {l}
+                        </button>
+                      )
+                    )}
+                  </div>
+                  {wins.length > 1 && (
+                    <div className="ap-nav">
+                      <button aria-label="Anterior" disabled={off <= 0} onClick={() => setApOff((o) => Math.max(0, o - 1))}>
+                        ‹
+                      </button>
+                      <span>
+                        {off + 1} / {wins.length}
+                      </span>
+                      <button
+                        aria-label="Próximo"
+                        disabled={off >= wins.length - 1}
+                        onClick={() => setApOff((o) => Math.min(wins.length - 1, o + 1))}
+                      >
+                        ›
+                      </button>
+                    </div>
+                  )}
+                  <div className="ap-chips">
+                    {canais.map((c) => {
+                      const on = !apHidden.has(c.nome);
+                      return (
+                        <button
+                          key={c.nome}
+                          className={`ap-chip${on ? " on" : ""}`}
+                          onClick={() =>
+                            setApHidden((prev) => {
+                              const nx = new Set(prev);
+                              if (nx.has(c.nome)) nx.delete(c.nome);
+                              else nx.add(c.nome);
+                              return nx;
+                            })
+                          }
+                        >
+                          <span className="ap-chip-dot" style={{ background: c.cor }} />
+                          {c.nome}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="ap-body">
+                  {dias.length ? (
+                    dias.map(({ d, dow, posts: dp }) => (
+                      <section className="ap-day" key={d}>
+                        <div className="ap-day-h">
+                          <span className="ap-day-num">{String(d).padStart(2, "0")}</span>
+                          <div>
+                            <div className="ap-day-wd">{WD_FULL[dow]}</div>
+                            <div className="ap-day-meta">
+                              {d} de {MONTHS_FULL[month]}
+                            </div>
+                          </div>
+                          <span className="ap-day-count">{dp.length}</span>
+                        </div>
+                        <div className="ap-cards">
+                          {dp.map((p) => {
+                            const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
+                            return (
+                              <article className="ap-card" key={p.id} style={{ borderLeftColor: canalCor(p.canal) }}>
+                                <div className="ap-card-top">
+                                  <span className="ap-card-time">{p.hora || "--:--"}</span>
+                                  <span className="ap-card-canal">
+                                    <span className="ap-chip-dot" style={{ background: canalCor(p.canal) }} />
+                                    {p.canal}
+                                  </span>
+                                  {p.formato && <span className="ap-card-fmt">{p.formato}</span>}
+                                  <span className="ap-card-st" style={{ color: st.cor, background: st.cor + "1f" }}>
+                                    {p.status === "publicado" ? "publicado ✓" : st.label}
+                                  </span>
+                                </div>
+                                <div className="ap-card-title">{p.titulo}</div>
+                                {p.legenda && <div className="ap-card-leg">{p.legenda}</div>}
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))
+                  ) : (
+                    <div className="ap-empty">
+                      Nenhuma publicação planejada neste período{apHidden.size ? " para os canais selecionados" : ""}.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       {/* Modal (remonta a cada abertura via key) */}
       {s.postModal && (
