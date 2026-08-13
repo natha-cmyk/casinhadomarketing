@@ -73,6 +73,8 @@ const keyOf = (platform: string, accountId: string, since: string, until: string
 // extrai os itens de uma dimensão da demografia, tolerante ao shape (breakdowns[dim] ou metrics[dim].breakdowns)
 function demoItems(demo: DemographicsResponse | null, dim: string): { dimension: string; value: number }[] {
   if (!demo) return [];
+  const fromReal = demo.demographics?.[dim];
+  if (fromReal && fromReal.length) return fromReal;
   const fromTop = demo.breakdowns?.[dim];
   if (fromTop && fromTop.length) return fromTop;
   const fromMetric = demo.metrics?.[dim]?.breakdowns;

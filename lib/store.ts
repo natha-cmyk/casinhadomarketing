@@ -72,7 +72,8 @@ export interface UIState {
   personas: PersonaItem[]; concorrentes: ConcItem[];
   hydrated: boolean;
   // contas conectadas na Zernio (do profile do workspace)
-  zernioAccounts: { _id: string; platform: string; followersCount?: number; displayName?: string }[];
+  zernioAccounts: { _id: string; platform: string; followersCount?: number; displayName?: string;
+    enabled?: boolean; adsStatus?: string; profilePicture?: string; username?: string }[];
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
@@ -142,10 +143,17 @@ export const useStore = create<UIState>((set) => ({
   set: (patch) => set(patch),
   setZernioAccounts: (accounts) =>
     set((s) => {
-      // ativa o painel/nav da rede de cada conta conectada (twitter → x)
+      // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).
+      // contas ads-only (enabled:false, adsStatus:connected) NÃO viram rede social.
       const rev: Record<string, string> = { twitter: "x" };
       const redes = { ...s.redes };
-      for (const a of accounts) redes[rev[a.platform] || a.platform] = true;
+      const byRede: Record<string, boolean> = {};
+      for (const a of accounts) {
+        const id = rev[a.platform] || a.platform;
+        byRede[id] = (byRede[id] ?? false) || a.enabled === true;
+      }
+      // só mexe nas redes que têm conta; toggles manuais de redes sem conta ficam intactos
+      for (const [id, on] of Object.entries(byRede)) redes[id] = on;
       return { zernioAccounts: accounts, redes };
     }),
   hydrate: (d) =>

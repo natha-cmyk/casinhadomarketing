@@ -94,6 +94,19 @@ export interface AnalyticsResponse {
   metrics: Record<string, AnalyticsMetric>;
   unavailableMetrics?: string[];
 }
+// conjunto COMPLETO de métricas por plataforma (a API só devolve ~4 por padrão).
+// instagram verificado ao vivo; demais são o superset conhecido — a chamada tem
+// fallback (accountInsightsFull) que degrada pro default se a lista tiver métrica inválida.
+export const ACCOUNT_METRICS: Record<string, string[]> = {
+  instagram: ["reach", "views", "accounts_engaged", "total_interactions", "likes", "comments",
+    "shares", "saves", "replies", "reposts", "follows_and_unfollows", "profile_links_taps"],
+  facebook: ["reach", "views", "total_interactions", "likes", "comments", "shares", "post_engagements"],
+  tiktok: ["views", "likes", "comments", "shares", "reach", "engaged_audience", "profile_views"],
+  youtube: ["views", "likes", "comments", "shares", "subscribers_gained", "subscribers_lost", "watch_time", "average_view_duration"],
+  linkedin: ["impressions", "clicks", "likes", "comments", "shares", "engagement", "unique_impressions"],
+  twitter: ["impressions", "likes", "replies", "reposts", "profile_visits", "engagements"],
+};
+
 export function accountInsights(
   platform: string,
   accountId: string,
@@ -104,6 +117,57 @@ export function accountInsights(
   if (opts?.since) q.set("since", opts.since);
   if (opts?.until) q.set("until", opts.until);
   return zernio<AnalyticsResponse>(`/analytics/${encodeURIComponent(platform)}/account-insights?${q.toString()}`);
+}
+
+// puxa o conjunto completo de métricas conhecidas; se a lista rejeitar (métrica inválida
+// numa plataforma não-verificada), refaz sem `metrics` pra pegar ao menos os defaults.
+export async function accountInsightsFull(
+  platform: string,
+  accountId: string,
+  opts?: { since?: string; until?: string }
+): Promise<AnalyticsResponse> {
+  const full = ACCOUNT_METRICS[platform];
+  if (full) {
+    try {
+      return await accountInsights(platform, accountId, { ...opts, metrics: full.join(",") });
+    } catch {
+      // fallback pros defaults da plataforma
+    }
+  }
+  return accountInsights(platform, accountId, opts);
+}
+
+// ── ADS (Meta/Facebook por ora) ────────────────────────────────
+export interface AdAccount {
+  id: string; name: string; currency: string;
+  accountStatus?: number; businessName?: string; selectable?: boolean;
+}
+// GET /ads/accounts?accountId=<zernioAccountId> — ad accounts (act_...) da conta conectada
+export function listAdAccounts(accountId: string) {
+  return zernio<{ accounts: AdAccount[] }>(`/ads/accounts?accountId=${encodeURIComponent(accountId)}`);
+}
+
+export interface AdInsightRow {
+  campaign_name?: string; account_id?: string;
+  impressions?: string; spend?: string; clicks?: string; reach?: string;
+  ctr?: string; cpc?: string; cpm?: string; frequency?: string;
+  inline_link_clicks?: string;
+  actions?: { action_type: string; value: string }[];
+  date_start?: string; date_stop?: string;
+  [k: string]: unknown;
+}
+const AD_FIELDS = "impressions,spend,clicks,ctr,cpc,cpm,reach,frequency,inline_link_clicks,actions";
+// GET /ads/insights?accountId=<zernio>&objectId=<act_>&level=&fields= — desempenho de mídia paga
+export function adsInsights(
+  accountId: string,
+  objectId: string,
+  opts?: { since?: string; until?: string; level?: "account" | "campaign" | "adset" | "ad"; fields?: string }
+) {
+  const q = new URLSearchParams({ accountId, objectId, fields: opts?.fields ?? AD_FIELDS });
+  if (opts?.since) q.set("since", opts.since);
+  if (opts?.until) q.set("until", opts.until);
+  if (opts?.level) q.set("level", opts.level);
+  return zernio<{ objectId: string; data: AdInsightRow[]; paging?: unknown }>(`/ads/insights?${q.toString()}`);
 }
 
 // GET /analytics/{platform}/follower-history — série diária de seguidores (mesmo envelope)
@@ -120,6 +184,9 @@ export interface DemographicsResponse {
   accountId: string;
   platform: string;
   metric: string;
+  // shape real da API: demographics.{age,gender,country,city} = [{dimension,value}]
+  demographics?: Record<string, { dimension: string; value: number }[]>;
+  // fallbacks tolerantes a outras formas
   breakdowns?: Record<string, { dimension: string; value: number }[]>;
   metrics?: Record<string, { breakdowns?: { dimension: string; value: number }[] }>;
   [k: string]: unknown;

@@ -2,7 +2,7 @@
 // Combinado: account-insights + follower-history + demographics (IG) numa chamada.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
-import { accountInsights, followerHistory, demographics } from "@/lib/zernio";
+import { accountInsightsFull, followerHistory, demographics } from "@/lib/zernio";
 
 export async function GET(req: Request) {
   try {
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     const until = q.get("until") ?? undefined;
 
     const [insights, followers, demo] = await Promise.all([
-      accountInsights(platform, accountId, { since, until }).catch(() => null),
+      accountInsightsFull(platform, accountId, { since, until }).catch(() => null),
       followerHistory(platform, accountId, { since, until }).catch(() => null),
       platform === "instagram" ? demographics(accountId).catch(() => null) : Promise.resolve(null),
     ]);
