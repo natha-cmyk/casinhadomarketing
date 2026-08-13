@@ -37,6 +37,8 @@ model Workspace {
   personas        Persona[]
   concorrentes    Concorrente[]
   fontes          Fonte[]
+  crmConfig       CrmConfig?
+  leads           Lead[]
 }
 
 enum Role {
@@ -239,4 +241,41 @@ model Concorrente {
   ordem        Int           @default(0)
 
   @@index([workspaceId, categoria])
+}
+
+// ─────────────────────────────────────────────────────────────
+// CRM — Geração por Canais (leads/oportunidades). O CRM do cliente
+// vive no ClickUp (fora da integração social). Dois modos de conexão:
+// ClickUp nativo (API REST c/ token do usuário) ou webhook genérico.
+// ─────────────────────────────────────────────────────────────
+model CrmConfig {
+  id            String    @id @default(cuid())
+  workspaceId   String    @unique
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider      String    @default("clickup") // "clickup" | "webhook"
+  clickupToken  String? // TODO(segurança): cifrar clickupToken em repouso
+  clickupListId String?
+  fieldMap      Json      @default("{}") // { channel|product|status|value|lossReason : "<nome do campo no ClickUp>" }
+  webhookSecret String?
+  updatedAt     DateTime  @updatedAt
+}
+
+model Lead {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  extId       String? // id do lead no CRM (task.id no ClickUp)
+  title       String?
+  source      String? // "clickup" | "webhook"
+  channel     String?
+  product     String?
+  status      String?
+  stage       String?
+  value       Float     @default(0)
+  lossReason  String?
+  createdAt   DateTime  @default(now())
+  raw         Json      @default("{}")
+
+  @@unique([workspaceId, extId])
+  @@index([workspaceId])
 }

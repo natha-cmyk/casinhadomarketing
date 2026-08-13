@@ -372,3 +372,92 @@ export const inboxResponseTime = (o?: Parameters<typeof inboxQS>[0]) => zernio<I
 export const inboxSourceBreakdown = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxSourceBreakdown>(`/analytics/inbox/source-breakdown?${inboxQS(o)}`);
 
 // TODO(publish): POST /posts (publish do calendário) — {content, scheduledFor, timezone, platforms:[{platform,accountId}]}
+
+// ── Google Business (Perfil da Empresa / GBP) ───────────────────────────────
+// Verificado ao vivo (conta Seahub). A conta googlebusiness da Zernio representa UMA
+// localização SELECIONADA (metadata.selectedLocationId). Todos os endpoints de leitura
+// (performance/keywords/media/reviews/details) refletem ESSA localização — o param
+// `locationId` em performance é IGNORADO pela API (as 3 fichas devolvem números idênticos).
+// Trocar a ficha ativa exige POST /accounts/{id}/gmb-locations/assign (escrita) — não fazemos.
+export interface GbpMetric { total: number; values: { date: string; value: number }[] }
+export interface GbpPerformance {
+  success: boolean; accountId: string; platform: string;
+  dateRange?: { since?: string; until?: string; fromDate?: string; toDate?: string };
+  dataDelay?: string;
+  // métricas reais (Seahub): BUSINESS_IMPRESSIONS_{DESKTOP,MOBILE}_{SEARCH,MAPS},
+  // BUSINESS_DIRECTION_REQUESTS, CALL_CLICKS, WEBSITE_CLICKS, BUSINESS_CONVERSATIONS,
+  // BUSINESS_BOOKINGS, BUSINESS_FOOD_ORDERS, BUSINESS_FOOD_MENU_CLICKS
+  metrics: Record<string, GbpMetric>;
+}
+export interface GbpKeyword { keyword: string; impressions: number }
+export interface GbpKeywordsResp {
+  success: boolean; accountId: string; platform: string;
+  monthRange?: { startMonth: string; endMonth: string };
+  keywords: GbpKeyword[];
+}
+export interface GbpLocation {
+  id: string; name: string; accountId?: string; accountName?: string;
+  address?: string; category?: string; websiteUrl?: string; storeCode?: string;
+}
+export interface GbpLocationsResp { locations: GbpLocation[] }
+export interface GbpMediaItem {
+  name: string; sourceUrl?: string; mediaFormat?: string;
+  googleUrl?: string; thumbnailUrl?: string; createTime?: string;
+  locationAssociation?: { category?: string };
+  dimensions?: { widthPixels?: number; heightPixels?: number };
+}
+export interface GbpMediaResp { success: boolean; accountId: string; locationId?: string; mediaItems: GbpMediaItem[] }
+export interface GbpReview {
+  id: string; name?: string;
+  reviewer?: { displayName?: string; profilePhotoUrl?: string; isAnonymous?: boolean };
+  rating?: number; starRating?: string; comment?: string;
+  createTime?: string; updateTime?: string;
+  reviewReply?: { comment?: string; updateTime?: string } | null;
+  photoCount?: number;
+}
+export interface GbpReviewsResp {
+  success: boolean; accountId: string; locationId?: string;
+  reviews: GbpReview[]; averageRating?: number; totalReviewCount?: number; nextPageToken?: string;
+}
+export interface GbpDetails {
+  success: boolean; accountId: string; locationId?: string;
+  location?: { name?: string; placeId?: string; reviewUrl?: string; mapsUri?: string; isVerified?: boolean };
+  title?: string;
+  phoneNumbers?: { primaryPhone?: string };
+  categories?: { primaryCategory?: { displayName?: string } };
+  [k: string]: unknown;
+}
+
+function gbpDateQS(accountId: string, opts?: { fromDate?: string; toDate?: string; locationId?: string }) {
+  const q = new URLSearchParams({ accountId });
+  if (opts?.fromDate) q.set("fromDate", opts.fromDate);
+  if (opts?.toDate) q.set("toDate", opts.toDate);
+  if (opts?.locationId) q.set("locationId", opts.locationId); // enviado por completude; a API ignora
+  return q.toString();
+}
+
+// GET /analytics/googlebusiness/performance — impressões (busca/maps × mobile/desktop),
+// pedidos de rota, cliques (site/ligar), conversas, agendamentos. Série diária por métrica.
+export function gbpPerformance(accountId: string, opts?: { fromDate?: string; toDate?: string; locationId?: string }) {
+  return zernio<GbpPerformance>(`/analytics/googlebusiness/performance?${gbpDateQS(accountId, opts)}`);
+}
+// GET /analytics/googlebusiness/search-keywords — termos que trouxeram a ficha (por mês, últimos ~3).
+export function gbpSearchKeywords(accountId: string, opts?: { fromDate?: string; toDate?: string }) {
+  return zernio<GbpKeywordsResp>(`/analytics/googlebusiness/search-keywords?${gbpDateQS(accountId, opts)}`);
+}
+// GET /accounts/{id}/gmb-locations — TODAS as fichas (localizações) do perfil conectado.
+export function gbpLocations(accountId: string) {
+  return zernio<GbpLocationsResp>(`/accounts/${encodeURIComponent(accountId)}/gmb-locations`);
+}
+// GET /accounts/{id}/gmb-media — fotos da ficha ativa.
+export function gbpMedia(accountId: string) {
+  return zernio<GbpMediaResp>(`/accounts/${encodeURIComponent(accountId)}/gmb-media`);
+}
+// GET /accounts/{id}/gmb-reviews — avaliações + média + total (da ficha ativa).
+export function gbpReviews(accountId: string) {
+  return zernio<GbpReviewsResp>(`/accounts/${encodeURIComponent(accountId)}/gmb-reviews`);
+}
+// GET /accounts/{id}/gmb-location-details — telefone, categoria, verificação, link do Maps (ficha ativa).
+export function gbpLocationDetails(accountId: string) {
+  return zernio<GbpDetails>(`/accounts/${encodeURIComponent(accountId)}/gmb-location-details`);
+}
