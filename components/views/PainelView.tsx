@@ -5,17 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { REDES } from "@/lib/seed-data";
 import { PageHead, KpiCard } from "@/components/ui";
-import { Ic } from "@/components/Ic";
 import { fmt } from "@/lib/format";
-import { pathForView } from "@/lib/nav";
-
-const ATALHOS = [
-  { id: "instagram", icon: "ig", label: "Instagram", desc: "métricas da rede" },
-  { id: "canais", icon: "leads", label: "Geração", desc: "origem dos leads" },
-  { id: "ads", icon: "ads", label: "Canais Pagos", desc: "mídia paga" },
-  { id: "persona", icon: "persona", label: "Persona", desc: "público & CRM" },
-  { id: "concorrencia", icon: "vs", label: "Concorrência", desc: "benchmark" },
-];
 
 const redeLabel = (p: string) => REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.label || p;
 const redeCor = (p: string) => REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.cor || "#121111";
@@ -29,7 +19,7 @@ export function PainelView() {
       <PageHead
         eyebrow="VISÃO GERAL"
         title="Painel"
-        desc="Resumo do ambiente — contas conectadas e atalhos. Conecte suas redes em Personalização para popular os indicadores."
+        desc="Resumo do ambiente — visão geral de cada canal conectado. Conecte suas redes em Personalização para popular os indicadores."
       />
 
       {accounts.length === 0 ? (
@@ -69,20 +59,6 @@ export function PainelView() {
         </div>
       )}
 
-      <div style={{ marginTop: 22 }}>
-        <div className="ind-h" style={{ marginBottom: 8 }}>Atalhos</div>
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
-          {ATALHOS.map((a) => (
-            <Link key={a.id} href={pathForView(a.id)} className="card" style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", gap: 4 }}>
-              <span className="ico" style={{ color: "var(--red)" }}>
-                <Ic name={a.icon} />
-              </span>
-              <b style={{ fontSize: 13.5 }}>{a.label}</b>
-              <span style={{ fontSize: 11.5, color: "var(--label-3)" }}>{a.desc}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
     </>
   );
 }

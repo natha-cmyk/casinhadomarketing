@@ -9,8 +9,11 @@ export const MONTHS_FULL = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
-export const CUR_YEAR = 2026;
-export const CUR_MONTH = 6; // Julho (0-index)
+// mês/ano ATUAIS (dinâmicos) — o painel abre sempre no mês corrente.
+// o analytics real (via integração) é ancorado na data de hoje, então acompanha.
+const _now = new Date();
+export const CUR_YEAR = _now.getFullYear();
+export const CUR_MONTH = _now.getMonth(); // 0-index
 
 export const DIM: Record<number, number[]> = {
   2024: [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],

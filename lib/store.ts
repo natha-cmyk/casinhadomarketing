@@ -142,7 +142,14 @@ export interface UIState {
 
 export const useStore = create<UIState>((set) => ({
   period: "mes", year: CUR_YEAR, month: CUR_MONTH, week: 0, quarter: quarterOf(CUR_MONTH),
-  scenario: false, cmp: { period: "mes", year: 2025, month: CUR_MONTH, week: 0, quarter: quarterOf(CUR_MONTH) },
+  // comparação padrão = mês anterior (tem dado real); ajusta o ano na virada de janeiro
+  scenario: false, cmp: {
+    period: "mes",
+    year: CUR_MONTH === 0 ? CUR_YEAR - 1 : CUR_YEAR,
+    month: (CUR_MONTH + 11) % 12,
+    week: 0,
+    quarter: quarterOf((CUR_MONTH + 11) % 12),
+  },
   adsMetric: "receita", adsPlat: "todos", canaisView: "lista", concProd: "geral",
   igProfile: "seahub", ufFeriado: "RN",
   ind: { seguidores: true, atividades: true, splitFollowers: true, organico: true },
