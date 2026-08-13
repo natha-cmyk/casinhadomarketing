@@ -1,8 +1,17 @@
 "use client";
 // Persona & Público — CRUD por workspace (persistido). Começa vazio.
 // Portado de viewPersona (blueprint 1517-1598), simplificado para cards editáveis.
+import { useState } from "react";
 import { useStore, newId, type PersonaItem } from "@/lib/store";
 import { Card, PageHead } from "@/components/ui";
+
+// redes que expõem demografia de audiência (mesmo conjunto da rota /api/persona/gerar)
+const REDE_LABEL: Record<string, string> = { instagram: "Instagram", youtube: "YouTube" };
+const REDE_EMOJI: Record<string, string> = { instagram: "📸", youtube: "▶️" };
+const REDE_COVER: Record<string, string> = {
+  instagram: "linear-gradient(120deg,#FF001E,#121111)",
+  youtube: "linear-gradient(120deg,#FF0000,#121111)",
+};
 
 function PersonaCard({ p }: { p: PersonaItem }) {
   const update = useStore((s) => s.updatePersona);
@@ -112,9 +121,27 @@ function PersonaCard({ p }: { p: PersonaItem }) {
   );
 }
 
+// rascunho de persona devolvido pela rota /api/persona/gerar
+interface GenDraft {
+  nome: string; representa: string; comunica: string;
+  dores: string[]; canais: string; stats: [string, string][];
+}
+
 export default function PersonaView() {
   const personas = useStore((s) => s.personas);
   const addPersona = useStore((s) => s.addPersona);
+  const zernioAccounts = useStore((s) => s.zernioAccounts);
+
+  // seletor "gerar da audiência"
+  const [selOpen, setSelOpen] = useState(false);
+  const [genBusy, setGenBusy] = useState<string | null>(null); // accountId em processamento
+  const [genErr, setGenErr] = useState<string | null>(null);
+
+  // contas SOCIAIS conectadas que expõem demografia (Instagram / YouTube).
+  // ads-only (enabled:false) não têm audiência de perfil — ficam de fora.
+  const demoAccounts = zernioAccounts.filter(
+    (a) => (a.platform === "instagram" || a.platform === "youtube") && a.enabled !== false
+  );
 
   const add = () =>
     addPersona({
@@ -123,14 +150,107 @@ export default function PersonaView() {
       ordem: personas.length,
     });
 
+  // chama a rota, recebe o rascunho e cria uma persona marcada como "gerada da audiência"
+  const gerar = async (acc: (typeof demoAccounts)[number]) => {
+    setGenBusy(acc._id); setGenErr(null);
+    try {
+      const r = await fetch("/api/persona/gerar", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ platform: acc.platform, accountId: acc._id }),
+      });
+      const data = (await r.json().catch(() => null)) as { persona?: GenDraft; meta?: { rede?: string }; error?: string } | null;
+      if (!r.ok || !data?.persona) {
+        setGenErr(data?.error || "Não foi possível gerar a persona agora.");
+        return;
+      }
+      const d = data.persona;
+      const rede = data.meta?.rede || REDE_LABEL[acc.platform] || acc.platform;
+      const handleBase = acc.username || acc.displayName || acc.platform;
+      addPersona({
+        id: newId("persona"),
+        tag: `Audiência · ${rede}`,
+        handle: `@${String(handleBase).replace(/^@/, "")}`,
+        emoji: REDE_EMOJI[acc.platform] || "✨",
+        cover: REDE_COVER[acc.platform] || "linear-gradient(120deg,#00BBC5,#121111)",
+        nome: d.nome, representa: d.representa, comunica: d.comunica,
+        dores: Array.isArray(d.dores) ? d.dores : [],
+        canais: d.canais || rede, gatilho: "",
+        stats: Array.isArray(d.stats) ? d.stats : [],
+        ordem: personas.length,
+      });
+      setSelOpen(false);
+    } catch {
+      setGenErr("Falha de rede ao gerar a persona.");
+    } finally {
+      setGenBusy(null);
+    }
+  };
+
   return (
     <>
       <PageHead
         eyebrow="Estratégia · Inteligência de Personas"
         title="Persona & Público"
         desc="Personas de marca e de conversão do seu público. Crie, edite e remova — tudo salvo neste workspace."
-        right={<button className="btn-link" onClick={add}>＋ Adicionar</button>}
+        right={
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="btn-link" onClick={() => { setSelOpen((o) => !o); setGenErr(null); }}>
+              ✨ Gerar persona da audiência
+            </button>
+            <button className="btn-link" onClick={add}>＋ Adicionar</button>
+          </div>
+        }
       />
+
+      {selOpen && (
+        <Card padLg style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-.2px", marginBottom: 2 }}>
+            Retrato da audiência real
+          </div>
+          <p style={{ color: "var(--label-2)", margin: "0 0 12px", fontSize: 13 }}>
+            Escolha uma rede conectada com demografia. Montamos uma persona a partir de quem{" "}
+            <b>realmente consome o canal</b> (idade, gênero, cidade) — para você comparar com as personas
+            planejadas e enxergar desalinhamento. É editável depois, como qualquer persona.
+          </p>
+
+          {demoAccounts.length === 0 ? (
+            <p style={{ color: "var(--label-3)", fontSize: 13, margin: 0 }}>
+              Nenhuma rede com demografia conectada. Conecte um Instagram ou YouTube em Conexões para gerar.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {demoAccounts.map((a) => {
+                const rede = REDE_LABEL[a.platform] || a.platform;
+                const nome = a.displayName || a.username || rede;
+                const busy = genBusy === a._id;
+                return (
+                  <button
+                    key={a._id}
+                    className="btn"
+                    onClick={() => gerar(a)}
+                    disabled={!!genBusy}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 8,
+                      padding: "9px 13px", borderRadius: 12, cursor: genBusy ? "default" : "pointer",
+                      opacity: genBusy && !busy ? 0.5 : 1,
+                    }}
+                  >
+                    <span style={{ fontSize: 16 }}>{REDE_EMOJI[a.platform] || "✨"}</span>
+                    <span style={{ fontWeight: 600 }}>{rede}</span>
+                    <span style={{ color: "var(--label-3)", fontSize: 12.5 }}>· {nome}</span>
+                    {busy && <span style={{ color: "var(--cyan)", fontSize: 12.5 }}>gerando…</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {genErr && (
+            <div style={{ marginTop: 10, color: "var(--red)", fontSize: 13 }}>{genErr}</div>
+          )}
+        </Card>
+      )}
 
       {personas.length === 0 ? (
         <div className="empty">

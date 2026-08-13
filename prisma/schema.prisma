@@ -39,6 +39,7 @@ model Workspace {
   fontes          Fonte[]
   crmConfig       CrmConfig?
   leads           Lead[]
+  historico       HistoricalMetric[]
 }
 
 enum Role {
@@ -278,4 +279,25 @@ model Lead {
 
   @@unique([workspaceId, extId])
   @@index([workspaceId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Importador de histórico — totais mensais das planilhas antigas
+// (pré-90 dias) que a integração ao vivo não puxa. Uma célula por
+// (plataforma × métrica × ano × mês). Upsert por competência.
+// TODO(historico): ligar HistoricalMetric nos painéis pra períodos fora dos 90 dias.
+// ─────────────────────────────────────────────────────────────
+model HistoricalMetric {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platform    String // "instagram" | "meta_ads" | "leads" | "google_ads"
+  metric      String
+  ano         Int
+  mes         Int // 1-12
+  valor       Float     @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, platform, metric, ano, mes])
+  @@index([workspaceId, platform])
 }

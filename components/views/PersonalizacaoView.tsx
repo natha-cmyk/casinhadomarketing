@@ -3,8 +3,9 @@
 // chip lists, matriz de relação, toggles de redes e acordeões de indicadores.
 // Fidelidade 1:1 com casinha-do-marketing.html.
 // UX: cada seção é um card colapsável (.psec) com acento de cor próprio; só "Conexões" abre por padrão.
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from "react";
 import { PageHead } from "@/components/ui";
+import { parseBR, fmt } from "@/lib/format";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { Ic } from "@/components/Ic";
 import { REDES, PANEL_INDICATORS, type IndGroup } from "@/lib/seed-data";
@@ -384,6 +385,15 @@ export default function PersonalizacaoView() {
             Leitura do PDF e interpretação inteligente rodam no backend (Lovable/OpenClaw). O CSV é parseado aqui; a seleção de campos é manual.
           </div>
         </div>
+      </PSection>
+
+      {/* ===== Importar histórico ===== */}
+      <PSection
+        title="Importar histórico"
+        sub="traga os totais mensais das planilhas antigas (pré-90 dias) que a integração não puxa"
+        accent="var(--critico)"
+      >
+        <HistoricoImport />
       </PSection>
 
       {/* ===== Ambiente ===== */}
@@ -838,6 +848,289 @@ function InterpretPanel({
         <button className="btn-link ig" onClick={onConfirm} type="button">
           Adicionar como fonte
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ===== Importar histórico — totais mensais das planilhas antigas (pré-90 dias) =====
+   Grava em HistoricalMetric via /api/historico. A exibição nos painéis fica pra depois.
+   TODO(historico): ligar HistoricalMetric nos painéis pra períodos fora dos 90 dias. */
+const HIST_MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const HIST_PLATAFORMAS: { id: string; label: string }[] = [
+  { id: "instagram", label: "Instagram" },
+  { id: "meta_ads", label: "Meta Ads" },
+  { id: "leads", label: "Leads por canal" },
+  { id: "google_ads", label: "Google Ads" },
+];
+const HIST_ANOS = [2024, 2025, 2026];
+const histPlatLabel = (id: string) => HIST_PLATAFORMAS.find((p) => p.id === id)?.label || id;
+
+type HistRow = { metric: string; meses: number[] };
+type HistDbRow = { platform: string; metric: string; ano: number; mes: number; valor: number };
+
+// Uma linha por métrica: `metrica , jan , … , dez`. Delimitador vírgula ou ponto-e-vírgula
+// (BR com vírgula decimal → use ';'). Header opcional (`metrica,…`) é ignorado. Vazio = 0.
+function parseHistorico(text: string): HistRow[] {
+  const lines = String(text).replace(/\r/g, "").split("\n").filter((l) => l.trim().length);
+  const out: HistRow[] = [];
+  for (const line of lines) {
+    const delim = line.includes(";") ? ";" : ",";
+    const cells = line.split(delim);
+    const metric = (cells[0] || "").trim().replace(/^"|"$/g, "");
+    if (!metric) continue;
+    const norm = metric.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (norm === "metrica") continue; // linha de cabeçalho
+    const rest = cells.slice(1, 13);
+    const meses = Array.from({ length: 12 }, (_, i) => parseBR(rest[i] ?? ""));
+    out.push({ metric, meses });
+  }
+  return out;
+}
+
+function HistoricoImport() {
+  const [platform, setPlatform] = useState("instagram");
+  const [ano, setAno] = useState(2026);
+  const [csv, setCsv] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [imported, setImported] = useState<HistDbRow[]>([]);
+
+  const parsed = parseHistorico(csv);
+
+  const refresh = useCallback(async () => {
+    try {
+      const r = await fetch("/api/historico");
+      if (!r.ok) return;
+      const d = await r.json();
+      if (Array.isArray(d?.rows)) setImported(d.rows as HistDbRow[]);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  function handleFile(file?: File | null) {
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => setCsv(String(rd.result || ""));
+    rd.readAsText(file);
+  }
+
+  async function importar() {
+    if (!parsed.length || busy) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/historico", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform, ano, rows: parsed }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setMsg(`${d.cells} células gravadas em ${histPlatLabel(platform)} · ${ano}.`);
+        setCsv("");
+        refresh();
+      } else {
+        setMsg("Não foi possível importar agora.");
+      }
+    } catch {
+      setMsg("Não foi possível importar agora.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function limpar(plat: string, year: number) {
+    if (busy) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch(`/api/historico?platform=${encodeURIComponent(plat)}&ano=${year}`, {
+        method: "DELETE",
+      });
+      if (r.ok) {
+        setMsg(`Histórico de ${histPlatLabel(plat)} · ${year} removido.`);
+        refresh();
+      }
+    } catch {
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // agrupa o que já foi importado por (plataforma × ano) pra listar + limpar
+  const grupos = Object.values(
+    imported.reduce<Record<string, { platform: string; ano: number; cells: number; metrics: Set<string> }>>(
+      (acc, row) => {
+        const k = `${row.platform}__${row.ano}`;
+        if (!acc[k]) acc[k] = { platform: row.platform, ano: row.ano, cells: 0, metrics: new Set() };
+        acc[k].cells++;
+        acc[k].metrics.add(row.metric);
+        return acc;
+      },
+      {}
+    )
+  ).sort((a, b) => b.ano - a.ano || a.platform.localeCompare(b.platform));
+
+  return (
+    <div className="imp-body">
+      <div className="pm-hint" style={{ marginBottom: 4 }}>
+        A integração ao vivo só puxa ~90 dias. Aqui você traz os <b>totais mensais</b> das planilhas
+        antigas. Escolha a plataforma e o ano, cole (ou envie) um CSV com uma métrica por linha no
+        formato <code>metrica,jan,fev,mar,abr,mai,jun,jul,ago,set,out,nov,dez</code> — valores
+        numéricos, vazio conta como 0.
+      </div>
+
+      <div className="pm-row">
+        <div>
+          <label className="field-lbl">Plataforma</label>
+          <select
+            className="field-edit"
+            value={platform}
+            onChange={(e) => setPlatform(e.target.value)}
+            aria-label="Plataforma"
+          >
+            {HIST_PLATAFORMAS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="field-lbl">Ano</label>
+          <select
+            className="field-edit"
+            value={ano}
+            onChange={(e) => setAno(Number(e.target.value))}
+            aria-label="Ano"
+          >
+            {HIST_ANOS.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="imp-sub" style={{ marginTop: 12 }}>
+        <div className="imp-sub-h">
+          Cole o CSV<span className="imp-sub-t">uma métrica por linha · vírgula ou ; como separador</span>
+        </div>
+        <textarea
+          className="field-edit"
+          style={{ minHeight: 120, fontFamily: "ui-monospace, monospace", fontSize: 12, resize: "vertical" }}
+          value={csv}
+          onChange={(e) => setCsv(e.target.value)}
+          placeholder={"Alcance,1200,1350,1580,1490,1720,1810,1900,2010,2200,2100,2350,2500\nSeguidores,80,95,110,102,130,145,150,160,175,168,190,210"}
+          aria-label="CSV do histórico"
+          spellCheck={false}
+        />
+        <div style={{ marginTop: 8 }}>
+          <DropZone
+            accept=".csv,.txt"
+            onFile={handleFile}
+            title="ou arraste um CSV / clique para enviar"
+            hint="o conteúdo é lido aqui na hora e cai no campo acima"
+          />
+        </div>
+      </div>
+
+      {parsed.length ? (
+        <div className="fonte-map" style={{ marginTop: 12 }}>
+          <div className="fm-h">
+            Preview <span className="fm-meta">{parsed.length} métrica(s) × 12 meses · {histPlatLabel(platform)} · {ano}</span>
+          </div>
+          <div className="fm-prev">
+            <table>
+              <thead>
+                <tr>
+                  <th>métrica</th>
+                  {HIST_MESES.map((m) => (
+                    <th key={m} style={{ textTransform: "capitalize" }}>
+                      {m}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {parsed.map((r, ri) => (
+                  <tr key={ri}>
+                    <td style={{ fontWeight: 600 }}>{r.metric}</td>
+                    {r.meses.map((v, i) => (
+                      <td key={i} style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {fmt(v)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="fm-acts">
+            <button className="btn-link" onClick={() => setCsv("")} type="button" disabled={busy}>
+              Limpar campo
+            </button>
+            <button className="btn-link ig" onClick={importar} type="button" disabled={busy}>
+              {busy ? "Importando…" : "Importar"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {msg ? (
+        <div className="pm-hint" style={{ marginTop: 8 }}>
+          {msg}
+        </div>
+      ) : null}
+
+      {grupos.length ? (
+        <div className="imp-sub" style={{ marginTop: 12 }}>
+          <div className="imp-sub-h">Já importado</div>
+          {grupos.map((g) => (
+            <div className="file-chip" key={`${g.platform}__${g.ano}`}>
+              <div className="fi">{g.ano}</div>
+              <div>
+                <b>
+                  {histPlatLabel(g.platform)} · {g.ano}
+                </b>
+                <span>
+                  {g.metrics.size} métrica(s) · {g.cells} células
+                </span>
+              </div>
+              <button
+                className="x"
+                onClick={() => limpar(g.platform, g.ano)}
+                aria-label={`Limpar ${histPlatLabel(g.platform)} ${g.ano}`}
+                type="button"
+                disabled={busy}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="tfoot-note" style={{ marginTop: 12 }}>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#9A9AA0"
+          strokeWidth={2}
+          style={{ flex: "0 0 14px", marginTop: 1 }}
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8h.01M11 12h1v4h1" />
+        </svg>{" "}
+        Cuidado: não empilhe &quot;Impressões&quot; (2024-25) com &quot;Visualizações&quot; (2026) — são
+        métricas diferentes. E importe a versão bruta, não a ponderada por % orgânico.
       </div>
     </div>
   );

@@ -97,11 +97,13 @@ export interface UIState {
   manualAds: ManualAd[];
   manualCampaigns: ManualCampaign[];
   customInd: Record<string, CustomInd[]>;
+  // ordem dos cards reordenáveis dos painéis sociais, por painel (= rede). Persistido no config.
+  cardOrder: Record<string, string[]>;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[] }; customInd?: Record<string, CustomInd[]> } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]> } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -122,6 +124,8 @@ export interface UIState {
   removeManualCampaign: (id: string) => void;
   // indicadores customizados
   addCustomInd: (panel: string, c: CustomInd) => void; removeCustomInd: (panel: string, id: string) => void;
+  // ordem dos cards reordenáveis (drag) por painel social
+  setCardOrder: (panel: string, ids: string[]) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
@@ -180,6 +184,7 @@ export const useStore = create<UIState>((set) => ({
   manualAds: [],
   manualCampaigns: [],
   customInd: {},
+  cardOrder: {},
 
   set: (patch) => set(patch),
   addManualAd: (a) => set((s) => ({ manualAds: [...s.manualAds, a] })),
@@ -194,6 +199,8 @@ export const useStore = create<UIState>((set) => ({
     set((s) => ({ customInd: { ...s.customInd, [panel]: [...(s.customInd[panel] || []), c] } })),
   removeCustomInd: (panel, id) =>
     set((s) => ({ customInd: { ...s.customInd, [panel]: (s.customInd[panel] || []).filter((c) => c.id !== id) } })),
+  setCardOrder: (panel, ids) =>
+    set((s) => ({ cardOrder: { ...s.cardOrder, [panel]: ids } })),
   setZernioAccounts: (accounts) =>
     set((s) => {
       // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).
@@ -220,6 +227,7 @@ export const useStore = create<UIState>((set) => ({
         patch.impOpen = !!d.config.impOpen;
         if (Array.isArray(d.config.adConfig?.manualChannels)) patch.manualAds = d.config.adConfig!.manualChannels!;
         if (Array.isArray(d.config.adConfig?.manualCampaigns)) patch.manualCampaigns = d.config.adConfig!.manualCampaigns!;
+        if (d.config.adConfig?.cardOrder) patch.cardOrder = d.config.adConfig.cardOrder;
         if (d.config.customInd) patch.customInd = d.config.customInd;
       }
       if (d.perfil) patch.perfil = d.perfil;

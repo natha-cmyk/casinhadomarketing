@@ -5,7 +5,10 @@
 // "Desempenho no tempo" com SELETOR de métrica (série diária cronológica), mix de
 // conteúdo, seguidores, engajamento por tipo, rendimento orgânico, atividade & audiência,
 // conversas, top conteúdos e heatmap de melhores horários. COMPARAÇÃO de períodos preservada.
-import { Fragment, useEffect, useState, type CSSProperties } from "react";
+import {
+  Fragment, cloneElement, useEffect, useState,
+  type CSSProperties, type ReactElement, type HTMLAttributes, type DragEvent,
+} from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { PageHead, KpiCard, DeltaChip, BarRow, MiniStat } from "@/components/ui";
@@ -176,6 +179,20 @@ function sparkline(values: number[], color: string): string {
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path d="${area}" fill="${color}" opacity="0.10"/><path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lx}" cy="${ly}" r="2.4" fill="${color}"/></svg>`;
 }
 
+// aplica uma ordem salva a uma lista de cards: os ids salvos (presentes) primeiro, na ordem
+// gravada; ids novos/desconhecidos vão pro fim, mantendo a ordem padrão (ordem de construção).
+function applyCardOrder<T extends { id: string }>(defs: T[], saved: string[]): T[] {
+  const byId = new Map(defs.map((d) => [d.id, d]));
+  const out: T[] = [];
+  const used = new Set<string>();
+  for (const id of saved) {
+    const d = byId.get(id);
+    if (d && !used.has(id)) { out.push(d); used.add(id); }
+  }
+  for (const d of defs) if (!used.has(d.id)) out.push(d);
+  return out;
+}
+
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -194,6 +211,9 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
   // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras / pizza)
   const [perfChart, setPerfChart] = useState<"line" | "bar" | "pie">("line");
+  // modo "organizar" (drag-and-drop dos cards reordenáveis) + card em arraste
+  const [editing, setEditing] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   // fetch combinado (métricas + seguidores + série + daily + top + demografia) + comparação
   useEffect(() => {
@@ -512,15 +532,291 @@ export function SocialInsights({ rede }: { rede: string }) {
   const demoDims = demo ? DIM_ORDER.map((dim) => ({ dim, items: demoItems(demo, dim) })).filter((d) => d.items.length) : [];
   const showDemo = shown("audiencia") && demoDims.length > 0;
 
+  // ── Cards REORDENÁVEIS (drag) ──
+  // Cada card renderizável ganha um id estável e entra numa lista única, construída na ordem
+  // padrão (só os visíveis). A ordem salva por workspace é aplicada; ids novos vão pro fim.
+  type CardDef = { id: string; node: ReactElement<HTMLAttributes<HTMLDivElement>>; full?: boolean };
+  const cards: CardDef[] = [];
+
+  if (showMix && content) cards.push({ id: "mix", node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
+      <div className="card-head">
+        <div className="t">Mix de conteúdo</div>
+        {mixTop && <span className="badge">Vencedor: {mixTop}</span>}
+      </div>
+      {mixRows.map(([t, v]) => (
+        <BarRow key={t} k={TYPE_PT[t] || t} v={v} max={content.total} color={cor} formatted={fmt(v)} />
+      ))}
+      {mixTop && (
+        <div className="insight" style={{ marginTop: 14 }}>
+          <div className="ib" style={{ background: cor }}><Ic name="overview" /></div>
+          <p><b>{mixTop}</b> lidera o alcance no período.</p>
+        </div>
+      )}
+      {stories != null && stories > 0 && (
+        <div style={{ fontSize: 12, color: "var(--label-3)", marginTop: 10 }}>Stories ativos: {fmt(stories)}</div>
+      )}
+    </div>
+  ) });
+
+  if (showSeg) cards.push({ id: "seguidores", node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--cyan)" } as CSSProperties}>
+      <div className="card-head"><div className="t">Seguidores</div></div>
+      <div className="mini">
+        <MiniStat l="Novos seguidores" n={novos != null ? fmt(novos) : "—"} />
+        <MiniStat l="Deixaram de seguir" n={saida != null ? fmt(saida) : "—"} />
+        <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} />
+        <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} />
+      </div>
+      {showFollChart && (
+        <div style={{ marginTop: 14 }}>
+          <Chart svg={lineChart(
+            follVals.map((v) => v.date.slice(5)),
+            [
+              { name: "Seguidores", color: cor, data: follVals.map((v) => v.value), fill: true },
+              ...(comparando && cmpFollVals.length
+                ? [{ name: "Comparação", color: cor, data: cmpFollVals.slice(0, follVals.length).map((v) => v.value), dash: true } as LineSeries]
+                : []),
+            ],
+            { h: 200, sel: follVals.length - 1 }
+          )} />
+        </div>
+      )}
+    </div>
+  ) });
+
+  if (engTypeRows.length > 0) cards.push({ id: "engajamento", node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--red)" } as CSSProperties}>
+      <div className="card-head">
+        <div>
+          <div className="t">Engajamento por tipo</div>
+          <div className="sub tnum">{fmt(engTypeSum)} interações</div>
+        </div>
+      </div>
+      {engTypeRows.map((r) => (
+        <BarRow key={r.key} k={r.k} v={metrics[r.key].total} max={engTypeMax} color="var(--cyan)" formatted={fmt(metrics[r.key].total)} />
+      ))}
+    </div>
+  ) });
+
+  if (showOrganic && content) cards.push({ id: "organico", node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--red)" } as CSSProperties}>
+      <div className="card-head">
+        <div>
+          <div className="t">Rendimento orgânico</div>
+          <div className="sub">{content.organicShare != null ? `${pctFmt(content.organicShare)} orgânico` : "sem dado no período"}</div>
+        </div>
+      </div>
+      {(() => {
+        const orMax = Math.max(1, content.organic.reach, content.paid.reach);
+        return (
+          <>
+            <BarRow k="Orgânico" v={content.organic.reach} max={orMax} color={cor} formatted={kfmt(content.organic.reach)} />
+            <BarRow k="Impulsionado" v={content.paid.reach} max={orMax} color="#8E8E93" formatted={kfmt(content.paid.reach)} />
+          </>
+        );
+      })()}
+      <div className="insight" style={{ marginTop: 12 }}>
+        <div className="ib" style={{ background: "var(--cyan)" }}><Ic name="ads" /></div>
+        <p>{content.organicShare != null
+          ? <><b>{pctFmt(content.organicShare)}</b> do alcance veio de conteúdo orgânico (não-impulsionado).</>
+          : "Sem alcance orgânico registrado neste período."}</p>
+      </div>
+    </div>
+  ) });
+
+  if (showActivity) cards.push({ id: "atividade", node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
+      <div className="card-head"><div className="t">Atividade &amp; audiência</div></div>
+      <div className="mini">
+        {accountsEngaged != null && <MiniStat l="Atividades no perfil" n={fmt(accountsEngaged)} />}
+        <MiniStat l="Visitas ao site" n={linkTaps?.WEBSITE != null ? fmt(linkTaps.WEBSITE) : "—"} />
+        {shown("link_call") && <MiniStat l="Toques em ligar" n={linkTaps?.CALL != null ? fmt(linkTaps.CALL) : "—"} />}
+        {shown("link_email") && <MiniStat l="Toques em e-mail" n={linkTaps?.EMAIL != null ? fmt(linkTaps.EMAIL) : "—"} />}
+      </div>
+    </div>
+  ) });
+
+  if (showConv) cards.push({ id: "conversas", node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--excelente)" } as CSSProperties}>
+      <div className="card-head"><div className="t">Conversas</div></div>
+      <div className="mini">
+        <MiniStat l="Leads (DM)" n={inboxLeads != null ? fmt(inboxLeads) : "—"} />
+        <MiniStat l="Conversas" n={inbox?.volume ? fmt(inbox.volume.summary.uniqueConversations) : "—"} />
+        <MiniStat l="Tempo de resposta" n={inbox?.responseTime && inbox.responseTime.summary.sampleSize > 0 ? humanDur(inbox.responseTime.summary.medianSeconds) : "—"} />
+      </div>
+      {showConvChart && inbox?.volume && (
+        <div style={{ marginTop: 14 }}>
+          <Chart svg={lineChart(
+            inbox.volume.timeseries.map((t) => t.date.slice(5)),
+            [
+              { name: "recebidas", color: cor, data: inbox.volume.timeseries.map((t) => t.received), fill: true },
+              { name: "enviadas", color: "#8E8E93", data: inbox.volume.timeseries.map((t) => t.sent) },
+            ],
+            { h: 200, sel: inbox.volume.timeseries.length - 1 }
+          )} />
+        </div>
+      )}
+    </div>
+  ) });
+
+  if (showTop && top?.posts) cards.push({ id: "top", node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
+      <div className="card-head">
+        <div>
+          <div className="t">{platform === "tiktok" || platform === "youtube" ? "Top vídeos do período" : "Top conteúdos do período"}</div>
+          <div className="sub">por engajamento · via integração</div>
+        </div>
+      </div>
+      <div className="top-list">
+        {top.posts.slice(0, 6).map((p, i) => {
+          const a = p.analytics || {};
+          const txt = (p.content || "").replace(/\s+/g, " ").trim();
+          const short = txt.length > 60 ? txt.slice(0, 60) + "…" : txt || "(sem legenda)";
+          const mt = (p as { mediaType?: string }).mediaType;
+          const fmtTag = [
+            mt ? (TYPE_PT[String(mt).toLowerCase()] || mt) : null,
+            p.publishedAt ? p.publishedAt.slice(0, 10).split("-").reverse().join("/") : null,
+          ].filter(Boolean).join(" · ");
+          return (
+            <div className="top-item" key={p._id}>
+              <span className="rank">{i + 1}</span>
+              <div>
+                <div className="tt">{short}</div>
+                <div className="fmt">
+                  {fmtTag}
+                  {p.platformPostUrl ? <> · <a href={p.platformPostUrl} target="_blank" rel="noopener" style={{ color: "var(--cyan)" }}>abrir ↗</a></> : null}
+                </div>
+              </div>
+              <div className="mv">
+                {a.engagementRate != null
+                  ? <>{erFmt(a.engagementRate)}<span>engaj.</span></>
+                  : a.reach != null
+                    ? <>{kfmt(a.reach)}<span>alcance</span></>
+                    : <>{fmt(a.views || 0)}<span>views</span></>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  ) });
+
+  if (showHorarios) cards.push({ id: "horarios", node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "#8E5BE0" } as CSSProperties}>
+      <div className="card-head">
+        <div>
+          <div className="t">Melhores horários</div>
+          <div className="sub">engajamento médio por dia × turno (0–100)</div>
+        </div>
+      </div>
+      {hasHeat ? (
+        <div className="heat">
+          <div />
+          {DIAS.map((d) => <div key={d} className="hh">{d}</div>)}
+          {TURNOS.map((t, ti) => (
+            <Fragment key={t.nome}>
+              <div className="hh" style={{ justifyContent: "flex-end", paddingRight: 4 }}>{t.nome}</div>
+              {heatGrid[ti].map((val, ci) => {
+                const nv = heatMax > 0 ? val / heatMax : 0;
+                return <div key={ci} className="hc" style={{ background: `rgba(0,187,197,${(0.14 + nv * 0.86).toFixed(2)})` }}>{Math.round(nv * 100)}</div>;
+              })}
+            </Fragment>
+          ))}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: "var(--label-3)" }}>sem dados de horário no período</div>
+      )}
+    </div>
+  ) });
+
+  if (showDemo) cards.push({ id: "audiencia", full: true, node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
+      <div className="card-head">
+        <div><div className="t">Audiência</div><div className="sub">{platform === "youtube" ? "quem assiste · espectadores (%)" : "quem segue o perfil · por seguidores"}</div></div>
+      </div>
+      <div className="si-demo">
+        {demoDims.map(({ dim, items }) => {
+          const tops = [...items].sort((a, b) => b.value - a.value).slice(0, 6);
+          const mx = Math.max(1, ...tops.map((t) => t.value));
+          return (
+            <div key={dim} className="si-dim">
+              <h5>{DIM_PT[dim] || dim}</h5>
+              {tops.map((t, i) => (
+                <BarRow
+                  key={i}
+                  k={dim === "gender" ? GENDER_PT[t.dimension] || t.dimension : t.dimension}
+                  v={t.value}
+                  max={mx}
+                  color={cor}
+                  formatted={fmt(t.value)}
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  ) });
+
+  const orderedCards = applyCardOrder(cards, s.cardOrder[rede] || []);
+  const orderedIds = orderedCards.map((c) => c.id);
+  // move o card `from` para a posição de `to` e persiste a nova ordem (só os visíveis).
+  const moveCard = (from: string, to: string) => {
+    if (from === to) return;
+    const arr = [...orderedIds];
+    const fi = arr.indexOf(from), ti = arr.indexOf(to);
+    if (fi < 0 || ti < 0) return;
+    arr.splice(fi, 1);
+    arr.splice(ti, 0, from);
+    s.setCardOrder(rede, arr);
+  };
+  // renderiza um card; no modo "organizar" torna-o arrastável (HTML5 DnD) com handle visível.
+  const renderCard = (c: CardDef) => {
+    const node = c.node;
+    const cls = [node.props.className, c.full ? "si-card-full" : "", editing ? "si-drag" : "", dragId === c.id ? "dragging" : ""]
+      .filter(Boolean).join(" ");
+    if (!editing) return cloneElement(node, { key: c.id, className: cls });
+    return cloneElement(
+      node,
+      {
+        key: c.id,
+        className: cls,
+        draggable: true,
+        onDragStart: (e: DragEvent<HTMLDivElement>) => { e.dataTransfer.effectAllowed = "move"; setDragId(c.id); },
+        onDragOver: (e: DragEvent<HTMLDivElement>) => { e.preventDefault(); if (dragId && dragId !== c.id) moveCard(dragId, c.id); },
+        onDrop: (e: DragEvent<HTMLDivElement>) => e.preventDefault(),
+        onDragEnd: () => setDragId(null),
+      },
+      <span key="__drag" className="drag-handle" aria-hidden="true">⠿</span>,
+      <Fragment key="__body">{node.props.children}</Fragment>,
+    );
+  };
+
   return (
     <>
       <PageHead
         eyebrow={eyebrow}
         title={label}
         desc={desc}
-        right={profileUrl ? (
-          <a className="btn-link" href={profileUrl} target="_blank" rel="noopener">Abrir perfil ↗</a>
-        ) : undefined}
+        right={
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {cards.length > 0 && (
+              <button
+                type="button"
+                className={`btn-link${editing ? " on" : ""}`}
+                aria-pressed={editing}
+                title={editing ? "Concluir organização dos cards" : "Organizar cards (arrastar)"}
+                onClick={() => { setEditing((v) => !v); setDragId(null); }}
+              >
+                {editing ? "✓ Concluir" : "✏️ Organizar"}
+              </button>
+            )}
+            {profileUrl && (
+              <a className="btn-link" href={profileUrl} target="_blank" rel="noopener">Abrir perfil ↗</a>
+            )}
+          </div>
+        }
       />
       {loading && <Spinner texto="Carregando métricas…" />}
       {err && <div className="auth-err">{err}</div>}
@@ -603,233 +899,11 @@ export function SocialInsights({ rede }: { rede: string }) {
             </div>
           )}
 
-          {/* Cards secundários — fluem e preenchem sem vão (auto-fit: 1 card sozinho ocupa a linha) */}
-          <div className="si-flow">
-            {showMix && content && (
-              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
-                <div className="card-head">
-                  <div className="t">Mix de conteúdo</div>
-                  {mixTop && <span className="badge">Vencedor: {mixTop}</span>}
-                </div>
-                {mixRows.map(([t, v]) => (
-                  <BarRow key={t} k={TYPE_PT[t] || t} v={v} max={content.total} color={cor} formatted={fmt(v)} />
-                ))}
-                {mixTop && (
-                  <div className="insight" style={{ marginTop: 14 }}>
-                    <div className="ib" style={{ background: cor }}><Ic name="overview" /></div>
-                    <p><b>{mixTop}</b> lidera o alcance no período.</p>
-                  </div>
-                )}
-                {stories != null && stories > 0 && (
-                  <div style={{ fontSize: 12, color: "var(--label-3)", marginTop: 10 }}>Stories ativos: {fmt(stories)}</div>
-                )}
-              </div>
-            )}
-
-            {showSeg && (
-              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--cyan)" } as CSSProperties}>
-                <div className="card-head"><div className="t">Seguidores</div></div>
-                <div className="mini">
-                  <MiniStat l="Novos seguidores" n={novos != null ? fmt(novos) : "—"} />
-                  <MiniStat l="Deixaram de seguir" n={saida != null ? fmt(saida) : "—"} />
-                  <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} />
-                  <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} />
-                </div>
-                {showFollChart && (
-                  <div style={{ marginTop: 14 }}>
-                    <Chart svg={lineChart(
-                      follVals.map((v) => v.date.slice(5)),
-                      [
-                        { name: "Seguidores", color: cor, data: follVals.map((v) => v.value), fill: true },
-                        ...(comparando && cmpFollVals.length
-                          ? [{ name: "Comparação", color: cor, data: cmpFollVals.slice(0, follVals.length).map((v) => v.value), dash: true } as LineSeries]
-                          : []),
-                      ],
-                      { h: 200, sel: follVals.length - 1 }
-                    )} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {engTypeRows.length > 0 && (
-              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--red)" } as CSSProperties}>
-                <div className="card-head">
-                  <div>
-                    <div className="t">Engajamento por tipo</div>
-                    <div className="sub tnum">{fmt(engTypeSum)} interações</div>
-                  </div>
-                </div>
-                {engTypeRows.map((r) => (
-                  <BarRow key={r.key} k={r.k} v={metrics[r.key].total} max={engTypeMax} color="var(--cyan)" formatted={fmt(metrics[r.key].total)} />
-                ))}
-              </div>
-            )}
-
-            {showOrganic && content && (
-              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--red)" } as CSSProperties}>
-                <div className="card-head">
-                  <div>
-                    <div className="t">Rendimento orgânico</div>
-                    <div className="sub">{content.organicShare != null ? `${pctFmt(content.organicShare)} orgânico` : "sem dado no período"}</div>
-                  </div>
-                </div>
-                {(() => {
-                  const orMax = Math.max(1, content.organic.reach, content.paid.reach);
-                  return (
-                    <>
-                      <BarRow k="Orgânico" v={content.organic.reach} max={orMax} color={cor} formatted={kfmt(content.organic.reach)} />
-                      <BarRow k="Impulsionado" v={content.paid.reach} max={orMax} color="#8E8E93" formatted={kfmt(content.paid.reach)} />
-                    </>
-                  );
-                })()}
-                <div className="insight" style={{ marginTop: 12 }}>
-                  <div className="ib" style={{ background: "var(--cyan)" }}><Ic name="ads" /></div>
-                  <p>{content.organicShare != null
-                    ? <><b>{pctFmt(content.organicShare)}</b> do alcance veio de conteúdo orgânico (não-impulsionado).</>
-                    : "Sem alcance orgânico registrado neste período."}</p>
-                </div>
-              </div>
-            )}
-
-            {showActivity && (
-              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
-                <div className="card-head"><div className="t">Atividade &amp; audiência</div></div>
-                <div className="mini">
-                  {accountsEngaged != null && <MiniStat l="Atividades no perfil" n={fmt(accountsEngaged)} />}
-                  <MiniStat l="Visitas ao site" n={linkTaps?.WEBSITE != null ? fmt(linkTaps.WEBSITE) : "—"} />
-                  {shown("link_call") && <MiniStat l="Toques em ligar" n={linkTaps?.CALL != null ? fmt(linkTaps.CALL) : "—"} />}
-                  {shown("link_email") && <MiniStat l="Toques em e-mail" n={linkTaps?.EMAIL != null ? fmt(linkTaps.EMAIL) : "—"} />}
-                </div>
-              </div>
-            )}
-
-            {showConv && (
-              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--excelente)" } as CSSProperties}>
-                <div className="card-head"><div className="t">Conversas</div></div>
-                <div className="mini">
-                  <MiniStat l="Leads (DM)" n={inboxLeads != null ? fmt(inboxLeads) : "—"} />
-                  <MiniStat l="Conversas" n={inbox?.volume ? fmt(inbox.volume.summary.uniqueConversations) : "—"} />
-                  <MiniStat l="Tempo de resposta" n={inbox?.responseTime && inbox.responseTime.summary.sampleSize > 0 ? humanDur(inbox.responseTime.summary.medianSeconds) : "—"} />
-                </div>
-                {showConvChart && inbox?.volume && (
-                  <div style={{ marginTop: 14 }}>
-                    <Chart svg={lineChart(
-                      inbox.volume.timeseries.map((t) => t.date.slice(5)),
-                      [
-                        { name: "recebidas", color: cor, data: inbox.volume.timeseries.map((t) => t.received), fill: true },
-                        { name: "enviadas", color: "#8E8E93", data: inbox.volume.timeseries.map((t) => t.sent) },
-                      ],
-                      { h: 200, sel: inbox.volume.timeseries.length - 1 }
-                    )} />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Top conteúdos + Melhores horários — auto-fit (sem coluna vazia quando só um renderiza) */}
-          {(showTop || showHorarios) && (
-          <div className="si-flow-sm">
-            {showTop && top?.posts && (
-              <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
-                <div className="card-head">
-                  <div>
-                    <div className="t">{platform === "tiktok" || platform === "youtube" ? "Top vídeos do período" : "Top conteúdos do período"}</div>
-                    <div className="sub">por engajamento · via integração</div>
-                  </div>
-                </div>
-                <div className="top-list">
-                  {top.posts.slice(0, 6).map((p, i) => {
-                    const a = p.analytics || {};
-                    const txt = (p.content || "").replace(/\s+/g, " ").trim();
-                    const short = txt.length > 60 ? txt.slice(0, 60) + "…" : txt || "(sem legenda)";
-                    const mt = (p as { mediaType?: string }).mediaType;
-                    const fmtTag = [
-                      mt ? (TYPE_PT[String(mt).toLowerCase()] || mt) : null,
-                      p.publishedAt ? p.publishedAt.slice(0, 10).split("-").reverse().join("/") : null,
-                    ].filter(Boolean).join(" · ");
-                    return (
-                      <div className="top-item" key={p._id}>
-                        <span className="rank">{i + 1}</span>
-                        <div>
-                          <div className="tt">{short}</div>
-                          <div className="fmt">
-                            {fmtTag}
-                            {p.platformPostUrl ? <> · <a href={p.platformPostUrl} target="_blank" rel="noopener" style={{ color: "var(--cyan)" }}>abrir ↗</a></> : null}
-                          </div>
-                        </div>
-                        <div className="mv">
-                          {a.engagementRate != null
-                            ? <>{erFmt(a.engagementRate)}<span>engaj.</span></>
-                            : a.reach != null
-                              ? <>{kfmt(a.reach)}<span>alcance</span></>
-                              : <>{fmt(a.views || 0)}<span>views</span></>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {showHorarios && (
-            <div className="card pad-lg tcard" style={{ "--tcard-accent": "#8E5BE0" } as CSSProperties}>
-              <div className="card-head">
-                <div>
-                  <div className="t">Melhores horários</div>
-                  <div className="sub">engajamento médio por dia × turno (0–100)</div>
-                </div>
-              </div>
-              {hasHeat ? (
-                <div className="heat">
-                  <div />
-                  {DIAS.map((d) => <div key={d} className="hh">{d}</div>)}
-                  {TURNOS.map((t, ti) => (
-                    <Fragment key={t.nome}>
-                      <div className="hh" style={{ justifyContent: "flex-end", paddingRight: 4 }}>{t.nome}</div>
-                      {heatGrid[ti].map((val, ci) => {
-                        const nv = heatMax > 0 ? val / heatMax : 0;
-                        return <div key={ci} className="hc" style={{ background: `rgba(0,187,197,${(0.14 + nv * 0.86).toFixed(2)})` }}>{Math.round(nv * 100)}</div>;
-                      })}
-                    </Fragment>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: "var(--label-3)" }}>sem dados de horário no período</div>
-              )}
-            </div>
-            )}
-          </div>
-          )}
-
-          {/* Audiência — demografia (idade/gênero/país/cidade), cada dimensão num sub-card próprio */}
-          {showDemo && (
-            <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
-              <div className="card-head">
-                <div><div className="t">Audiência</div><div className="sub">{platform === "youtube" ? "quem assiste · espectadores (%)" : "quem segue o perfil · por seguidores"}</div></div>
-              </div>
-              <div className="si-demo">
-                {demoDims.map(({ dim, items }) => {
-                  const tops = [...items].sort((a, b) => b.value - a.value).slice(0, 6);
-                  const mx = Math.max(1, ...tops.map((t) => t.value));
-                  return (
-                    <div key={dim} className="si-dim">
-                      <h5>{DIM_PT[dim] || dim}</h5>
-                      {tops.map((t, i) => (
-                        <BarRow
-                          key={i}
-                          k={dim === "gender" ? GENDER_PT[t.dimension] || t.dimension : t.dimension}
-                          v={t.value}
-                          max={mx}
-                          color={cor}
-                          formatted={fmt(t.value)}
-                        />
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
+          {/* Cards reordenáveis (secundários + de baixo) — grid fluido auto-fit; ordem por workspace.
+              No modo "organizar" (lápis no topo) cada card vira arrastável (HTML5 DnD). */}
+          {orderedCards.length > 0 && (
+            <div className={`si-flow${editing ? " si-flow-edit" : ""}`}>
+              {orderedCards.map(renderCard)}
             </div>
           )}
         </>

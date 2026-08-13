@@ -608,3 +608,19 @@ svg.chartI{cursor:crosshair}
 .perf-seg button.on{background:#fff;color:var(--label);box-shadow:inset 0 0 0 1px var(--chip-accent,var(--hairline-2)),0 1px 3px rgba(0,0,0,.10)}
 /* Desempenho no tempo: controles agrupados (tipo de gráfico + chips de métrica) */
 .perf-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+
+/* ===== Reordenar cards (drag) — modo "organizar" ===== */
+/* card ocupando a linha inteira (Audiência) mesmo dentro do grid auto-fit */
+.si-card-full{grid-column:1/-1}
+/* transição suave só no modo organizar; fora dele nada muda visualmente */
+.si-flow-edit .card{transition:box-shadow .15s,opacity .15s,transform .15s}
+/* card arrastável: cursor move + espaço pro handle no canto */
+.si-drag{cursor:move;padding-top:30px}
+.si-drag.card.pad-lg{padding-top:32px}
+/* card em arraste: leve destaque */
+.si-drag.dragging{opacity:.55;box-shadow:0 6px 20px rgba(0,0,0,.14)}
+/* handle discreto (6 pontinhos) no topo direito do card, só no modo organizar */
+.drag-handle{position:absolute;top:8px;right:12px;font-size:15px;line-height:1;color:var(--label-3);cursor:grab;user-select:none;letter-spacing:1px}
+.drag-handle:active{cursor:grabbing}
+/* estado ativo do botão-lápis "Organizar" */
+.btn-link.on{background:var(--ink);border-color:var(--ink);color:#fff}

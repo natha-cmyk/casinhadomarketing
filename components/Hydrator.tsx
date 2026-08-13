@@ -28,7 +28,7 @@ export function Hydrator() {
         .catch(() => {});
       unsub = useStore.subscribe((s, p) => {
         if (!s.hydrated) return;
-        if (s.redes !== p.redes || s.paineis !== p.paineis || s.contas !== p.contas || s.cfgOpen !== p.cfgOpen || s.impOpen !== p.impOpen || s.manualAds !== p.manualAds || s.manualCampaigns !== p.manualCampaigns || s.customInd !== p.customInd)
+        if (s.redes !== p.redes || s.paineis !== p.paineis || s.contas !== p.contas || s.cfgOpen !== p.cfgOpen || s.impOpen !== p.impOpen || s.manualAds !== p.manualAds || s.manualCampaigns !== p.manualCampaigns || s.customInd !== p.customInd || s.cardOrder !== p.cardOrder)
           debounce("config", () => saveConfig(useStore.getState()));
         if (s.perfil !== p.perfil) debounce("perfil", () => savePerfil(useStore.getState()));
         if (s.okr !== p.okr) debounce("okr", () => saveOkr(useStore.getState()));
