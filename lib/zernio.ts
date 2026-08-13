@@ -518,3 +518,38 @@ export function gbpReviews(accountId: string) {
 export function gbpLocationDetails(accountId: string) {
   return zernio<GbpDetails>(`/accounts/${encodeURIComponent(accountId)}/gmb-location-details`);
 }
+
+// ── Google Business — ESCRITA (contratos confirmados ao vivo) ────────────────
+// PUT /accounts/{id}/gmb-locations  body { selectedLocationId } — troca qual ficha o Zernio
+// SINCRONIZA. Como o param `locationId` nos GETs de analytics é ignorado (a Zernio só serve os
+// dados da ficha SELECIONADA), ver métricas de outra ficha exige trocar a selecionada aqui e
+// re-buscar os endpoints de leitura.
+export interface GbpSetLocationResp {
+  success?: boolean;
+  selectedLocationId?: string;
+  message?: string;
+  [k: string]: unknown;
+}
+export function gbpSetLocation(accountId: string, selectedLocationId: string) {
+  return zernio<GbpSetLocationResp>(`/accounts/${encodeURIComponent(accountId)}/gmb-locations`, {
+    method: "PUT",
+    body: JSON.stringify({ selectedLocationId }),
+  });
+}
+
+// POST /accounts/{id}/gmb-reviews/{reviewId}/reply  body { comment } (min 1 char) — publica a
+// resposta do dono a uma avaliação. A resposta fica associada à ficha SELECIONADA no momento.
+// Chamar de novo sobrescreve (PUT semantics do Google). `reviewId` = a parte curta (não o
+// resource name completo).
+export interface GbpReplyResp {
+  success?: boolean;
+  reviewId?: string;
+  platform?: string;
+  [k: string]: unknown;
+}
+export function gbpReplyReview(accountId: string, reviewId: string, comment: string) {
+  return zernio<GbpReplyResp>(
+    `/accounts/${encodeURIComponent(accountId)}/gmb-reviews/${encodeURIComponent(reviewId)}/reply`,
+    { method: "POST", body: JSON.stringify({ comment }) }
+  );
+}

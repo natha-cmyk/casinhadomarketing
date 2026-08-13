@@ -3,10 +3,11 @@
 // Mesma linguagem visual dos painéis de rede (PageHead, cards brancos, KPIs-herói,
 // "Desempenho no tempo" com lineChart, listas rankeadas). Acento da rede: #4285F4.
 //
-// Realidade da API (verificada ao vivo): a conta googlebusiness da Zernio representa UMA
-// ficha SELECIONADA; performance/keywords/media/reviews refletem só ela (o locationId é
-// ignorado). O seletor lista todas as fichas — a ativa mostra métricas ao vivo; as demais
-// aparecem como referência (nome/endereço/categoria). Trocar a ficha ativa exige escrita.
+// Realidade da API (verificada ao vivo): a conta googlebusiness da Zernio sincroniza UMA
+// ficha por vez; performance/keywords/media/reviews refletem só ela (o locationId é ignorado).
+// O seletor lista todas as fichas — escolher outra TROCA a ficha sincronizada (PUT gmb-locations)
+// e re-carrega as métricas dessa ficha. Responder avaliações é escrita (POST .../reply) e a
+// resposta fica associada à ficha sincronizada no momento.
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
@@ -18,7 +19,7 @@ import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
 import { REDES } from "@/lib/seed-data";
 import type {
-  GbpPerformance, GbpKeywordsResp, GbpLocationsResp, GbpMediaResp, GbpReviewsResp, GbpDetails, GbpLocation,
+  GbpPerformance, GbpKeywordsResp, GbpLocationsResp, GbpMediaResp, GbpReviewsResp, GbpDetails, GbpLocation, GbpReview,
 } from "@/lib/zernio";
 
 const CY = "#4285F4"; // acento Google Business
@@ -98,6 +99,8 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [selLoc, setSelLoc] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
+  const [switchErr, setSwitchErr] = useState<string | null>(null);
   const [perfSel, setPerfSel] = useState<string[]>(["impressions"]);
 
   const range = useMemo(() => dateRange(s), [s.period, s.year, s.month, s.quarter, s.week]);
@@ -155,6 +158,39 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
   const activeLoc = data?.activeLocationId || null;
   const isActiveSel = selLoc == null || selLoc === activeLoc;
   const selLocObj: GbpLocation | undefined = locations.find((l) => l.id === selLoc);
+
+  // Troca a ficha SINCRONIZADA na Zernio e re-carrega as métricas (que passam a ser dessa ficha).
+  async function switchLocation(id: string) {
+    if (!acct || switching || id === activeLoc) return;
+    setSelLoc(id); // destaque otimista
+    setSwitching(true);
+    setSwitchErr(null);
+    try {
+      const res = await fetch("/api/zernio/gbp/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setLocation", accountId: acct._id, locationId: id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j?.error) throw new Error(j?.error || "Falha ao trocar a ficha.");
+      // re-busca os dados (agora refletem a nova ficha) — invalida o cache do período
+      const key = keyOf(acct._id, range.since, range.until);
+      CACHE.delete(key);
+      const d: GbpData = await fetch(
+        `/api/zernio/gbp?accountId=${acct._id}&since=${range.since}&until=${range.until}`,
+        { cache: "no-store" }
+      ).then((r) => r.json());
+      if (d?.error) throw new Error(String(d.error));
+      CACHE.set(key, d);
+      setData(d);
+      setSelLoc(d.activeLocationId ?? id);
+    } catch (e) {
+      setSwitchErr(e instanceof Error ? e.message : String(e));
+      setSelLoc(activeLoc); // volta o destaque para a ficha realmente sincronizada
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   const rev = data?.reviews || null;
   const details = data?.details || null;
@@ -245,13 +281,15 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
 
       {!loading && !err && (
         <>
-          {/* Seletor de localização (fichas) */}
+          {/* Seletor de localização (fichas) — troca a ficha SINCRONIZADA */}
           {locations.length > 1 && (
             <div className="card pad-lg" style={{ marginBottom: 16 }}>
               <div className="card-head" style={{ marginBottom: 10 }}>
                 <div>
                   <div className="t">Localização</div>
-                  <div className="sub">{locations.length} fichas · métricas ao vivo na ficha ativa</div>
+                  <div className="sub">
+                    {locations.length} fichas · uma ficha sincronizada por vez — ao trocar, as métricas passam a ser dessa ficha
+                  </div>
                 </div>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -262,10 +300,13 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
                     <button
                       key={l.id}
                       type="button"
-                      onClick={() => setSelLoc(l.id)}
+                      onClick={() => switchLocation(l.id)}
+                      disabled={switching}
+                      aria-pressed={on}
                       style={{
                         display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2,
-                        padding: "8px 12px", borderRadius: 12, cursor: "pointer", textAlign: "left", maxWidth: 260,
+                        padding: "8px 12px", borderRadius: 12, cursor: switching ? "default" : "pointer",
+                        textAlign: "left", maxWidth: 260, opacity: switching && !on ? 0.55 : 1,
                         border: `1.5px solid ${on ? CY : "rgba(0,0,0,.10)"}`,
                         background: on ? "rgba(66,133,244,.08)" : "var(--white, #fff)",
                       }}
@@ -275,37 +316,20 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
                         {(l.name || "").split("|")[0].replace(/Seahub Coworking\s*-\s*/i, "").trim() || l.name}
                       </span>
                       {l.address && <span style={{ fontSize: 11, color: "var(--label-3,#8E8E93)" }}>{l.address}</span>}
-                      {isActive && <span style={{ fontSize: 10.5, color: GREEN, fontWeight: 600 }}>ficha ativa · métricas ao vivo</span>}
+                      {isActive && <span style={{ fontSize: 10.5, color: GREEN, fontWeight: 600 }}>ficha sincronizada · métricas ao vivo</span>}
                     </button>
                   );
                 })}
               </div>
+              {switchErr && (
+                <div className="auth-err" style={{ marginTop: 12, marginBottom: 0 }}>{switchErr}</div>
+              )}
             </div>
           )}
 
-          {/* Ficha não-ativa: só referência (a API só entrega métricas da ficha ativa) */}
-          {!isActiveSel && selLocObj && (
-            <div className="card pad-lg tcard" style={{ marginBottom: 16, "--tcard-accent": CY } as CSSProperties}>
-              <div className="card-head">
-                <div>
-                  <div className="t">{selLocObj.name.split("|")[0].trim()}</div>
-                  <div className="sub">{selLocObj.category || "Ficha do Google"}</div>
-                </div>
-              </div>
-              <div className="mini" style={{ marginTop: 4 }}>
-                <MiniStat l="Endereço" n={selLocObj.address || "—"} />
-                {selLocObj.websiteUrl && (
-                  <MiniStat l="Site" n={<a href={selLocObj.websiteUrl} target="_blank" rel="noopener" style={{ color: "var(--cyan)" }}>abrir ↗</a>} />
-                )}
-              </div>
-              <div className="insight" style={{ marginTop: 14 }}>
-                <div className="ib" style={{ background: CY }} />
-                <p>Métricas ao vivo ficam disponíveis apenas para a <b>ficha ativa</b> nesta conexão. Selecione a ficha ativa acima para ver desempenho, termos e avaliações.</p>
-              </div>
-            </div>
-          )}
+          {switching && <Spinner texto="Sincronizando ficha…" />}
 
-          {isActiveSel && (
+          {!switching && isActiveSel && (
             <>
               {/* KPIs-herói */}
               <div className="grid kpis" style={{ marginBottom: 16 }}>
@@ -402,20 +426,9 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
                       </div>
                     )}
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {(rev.reviews || []).slice(0, 4).map((r) => {
-                        const txt = (r.comment || "").replace(/\s*\(Translated by Google\)[\s\S]*$/i, "").replace(/\s+/g, " ").trim();
-                        const short = txt.length > 130 ? txt.slice(0, 130) + "…" : txt;
-                        return (
-                          <div key={r.id} style={{ borderTop: "1px solid rgba(0,0,0,.06)", paddingTop: 10 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                              <span style={{ fontWeight: 600, fontSize: 12.5 }}>{r.reviewer?.displayName || "Cliente"}</span>
-                              {r.rating != null && <Stars rating={r.rating} size={12} />}
-                            </div>
-                            {short && <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--label-2,#6E6E73)" }}>{short}</p>}
-                            {r.createTime && <span style={{ fontSize: 10.5, color: "var(--label-3,#8E8E93)" }}>{r.createTime.slice(0, 10).split("-").reverse().join("/")}</span>}
-                          </div>
-                        );
-                      })}
+                      {(rev.reviews || []).slice(0, 4).map((r) => (
+                        <ReviewItem key={r.id} review={r} accountId={acct._id} />
+                      ))}
                     </div>
                     {details?.location?.reviewUrl && (
                       <div style={{ marginTop: 12 }}>
@@ -485,5 +498,127 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
         </>
       )}
     </>
+  );
+}
+
+// ── Avaliação individual + resposta do dono (escrita pelo USUÁRIO) ──
+// A resposta vai para a Zernio (POST .../reply) e fica associada à ficha sincronizada.
+// TODO(ia): sugerir/gerar resposta com IA (Dionísio) — resposta automática por IA é frente futura.
+function ReviewItem({ review, accountId }: { review: GbpReview; accountId: string }) {
+  const txt = (review.comment || "").replace(/\s*\(Translated by Google\)[\s\S]*$/i, "").replace(/\s+/g, " ").trim();
+  const short = txt.length > 220 ? txt.slice(0, 220) + "…" : txt;
+  const existing = review.reviewReply?.comment?.replace(/\s+/g, " ").trim() || null;
+
+  const [reply, setReply] = useState<string | null>(existing);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send() {
+    const comment = draft.trim();
+    if (!comment) { setError("Escreva uma resposta antes de enviar."); return; }
+    setSending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/zernio/gbp/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reply", accountId, reviewId: review.id, comment }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j?.error) throw new Error(j?.error || "Falha ao enviar a resposta.");
+      setReply(comment);
+      setDraft("");
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid rgba(0,0,0,.06)", paddingTop: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontWeight: 600, fontSize: 12.5 }}>{review.reviewer?.displayName || "Cliente"}</span>
+        {review.rating != null && <Stars rating={review.rating} size={12} />}
+      </div>
+      {short && <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--label-2,#6E6E73)" }}>{short}</p>}
+      {review.createTime && (
+        <span style={{ fontSize: 10.5, color: "var(--label-3,#8E8E93)" }}>
+          {review.createTime.slice(0, 10).split("-").reverse().join("/")}
+        </span>
+      )}
+
+      {/* Resposta publicada */}
+      {reply && (
+        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, background: "rgba(66,133,244,.06)", borderLeft: `2px solid ${CY}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: CY }}>Resposta do dono</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: GREEN }}>respondida ✓</span>
+          </div>
+          <p style={{ margin: 0, fontSize: 12, color: "var(--label-2,#6E6E73)" }}>{reply}</p>
+        </div>
+      )}
+
+      {/* Formulário de resposta (texto do usuário) */}
+      {!reply && !open && (
+        <button
+          type="button"
+          onClick={() => { setOpen(true); setError(null); }}
+          style={{
+            marginTop: 8, padding: "5px 12px", borderRadius: 99, cursor: "pointer",
+            border: `1.5px solid ${CY}`, background: "transparent", color: CY, fontWeight: 650, fontSize: 12,
+          }}
+        >
+          Responder
+        </button>
+      )}
+
+      {!reply && open && (
+        <div style={{ marginTop: 8 }}>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Escreva a resposta pública a este cliente…"
+            rows={3}
+            disabled={sending}
+            style={{
+              width: "100%", resize: "vertical", padding: "8px 10px", borderRadius: 10,
+              border: "1.5px solid rgba(0,0,0,.12)", fontSize: 12.5, fontFamily: "inherit",
+              color: "var(--ink,#121111)", background: "var(--white,#fff)", boxSizing: "border-box",
+            }}
+          />
+          {error && <div style={{ marginTop: 6, fontSize: 11.5, color: RED }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={send}
+              disabled={sending || !draft.trim()}
+              style={{
+                padding: "6px 14px", borderRadius: 99, cursor: sending || !draft.trim() ? "default" : "pointer",
+                border: "none", background: CY, color: "#fff", fontWeight: 650, fontSize: 12,
+                opacity: sending || !draft.trim() ? 0.6 : 1,
+              }}
+            >
+              {sending ? "Enviando…" : "Responder"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); setDraft(""); setError(null); }}
+              disabled={sending}
+              style={{
+                padding: "6px 14px", borderRadius: 99, cursor: "pointer",
+                border: "1.5px solid rgba(0,0,0,.12)", background: "transparent",
+                color: "var(--label-2,#6E6E73)", fontWeight: 600, fontSize: 12,
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
