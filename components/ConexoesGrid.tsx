@@ -114,7 +114,13 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
             <div className="conx-block-h">{GROUP_LABEL[g]}</div>
             <div className="conx-grid2">
               {redes.map((r) => {
-                const on = connected.has(zplat(r.id));
+                // ads: conectado = existe conta da plataforma-alvo com ads ativo; social: conta da plataforma
+                const on =
+                  r.grupo === "ads"
+                    ? accounts.some(
+                        (a) => a.platform === AD_CONNECT[r.id] && (a.adsStatus === "connected" || a.adsStatus === "active")
+                      )
+                    : connected.has(zplat(r.id));
                 return (
                   <div key={r.id} className={`conx-sq${on ? " on" : ""}`}>
                     <span
