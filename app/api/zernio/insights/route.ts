@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import {
   accountInsightsFull, followerHistory, keyMetricSeries, dailyMetrics,
-  postAnalytics, profileLinkTaps, listStories, demographics, type PostAnalyticsItem,
+  postAnalytics, profileLinkTaps, listStories, bestTime, demographics, type PostAnalyticsItem,
 } from "@/lib/zernio";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
     const until = q.get("until") ?? undefined;
     const isIG = platform === "instagram";
 
-    const [insights, followers, keySeries, daily, postsResp, linkTaps, stories, demo] = await Promise.all([
+    const [insights, followers, keySeries, daily, postsResp, linkTaps, stories, bestSlots, demo] = await Promise.all([
       accountInsightsFull(platform, accountId, { since, until }).catch(() => null),
       followerHistory(platform, accountId, { since, until }).catch(() => null),
       keyMetricSeries(platform, accountId, { since, until }).catch(() => null),
@@ -52,6 +52,7 @@ export async function GET(req: Request) {
       postAnalytics({ accountId, platform, fromDate: since, toDate: until, sortBy: "engagement", limit: 100 }).catch(() => null),
       isIG ? profileLinkTaps(accountId, { since, until }).catch(() => null) : Promise.resolve(null),
       isIG ? listStories(accountId).then((s) => s.length).catch(() => null) : Promise.resolve(null),
+      bestTime(accountId, platform, { fromDate: since, toDate: until }).catch(() => null),
       isIG ? demographics(accountId).catch(() => null) : Promise.resolve(null),
     ]);
 
@@ -59,7 +60,7 @@ export async function GET(req: Request) {
     const top = postsResp ? { overview: postsResp.overview, posts: posts.slice(0, 8) } : null;
     const content = postsResp ? contentSummary(posts) : null;
 
-    return NextResponse.json({ insights, followers, keySeries, daily, top, content, linkTaps, stories, demographics: demo });
+    return NextResponse.json({ insights, followers, keySeries, daily, top, content, linkTaps, stories, bestTime: bestSlots, demographics: demo });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 502 });
   }

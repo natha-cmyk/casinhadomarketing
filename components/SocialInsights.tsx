@@ -1,11 +1,11 @@
 "use client";
 // Dashboard de analytics social por workspace. Serve Instagram e os painéis de rede
 // (canal/[rede]). Dado real quando a conta está conectada; estado vazio quando não.
-// Renderiza TUDO dirigido pelo catálogo de indicadores (socialCatalog + indShown):
-// KPIs (seguidores, métricas, derivados, inbox), gráficos (evolução de seguidores,
-// séries diárias, volume de conversas), seções (top conteúdos, fontes de inbox,
-// audiência/demografia) e COMPARAÇÃO de períodos.
-import { useEffect, useState, type ReactNode } from "react";
+// Layout portado 1:1 do painel Instagram do blueprint (viewInstagram): 4 KPIs, um card
+// "Desempenho no tempo" com SELETOR de métrica (série diária cronológica), mix de
+// conteúdo, seguidores, engajamento por tipo, rendimento orgânico, atividade & audiência,
+// conversas, top conteúdos e heatmap de melhores horários. COMPARAÇÃO de períodos preservada.
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { PageHead, KpiCard, DeltaChip, BarRow, MiniStat } from "@/components/ui";
@@ -16,10 +16,10 @@ import { lineChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
 import { REDES } from "@/lib/seed-data";
-import { socialCatalog, indShown } from "@/lib/indicators";
+import { indShown } from "@/lib/indicators";
 import type {
   AnalyticsResponse, DemographicsResponse, DailyMetricRow, PostAnalyticsResp,
-  InboxVolume, InboxResponseTime, InboxSourceBreakdown,
+  InboxVolume, InboxResponseTime, InboxSourceBreakdown, BestTimeSlot,
 } from "@/lib/zernio";
 
 // id da rede (Casinha) → plataforma da integração
@@ -98,6 +98,7 @@ interface Combined {
   content: ContentSummary | null;               // orgânico vs impulsionado + mix por tipo
   linkTaps: Record<string, number> | null;      // toques em links do perfil por tipo (IG)
   stories: number | null;                       // stories ativos (IG)
+  bestTime: BestTimeSlot[] | null;              // engajamento médio por dia da semana × hora
   demographics: DemographicsResponse | null;
 }
 const TYPE_PT: Record<string, string> = { video: "Reels / vídeos", image: "Imagens", carousel: "Carrosséis", other: "Outros" };
@@ -161,19 +162,6 @@ function sparkline(values: number[], color: string): string {
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path d="${area}" fill="${color}" opacity="0.10"/><path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${lx}" cy="${ly}" r="2.4" fill="${color}"/></svg>`;
 }
 
-// número-herói: rótulo + valor grande + delta + rodapé + sparkline embutido
-function HeroStat({ label, value, foot, delta, spark }: { label: string; value: string; foot?: string; delta?: ReactNode; spark?: string }) {
-  return (
-    <div className="hero-stat">
-      <div className="hero-lbl">{label}</div>
-      <div className="hero-val">{value}</div>
-      {delta ? <div style={{ marginTop: 2 }}>{delta}</div> : null}
-      {foot ? <div className="hero-foot">{foot}</div> : null}
-      {spark ? <div className="hero-spark" dangerouslySetInnerHTML={{ __html: spark }} /> : null}
-    </div>
-  );
-}
-
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -188,6 +176,8 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [inbox, setInbox] = useState<InboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // ASSINATURA: métrica selecionada do card "Desempenho no tempo" (série diária cronológica)
+  const [perfMetric, setPerfMetric] = useState<string>("reach");
 
   // fetch combinado (métricas + seguidores + série + daily + top + demografia) + comparação
   useEffect(() => {
@@ -289,20 +279,17 @@ export function SocialInsights({ rede }: { rede: string }) {
 
   const ins = data?.insights || null;
   const foll = data?.followers || null;
-  const demo = data?.demographics || null;
   const daily = data?.daily || null;
   const cmpDaily = cmpData?.daily || null;
   const top = data?.top || null;
   const content = data?.content || null;
-  const cmpContent = cmpData?.content || null;
   const linkTaps = data?.linkTaps || null;
   const stories = data?.stories ?? null;
   const cmpIns = cmpData?.insights || null;
   const cmpFoll = cmpData?.followers || null;
+  const bestTime = data?.bestTime || null;
 
   const metrics = ins?.metrics || {};
-  const keys = Object.keys(metrics);
-  const comSerie = keys.filter((k) => metrics[k].values?.length);
 
   // série de seguidores (atual + comparação tracejada)
   const follVals = foll?.metrics?.follower_count?.values || [];
@@ -310,204 +297,99 @@ export function SocialInsights({ rede }: { rede: string }) {
   const curFollLast = follVals.length ? follVals[follVals.length - 1].value : acct.followersCount ?? null;
   const cmpFollLast = cmpFollVals.length ? cmpFollVals[cmpFollVals.length - 1].value : null;
 
-  // dimensões da audiência com dados
-  const demoDims = demo ? DIM_ORDER.map((dim) => ({ dim, items: demoItems(demo, dim) })).filter((d) => d.items.length) : [];
-
   const desc =
     `${acct.displayName || "conta conectada"} · dados reais das contas conectadas · ${range.since} → ${range.until}` +
     (cmpRange ? ` · comparando ${range.since}→${range.until} vs ${cmpRange.since}→${cmpRange.until}` : "");
 
-  // ── indicadores por CONFIG (base da doc + extras + custom); Personalização liga/desliga ──
-  const cat = socialCatalog(rede);
+  // ── indicadores por CONFIG (Personalização liga/desliga); cada card opcional respeita shown(id) ──
   const shown = (id: string, custom = false) => indShown(s.paineis, rede, id, custom);
-  const kpiCat = cat.filter((c) => c.kind === "kpi" && shown(c.id));
-  const customList = s.customInd[rede] || [];
-  const customKpis = customList.filter((c) => c.kind === "kpi");
-  const showFollowerChart = shown("ch_followers");
-  const showDemographics = shown("audiencia");
-  const showTop = shown("posts");
-  const showMix = shown("content_mix");
-  const showInboxChart = shown("inbox_chart");
-  const showInboxSrc = shown("inbox_src");
-  // gráficos por métrica: só métricas com série E ligadas na config
-  const serieKeys = comSerie.filter((k) => shown("m_" + k));
-  // gráficos diários (daily-metrics) ligados
-  const dailyCharts = cat.filter((c) => c.kind === "chart" && c.bind.src === "dailyChart" && shown(c.id));
+
+  const profileUrl = acct.username && PROFILE_URL[platform] ? PROFILE_URL[platform](acct.username) : null;
   const anyData =
     ins != null || acct.followersCount != null ||
     (daily?.length ?? 0) > 0 || (top?.posts?.length ?? 0) > 0;
 
-  const profileUrl = acct.username && PROFILE_URL[platform] ? PROFILE_URL[platform](acct.username) : null;
-
-  // ── AMBIENTE DE LEITURA: números compilados (só o que tem dado) ──
+  // ── números compilados (só o que tem dado) ──
   const reachDaily = daily && daily.length ? sum(daily.map((r) => r.metrics.reach || 0)) : null;
   const reachTotal = reachDaily != null ? reachDaily : metrics.reach?.total ?? null;
   const cmpReachDaily = cmpDaily && cmpDaily.length ? sum(cmpDaily.map((r) => r.metrics.reach || 0)) : null;
   const cmpReachTotal = comparando ? (cmpReachDaily != null ? cmpReachDaily : cmpIns?.metrics?.reach?.total ?? null) : null;
-  const engRate = derived("eng_rate", metrics, acct.followersCount);
-  const cmpEngRate = comparando ? derived("eng_rate", cmpIns?.metrics || {}, acct.followersCount) : null;
+
+  const followersCount = acct.followersCount ?? null;
+  const viewsTotal = metrics.views?.total ?? null;
   const interactionsTotal = metrics.total_interactions?.total ?? null;
-  const engSpark = daily && daily.length
-    ? daily.map((r) => (r.metrics.likes || 0) + (r.metrics.comments || 0) + (r.metrics.shares || 0) + (r.metrics.saves || 0))
-    : [];
-  const isIG = platform === "instagram";
-  const hasInbox = COM_INBOX.has(platform);
+  const cmpViewsTotal = comparando ? cmpIns?.metrics?.views?.total ?? null : null;
+  const cmpInterTotal = comparando ? cmpIns?.metrics?.total_interactions?.total ?? null : null;
 
-  // dd/mm a partir de ISO (yyyy-mm-dd)
-  const br = (isoStr: string) => `${isoStr.slice(8, 10)}/${isoStr.slice(5, 7)}`;
-  const pctDelta = (cur: number, prev: number | null | undefined): string | null => {
-    if (prev == null || prev === 0) return null;
-    const d = ((cur - prev) / prev) * 100;
-    return (d >= 0 ? "+" : "−") + Math.abs(Math.round(d)) + "%";
-  };
-
-  // frase-resumo automática (só orações com dado)
-  const buildNarrative = (): string => {
-    const b = (s: string) => `<b>${s}</b>`;
-    const s1: string[] = [];
-    s1.push(`No período ${b(br(range.since) + "→" + br(range.until))}`);
-    let s1tail = "";
-    if (reachTotal != null) {
-      const dl = comparando ? pctDelta(reachTotal, cmpReachTotal) : null;
-      s1tail = `, o perfil alcançou ${b(kfmt(reachTotal) + " contas")}` + (dl ? ` (${dl} vs o período anterior)` : "");
-      if (engRate != null) s1tail += ` com ${b(pctFmt(engRate))} de engajamento`;
-    } else if (engRate != null) {
-      s1tail = ` com ${b(pctFmt(engRate))} de engajamento`;
-    }
-    const sentence1 = (s1.join("") + s1tail).trim();
-
-    const parts: string[] = [];
-    if (sentence1) parts.push(sentence1 + ".");
-
-    // conteúdo dominante + share orgânico
-    if (content) {
-      const s2: string[] = [];
-      const types = Object.entries(content.byType).filter(([, v]) => v > 0).sort((a, b2) => b2[1] - a[1]);
-      if (types.length && content.total > 0) {
-        const [t, v] = types[0];
-        s2.push(`${b(TYPE_PT[t] || t)} dominaram (${b(fmt(v) + " de " + fmt(content.total) + " posts")})`);
-      }
-      if (content.organicShare != null) {
-        s2.push(`${b(pctFmt(content.organicShare))} do alcance veio de conteúdo orgânico`);
-      }
-      if (s2.length) parts.push(s2.join(" e ") + ".");
-    }
-
-    // saldo de seguidores no período (comparação)
-    if (comparando && curFollLast != null && cmpFollLast != null && cmpFollLast !== curFollLast) {
-      const diff = curFollLast - cmpFollLast;
-      parts.push(`${b((diff >= 0 ? "+" : "−") + fmt(Math.abs(diff)))} seguidores frente ao período anterior.`);
-    }
-
-    // conversas
-    const conv = hasInbox ? inbox?.volume?.summary.uniqueConversations ?? null : null;
-    if (conv != null && conv > 0) {
-      parts.push(`${b(fmt(conv))} conversas iniciadas por clientes.`);
-    }
-    return parts.join(" ");
-  };
-  const narrative = buildNarrative();
-
-  // ── HERÓIS (3-4 números grandes com sparkline) ──
-  type Hero = { key: string; label: string; value: string; foot?: string; delta?: ReactNode; spark?: string };
-  const heroes: Hero[] = [];
-  if (shown("seguidores") && acct.followersCount != null) {
-    heroes.push({
-      key: "foll", label: "Seguidores", value: fmt(acct.followersCount), foot: "base total",
-      delta: comparando && cmpFollLast != null && curFollLast != null ? <DeltaChip delta={computeDelta(curFollLast, cmpFollLast, true)} scn /> : undefined,
-      spark: sparkline(follVals.map((v) => v.value), cor),
-    });
-  }
-  if ((shown("m_reach") || shown("d_reach")) && reachTotal != null) {
-    heroes.push({
-      key: "reach", label: "Alcance", value: kfmt(reachTotal), foot: "no período",
-      delta: comparando && cmpReachTotal != null ? <DeltaChip delta={computeDelta(reachTotal, cmpReachTotal, true)} scn /> : undefined,
-      spark: daily && daily.length ? sparkline(daily.map((r) => r.metrics.reach || 0), cor) : "",
-    });
-  }
-  if (shown("der_eng_rate") && engRate != null) {
-    heroes.push({
-      key: "eng", label: "Engajamento", value: pctFmt(engRate), foot: "interações ÷ alcance",
-      delta: comparando && cmpEngRate != null ? <DeltaChip delta={computeDelta(engRate, cmpEngRate, true)} scn /> : undefined,
-      spark: sparkline(engSpark, cor),
-    });
-  }
-  if (hasInbox && shown("inbox_leads") && inbox?.volume) {
-    heroes.push({
-      key: "conv", label: "Conversas", value: fmt(inbox.volume.summary.uniqueConversations),
-      foot: `${fmt(inbox.volume.summary.received)} recebidas`,
-      spark: sparkline(inbox.volume.timeseries.map((t) => t.received), cor),
-    });
-  }
-  // garante 3-4 heróis quando há dado: cai pra Interações totais
-  if (heroes.length < 3 && shown("m_total_interactions") && interactionsTotal != null) {
-    heroes.push({
-      key: "inter", label: "Interações", value: kfmt(interactionsTotal), foot: "no período",
-      delta: comparando && cmpIns?.metrics?.total_interactions ? <DeltaChip delta={computeDelta(interactionsTotal, cmpIns.metrics.total_interactions.total, true)} scn /> : undefined,
-      spark: sparkline(engSpark, cor),
-    });
-  }
-
-  // ── BLOCO CRESCIMENTO ──
-  const growSeg = shown("seguidores");
-  const growChart = shown("ch_followers") && follVals.length > 0;
-  const showGrowth = (growSeg || growChart) && (follVals.length > 0 || acct.followersCount != null);
   const fGained = metrics.followers_gained?.total ?? null;
   const fLost = metrics.followers_lost?.total ?? null;
   const fUnf = metrics.follows_and_unfollows?.total ?? null;
+  const net = fUnf != null ? fUnf : (fGained != null && fLost != null ? fGained - fLost : null);
+  const novos = fGained ?? (fUnf != null && fUnf >= 0 ? fUnf : null);
+  const saida = fLost ?? (fUnf != null && fUnf < 0 ? -fUnf : null);
 
-  // ── BLOCO ALCANCE & DESEMPENHO ──
-  const showReachChart = shown("d_reach") && !!daily && daily.length > 0;
-  const showImprChart = shown("d_impressions") && !!daily && daily.length > 0;
+  const hasInbox = COM_INBOX.has(platform);
+  const accountsEngaged = metrics.accounts_engaged?.total ?? null;
+
+  // ── card "Desempenho no tempo" (assinatura): seletor de métrica → série diária cronológica ──
+  const PERF_OPTS: { v: string; l: string }[] = [
+    { v: "reach", l: "Alcance" }, { v: "impressions", l: "Impressões" }, { v: "views", l: "Visualizações" },
+    { v: "likes", l: "Curtidas" }, { v: "comments", l: "Comentários" }, { v: "shares", l: "Compart." }, { v: "saves", l: "Salvos" },
+  ];
+  const perfLabel = PERF_OPTS.find((o) => o.v === perfMetric)?.l || "Alcance";
+  const dget = (r: DailyMetricRow, k: string) => (r.metrics as Record<string, number>)[k] ?? 0;
+  const showPerf = !!daily && daily.length > 0;
+
+  // ── Mix de conteúdo (por tipo de mídia) ──
+  const mixRows = content ? Object.entries(content.byType).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]) : [];
+  const mixTop = mixRows.length ? (TYPE_PT[mixRows[0][0]] || mixRows[0][0]) : null;
+  const showMix = !!content && content.total > 0 && mixRows.length > 0;
+
+  // ── Engajamento por tipo ──
+  const engTypeRows = ([
+    { k: "Curtidas", key: "likes" }, { k: "Compartilhamentos", key: "shares" },
+    { k: "Salvos", key: "saves" }, { k: "Comentários", key: "comments" }, { k: "Reposts", key: "reposts" },
+  ] as const).filter((r) => metrics[r.key] != null);
+  const engTypeMax = Math.max(1, ...engTypeRows.map((r) => metrics[r.key].total));
+  const engTypeSum = sum(engTypeRows.map((r) => metrics[r.key].total));
+
+  // ── Rendimento orgânico ──
   const showOrganic = shown("organico") && !!content;
-  const reachBigShown = shown("m_reach") || shown("d_reach");
-  const showReachBlock = (reachBigShown || showReachChart || showImprChart || showOrganic) && (reachTotal != null || content != null);
 
-  // ── BLOCO ENGAJAMENTO ──
-  const engRows = ([
-    { id: "m_likes", k: "Curtidas", key: "likes" },
-    { id: "m_comments", k: "Comentários", key: "comments" },
-    { id: "m_shares", k: "Compart.", key: "shares" },
-    { id: "m_saves", k: "Salvos", key: "saves" },
-    { id: "m_reposts", k: "Reposts", key: "reposts" },
-    { id: "m_replies", k: "Respostas", key: "replies" },
-  ] as const).filter((r) => shown(r.id) && metrics[r.key] != null);
-  const engMax = Math.max(1, ...engRows.map((r) => metrics[r.key].total));
-  const engBigInter = shown("m_total_interactions") && interactionsTotal != null;
-  const engBigRate = shown("der_eng_rate") && engRate != null;
-  const saveRate = shown("der_save_rate") ? derived("save_rate", metrics, acct.followersCount) : null;
-  const showEngBlock = engBigInter || engBigRate || engRows.length > 0 || saveRate != null;
+  // ── Seguidores ──
+  const showSeg = shown("seguidores") && (novos != null || saida != null || followersCount != null);
+  const showFollChart = shown("ch_followers") && follVals.length > 0;
 
-  // ── BLOCO CONTEÚDO (mix + top) ──
-  const showMixIn = shown("content_mix") && !!content && content.total > 0;
-  const showTopIn = shown("posts") && !!top && !!top.posts && top.posts.length > 0;
-  const showContentBlock = showMixIn || showTopIn;
-  const mixRows = content ? Object.entries(content.byType).filter(([, v]) => v > 0).sort((a, b2) => b2[1] - a[1]) : [];
+  // ── Atividade & audiência ──
+  const showActivity = (shown("link_website") || accountsEngaged != null) && (accountsEngaged != null || linkTaps != null);
 
-  // ── BLOCO PERFIL & SITE (IG) ──
-  const profileStats = isIG ? ([
-    shown("link_website") ? { l: "Visitas ao site", n: linkTaps?.WEBSITE != null ? fmt(linkTaps.WEBSITE) : "—" } : null,
-    shown("link_call") ? { l: "Toques em ligar", n: linkTaps?.CALL != null ? fmt(linkTaps.CALL) : "—" } : null,
-    shown("link_email") ? { l: "Toques em e-mail", n: linkTaps?.EMAIL != null ? fmt(linkTaps.EMAIL) : "—" } : null,
-    shown("m_profile_links_taps") && metrics.profile_links_taps ? { l: "Toques em links", n: kfmt(metrics.profile_links_taps.total) } : null,
-    shown("stories_count") ? { l: "Stories ativos", n: stories != null ? fmt(stories) : "—" } : null,
-  ].filter(Boolean) as { l: string; n: string }[]) : [];
-  const showProfileBlock = profileStats.length > 0 && (linkTaps != null || stories != null || metrics.profile_links_taps != null);
-
-  // ── BLOCO CONVERSAS ──
-  const convStats = hasInbox ? ([
-    shown("inbox_leads") ? { l: "Leads orgânicos (DM)", n: (() => { const src = inbox?.sources?.sources?.find((x) => x.source === "contact"); const leads = src ? src.received : inbox?.volume?.summary.received ?? null; return leads != null ? fmt(leads) : "—"; })() } : null,
-    shown("inbox_vol") && inbox?.volume ? { l: "Conversas", n: fmt(inbox.volume.summary.uniqueConversations) } : null,
-    shown("inbox_rt") ? { l: "Tempo de resposta", n: inbox?.responseTime && inbox.responseTime.summary.sampleSize > 0 ? humanDur(inbox.responseTime.summary.medianSeconds) : "—" } : null,
-  ].filter(Boolean) as { l: string; n: string }[]) : [];
+  // ── Conversas ──
+  const inboxLeads = (() => {
+    const src = inbox?.sources?.sources?.find((x) => x.source === "contact");
+    return src ? src.received : inbox?.volume?.summary.received ?? null;
+  })();
+  const showConv = hasInbox && !!inbox && (inbox.volume != null || inbox.responseTime != null || inbox.sources != null);
   const showConvChart = shown("inbox_chart") && !!inbox?.volume && inbox.volume.timeseries.length > 0;
-  const showConvSrc = shown("inbox_src") && !!inbox?.sources && inbox.sources.sources.length > 0;
-  const showConvBlock = hasInbox && (convStats.length > 0 || showConvChart || showConvSrc);
 
-  // ── BLOCO OUTROS: séries diárias que não couberam + séries por métrica + custom + lacunas ──
-  const otherDaily = dailyCharts.filter((it) => it.bind.src === "dailyChart" && it.bind.key !== "reach" && it.bind.key !== "impressions");
-  const gapKpis = kpiCat.filter((it) => it.bind.src === "none");
-  const showOther = (daily && daily.length > 0 && otherDaily.length > 0) || serieKeys.length > 0 || customKpis.length > 0 || gapKpis.length > 0;
+  // ── Top conteúdos ──
+  const showTop = shown("posts") && !!top?.posts && top.posts.length > 0;
+
+  // ── Melhores horários: heatmap dia (Seg..Dom) × turno (Manhã/Tarde/Noite) a partir de bestTime ──
+  const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+  const TURNOS: { nome: string; from: number; to: number }[] = [
+    { nome: "Manhã", from: 6, to: 12 }, { nome: "Tarde", from: 12, to: 18 }, { nome: "Noite", from: 18, to: 24 },
+  ];
+  const heatGrid = TURNOS.map(() => new Array<number>(7).fill(0));
+  if (bestTime) {
+    for (const slot of bestTime) {
+      const ti = TURNOS.findIndex((t) => slot.hour >= t.from && slot.hour < t.to);
+      if (ti < 0) continue;
+      const col = (slot.day_of_week + 6) % 7; // 0=Dom..6=Sáb → coluna Seg..Dom
+      heatGrid[ti][col] += slot.avg_engagement || 0;
+    }
+  }
+  const heatMax = Math.max(0, ...heatGrid.flat());
+  const hasHeat = !!bestTime && bestTime.length > 0 && heatMax > 0;
 
   return (
     <>
@@ -522,51 +404,112 @@ export function SocialInsights({ rede }: { rede: string }) {
       {loading && <Spinner texto="Carregando métricas…" />}
       {err && <div className="auth-err">{err}</div>}
       {!loading && !err && (
-        <div className="grid" style={{ gap: 16 }}>
-          {/* 1) NARRATIVA — frase-resumo automática do período */}
-          {narrative && (
-            <div className="narr">
-              <div className="narr-ic" style={{ background: cor }}><Ic name="overview" /></div>
-              <p dangerouslySetInnerHTML={{ __html: narrative }} />
-            </div>
-          )}
-
-          {/* 2) HERÓIS — 3-4 números grandes com sparkline + delta */}
-          {heroes.length > 0 && (
-            <div className="hero-grid">
-              {heroes.map((h) => (
-                <HeroStat key={h.key} label={h.label} value={h.value} foot={h.foot} delta={h.delta} spark={h.spark} />
-              ))}
-            </div>
-          )}
-
+        <>
           {!anyData && (
-            <div className="card">
+            <div className="card" style={{ marginBottom: 16 }}>
               Sem métricas no período (verifique o add-on Analytics do plano), ou ainda não há dados.
             </div>
           )}
 
-          {/* 3) CRESCIMENTO — seguidores + evolução (ids: seguidores, ch_followers) */}
-          {showGrowth && (
-            <div className="card">
-              <div className="card-head">
-                <div className="t">Crescimento</div>
-                <span className="badge">{comparando ? "atual · comparação" : "no período"}</span>
-              </div>
-              {growSeg && acct.followersCount != null && (
-                <>
-                  <div className="bignum">{fmt(acct.followersCount)}</div>
-                  <div className="tblock-sub">seguidores</div>
-                </>
-              )}
-              {(fGained != null || fLost != null) ? (
-                <div className="tblock-sub">+{fmt(fGained || 0)} ganhos · −{fmt(fLost || 0)} perdidos</div>
-              ) : fUnf != null ? (
-                <div className="tblock-sub">Saldo de follows/unfollows: {fmt(fUnf)}</div>
-              ) : null}
-              {growChart && (
+          {/* 4 KPIs */}
+          <div className="grid kpis" style={{ marginBottom: 16 }}>
+            <KpiCard
+              lbl="Seguidores"
+              val={followersCount != null ? fmt(followersCount) : "—"}
+              foot={net != null ? `líquido ${net >= 0 ? "+" : ""}${fmt(net)} no período` : undefined}
+            >
+              {comparando && cmpFollLast != null && followersCount != null
+                ? <DeltaChip delta={computeDelta(followersCount, cmpFollLast, true)} scn />
+                : null}
+            </KpiCard>
+            <KpiCard lbl="Contas alcançadas" val={reachTotal != null ? kfmt(reachTotal) : "—"} foot="alcance">
+              {comparando && cmpReachTotal != null && reachTotal != null
+                ? <DeltaChip delta={computeDelta(reachTotal, cmpReachTotal, true)} scn />
+                : null}
+            </KpiCard>
+            <KpiCard lbl="Visualizações" val={viewsTotal != null ? kfmt(viewsTotal) : "—"} foot="impressões">
+              {comparando && cmpViewsTotal != null && viewsTotal != null
+                ? <DeltaChip delta={computeDelta(viewsTotal, cmpViewsTotal, true)} scn />
+                : null}
+            </KpiCard>
+            <KpiCard lbl="Interações" val={interactionsTotal != null ? kfmt(interactionsTotal) : "—"} foot="engajamento bruto">
+              {comparando && cmpInterTotal != null && interactionsTotal != null
+                ? <DeltaChip delta={computeDelta(interactionsTotal, cmpInterTotal, true)} scn />
+                : null}
+            </KpiCard>
+          </div>
+
+          {/* Desempenho no tempo (assinatura) + Mix de conteúdo */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr", gap: 16, marginBottom: 16 }}>
+            {showPerf ? (
+              <div className="card pad-lg">
+                <div className="card-head">
+                  <div>
+                    <div className="t">Desempenho no tempo</div>
+                    <div className="sub">Série diária · {perfLabel}</div>
+                  </div>
+                  <div className="seg small" role="group" aria-label="Métrica" style={{ flexWrap: "wrap" }}>
+                    {PERF_OPTS.map((o) => (
+                      <button key={o.v} type="button" className={perfMetric === o.v ? "on" : ""} onClick={() => setPerfMetric(o.v)}>
+                        {o.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <Chart
                   svg={lineChart(
+                    daily!.map((r) => r.date.slice(5)),
+                    [
+                      { name: perfLabel, color: cor, data: daily!.map((r) => dget(r, perfMetric)), fill: true },
+                      ...(comparando && cmpDaily && cmpDaily.length
+                        ? [{ name: "Comparação", color: cor, data: cmpDaily.slice(0, daily!.length).map((r) => dget(r, perfMetric)), dash: true } as LineSeries]
+                        : []),
+                    ],
+                    { h: 250, sel: daily!.length - 1 }
+                  )}
+                />
+                <div className="legend">
+                  <span><i style={{ background: cor }} />{perfLabel}</span>
+                  {comparando && cmpDaily && cmpDaily.length ? <span><i className="dash" style={{ borderTopColor: cor }} />Comparação</span> : null}
+                </div>
+              </div>
+            ) : <div />}
+
+            {showMix && content ? (
+              <div className="card pad-lg">
+                <div className="card-head">
+                  <div className="t">Mix de conteúdo</div>
+                  {mixTop && <span className="badge">Vencedor: {mixTop}</span>}
+                </div>
+                {mixRows.map(([t, v]) => (
+                  <BarRow key={t} k={TYPE_PT[t] || t} v={v} max={content.total} color={cor} formatted={fmt(v)} />
+                ))}
+                {mixTop && (
+                  <div className="insight" style={{ marginTop: 14 }}>
+                    <div className="ib" style={{ background: cor }}><Ic name="overview" /></div>
+                    <p><b>{mixTop}</b> lidera o alcance no período.</p>
+                  </div>
+                )}
+                {stories != null && stories > 0 && (
+                  <div style={{ fontSize: 12, color: "var(--label-3)", marginTop: 10 }}>Stories ativos: {fmt(stories)}</div>
+                )}
+              </div>
+            ) : <div />}
+          </div>
+
+          {/* Seguidores */}
+          {showSeg && (
+            <div className="card pad-lg" style={{ marginBottom: 16 }}>
+              <div className="card-head"><div className="t">Seguidores</div></div>
+              <div className="mini">
+                <MiniStat l="Novos seguidores" n={novos != null ? fmt(novos) : "—"} />
+                <MiniStat l="Deixaram de seguir" n={saida != null ? fmt(saida) : "—"} />
+                <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} />
+                <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} />
+              </div>
+              {showFollChart && (
+                <div style={{ marginTop: 14 }}>
+                  <Chart svg={lineChart(
                     follVals.map((v) => v.date.slice(5)),
                     [
                       { name: "Seguidores", color: cor, data: follVals.map((v) => v.value), fill: true },
@@ -574,287 +517,164 @@ export function SocialInsights({ rede }: { rede: string }) {
                         ? [{ name: "Comparação", color: cor, data: cmpFollVals.slice(0, follVals.length).map((v) => v.value), dash: true } as LineSeries]
                         : []),
                     ],
-                    { sel: follVals.length - 1 }
-                  )}
-                />
+                    { h: 200, sel: follVals.length - 1 }
+                  )} />
+                </div>
               )}
             </div>
           )}
 
-          {/* 4) ALCANCE & DESEMPENHO — alcance + série diária + orgânico vs impulsionado */}
-          {showReachBlock && (
-            <div className="card">
-              <div className="card-head">
-                <div className="t">Alcance &amp; desempenho</div>
-                <span className="badge">{comparando ? "atual · comparação" : "no período"}</span>
-              </div>
-              {reachBigShown && reachTotal != null && (
-                <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                    <div className="bignum">{kfmt(reachTotal)}</div>
-                    {comparando && cmpReachTotal != null && <DeltaChip delta={computeDelta(reachTotal, cmpReachTotal, true)} scn />}
+          {/* Engajamento por tipo + Rendimento orgânico */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            {engTypeRows.length > 0 ? (
+              <div className="card pad-lg">
+                <div className="card-head">
+                  <div>
+                    <div className="t">Engajamento por tipo</div>
+                    <div className="sub tnum">{fmt(engTypeSum)} interações</div>
                   </div>
-                  <div className="tblock-sub">contas alcançadas no período</div>
-                </>
-              )}
-              {showReachChart && (
-                <Chart
-                  svg={lineChart(
-                    daily!.map((r) => r.date.slice(5)),
+                </div>
+                {engTypeRows.map((r) => (
+                  <BarRow key={r.key} k={r.k} v={metrics[r.key].total} max={engTypeMax} color="var(--cyan)" formatted={fmt(metrics[r.key].total)} />
+                ))}
+              </div>
+            ) : <div />}
+
+            {showOrganic && content ? (
+              <div className="card pad-lg">
+                <div className="card-head">
+                  <div>
+                    <div className="t">Rendimento orgânico</div>
+                    <div className="sub">{content.organicShare != null ? `${pctFmt(content.organicShare)} orgânico` : "sem dado no período"}</div>
+                  </div>
+                </div>
+                {(() => {
+                  const orMax = Math.max(1, content.organic.reach, content.paid.reach);
+                  return (
+                    <>
+                      <BarRow k="Orgânico" v={content.organic.reach} max={orMax} color={cor} formatted={kfmt(content.organic.reach)} />
+                      <BarRow k="Impulsionado" v={content.paid.reach} max={orMax} color="#8E8E93" formatted={kfmt(content.paid.reach)} />
+                    </>
+                  );
+                })()}
+                <div className="insight" style={{ marginTop: 12 }}>
+                  <div className="ib" style={{ background: "var(--cyan)" }}><Ic name="ads" /></div>
+                  <p>{content.organicShare != null
+                    ? <><b>{pctFmt(content.organicShare)}</b> do alcance veio de conteúdo orgânico (não-impulsionado).</>
+                    : "Sem alcance orgânico registrado neste período."}</p>
+                </div>
+              </div>
+            ) : <div />}
+          </div>
+
+          {/* Atividade & audiência */}
+          {showActivity && (
+            <div className="card pad-lg" style={{ marginBottom: 16 }}>
+              <div className="card-head"><div className="t">Atividade &amp; audiência</div></div>
+              <div className="mini">
+                {accountsEngaged != null && <MiniStat l="Atividades no perfil" n={fmt(accountsEngaged)} />}
+                <MiniStat l="Visitas ao site" n={linkTaps?.WEBSITE != null ? fmt(linkTaps.WEBSITE) : "—"} />
+                {shown("link_call") && <MiniStat l="Toques em ligar" n={linkTaps?.CALL != null ? fmt(linkTaps.CALL) : "—"} />}
+                {shown("link_email") && <MiniStat l="Toques em e-mail" n={linkTaps?.EMAIL != null ? fmt(linkTaps.EMAIL) : "—"} />}
+              </div>
+            </div>
+          )}
+
+          {/* Conversas */}
+          {showConv && (
+            <div className="card pad-lg" style={{ marginBottom: 16 }}>
+              <div className="card-head"><div className="t">Conversas</div></div>
+              <div className="mini">
+                <MiniStat l="Leads (DM)" n={inboxLeads != null ? fmt(inboxLeads) : "—"} />
+                <MiniStat l="Conversas" n={inbox?.volume ? fmt(inbox.volume.summary.uniqueConversations) : "—"} />
+                <MiniStat l="Tempo de resposta" n={inbox?.responseTime && inbox.responseTime.summary.sampleSize > 0 ? humanDur(inbox.responseTime.summary.medianSeconds) : "—"} />
+              </div>
+              {showConvChart && inbox?.volume && (
+                <div style={{ marginTop: 14 }}>
+                  <Chart svg={lineChart(
+                    inbox.volume.timeseries.map((t) => t.date.slice(5)),
                     [
-                      { name: "Alcance", color: cor, data: daily!.map((r) => r.metrics.reach || 0), fill: true },
-                      ...(comparando && cmpDaily && cmpDaily.length
-                        ? [{ name: "Comparação", color: cor, data: cmpDaily.slice(0, daily!.length).map((r) => r.metrics.reach || 0), dash: true } as LineSeries]
-                        : []),
+                      { name: "recebidas", color: cor, data: inbox.volume.timeseries.map((t) => t.received), fill: true },
+                      { name: "enviadas", color: "#8E8E93", data: inbox.volume.timeseries.map((t) => t.sent) },
                     ],
-                    { sel: daily!.length - 1 }
-                  )}
-                />
-              )}
-              {showImprChart && (
-                <Chart
-                  svg={lineChart(
-                    daily!.map((r) => r.date.slice(5)),
-                    [{ name: "Impressões", color: cor, data: daily!.map((r) => r.metrics.impressions || 0), fill: true }],
-                    { sel: daily!.length - 1 }
-                  )}
-                />
-              )}
-              {showOrganic && content && (
-                <div style={{ marginTop: 12 }}>
-                  <div className="tblock-sub" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span>Orgânico vs impulsionado{content.organicShare != null && <> · {pctFmt(content.organicShare)} orgânico</>}</span>
-                    {comparando && content.organicShare != null && cmpContent?.organicShare != null && (
-                      <DeltaChip delta={computeDelta(content.organicShare, cmpContent.organicShare, true)} scn />
-                    )}
-                  </div>
-                  {(() => {
-                    const orMax = Math.max(1, content.organic.reach, content.paid.reach);
-                    return (
-                      <>
-                        <BarRow k="Orgânico" v={content.organic.reach} max={orMax} color={cor} formatted={kfmt(content.organic.reach)} />
-                        <BarRow k="Impulsionado" v={content.paid.reach} max={orMax} color="#8E8E93" formatted={kfmt(content.paid.reach)} />
-                      </>
-                    );
-                  })()}
+                    { h: 200, sel: inbox.volume.timeseries.length - 1 }
+                  )} />
                 </div>
               )}
             </div>
           )}
 
-          {/* 5) ENGAJAMENTO — total + taxa + breakdown horizontal */}
-          {showEngBlock && (
-            <div className="card">
-              <div className="card-head">
-                <div className="t">Engajamento</div>
-                <span className="badge">no período</span>
-              </div>
-              <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-end", marginBottom: engRows.length ? 12 : 0 }}>
-                {engBigInter && (
+          {/* Top conteúdos do período + Melhores horários */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 16 }}>
+            {showTop && top?.posts ? (
+              <div className="card pad-lg">
+                <div className="card-head">
                   <div>
-                    <div className="bignum">{kfmt(interactionsTotal!)}</div>
-                    <div className="tblock-sub" style={{ margin: "4px 0 0" }}>interações totais</div>
+                    <div className="t">Top conteúdos do período</div>
+                    <div className="sub">por engajamento · via integração</div>
                   </div>
-                )}
-                {engBigRate && (
-                  <div>
-                    <div className="bignum">{pctFmt(engRate!)}</div>
-                    <div className="tblock-sub" style={{ margin: "4px 0 0" }}>taxa de engajamento</div>
-                  </div>
-                )}
-                {saveRate != null && (
-                  <div>
-                    <div className="bignum">{pctFmt(saveRate)}</div>
-                    <div className="tblock-sub" style={{ margin: "4px 0 0" }}>taxa de salvamento</div>
-                  </div>
-                )}
-              </div>
-              {engRows.map((r) => (
-                <BarRow key={r.id} k={r.k} v={metrics[r.key].total} max={engMax} color={cor} formatted={fmt(metrics[r.key].total)} />
-              ))}
-            </div>
-          )}
-
-          {/* 6) CONTEÚDO — mix por tipo + top conteúdos (ids: content_mix, posts) */}
-          {showContentBlock && (
-            <div className="card">
-              <div className="card-head">
-                <div className="t">Conteúdo</div>
-                {content && content.total > 0 && <span className="badge">{fmt(content.total)} posts</span>}
-              </div>
-              {showMixIn && content && (
-                <div style={{ marginBottom: showTopIn ? 14 : 0 }}>
-                  <div className="tblock-sub">Mix por tipo de mídia</div>
-                  {mixRows.map(([t, v]) => (
-                    <BarRow key={t} k={TYPE_PT[t] || t} v={v} max={content.total} color={cor} formatted={fmt(v)} />
-                  ))}
                 </div>
-              )}
-              {showTopIn && top && top.posts && (
-                <div>
-                  <div className="tblock-sub">Top conteúdos · por engajamento</div>
-                  {top.posts.slice(0, 6).map((p) => {
+                <div className="top-list">
+                  {top.posts.slice(0, 6).map((p, i) => {
                     const a = p.analytics || {};
                     const txt = (p.content || "").replace(/\s+/g, " ").trim();
-                    const short = txt.length > 80 ? txt.slice(0, 80) + "…" : txt || "(sem legenda)";
+                    const short = txt.length > 60 ? txt.slice(0, 60) + "…" : txt || "(sem legenda)";
+                    const mt = (p as { mediaType?: string }).mediaType;
+                    const fmtTag = [
+                      mt ? (TYPE_PT[String(mt).toLowerCase()] || mt) : null,
+                      p.publishedAt ? p.publishedAt.slice(0, 10).split("-").reverse().join("/") : null,
+                    ].filter(Boolean).join(" · ");
                     return (
-                      <div className="toppost" key={p._id}>
-                        <div className="tp-txt">{short}</div>
-                        <div className="tp-badges">
-                          {a.engagementRate != null && <span>{erFmt(a.engagementRate)}</span>}
-                          {a.reach != null && <span>{kfmt(a.reach)}</span>}
-                          {a.likes != null && <span>{fmt(a.likes)} ♥</span>}
+                      <div className="top-item" key={p._id}>
+                        <span className="rank">{i + 1}</span>
+                        <div>
+                          <div className="tt">{short}</div>
+                          <div className="fmt">
+                            {fmtTag}
+                            {p.platformPostUrl ? <> · <a href={p.platformPostUrl} target="_blank" rel="noopener" style={{ color: "var(--cyan)" }}>abrir ↗</a></> : null}
+                          </div>
                         </div>
-                        {p.platformPostUrl && (
-                          <a href={p.platformPostUrl} target="_blank" rel="noopener">abrir ↗</a>
-                        )}
+                        <div className="mv">
+                          {a.engagementRate != null
+                            ? <>{erFmt(a.engagementRate)}<span>engaj.</span></>
+                            : a.reach != null
+                              ? <>{kfmt(a.reach)}<span>alcance</span></>
+                              : <>{fmt(a.views || 0)}<span>views</span></>}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            ) : <div />}
 
-          {/* 7) PERFIL & SITE (IG) — visitas ao site, toques, stories */}
-          {showProfileBlock && (
-            <div className="card">
+            <div className="card pad-lg">
               <div className="card-head">
-                <div className="t">Perfil &amp; site</div>
-                <span className="badge">no período</span>
-              </div>
-              <div className="mini">
-                {profileStats.map((st, i) => <MiniStat key={i} l={st.l} n={st.n} />)}
-              </div>
-            </div>
-          )}
-
-          {/* 8) CONVERSAS — leads, conversas, tempo de resposta + volume + fontes */}
-          {showConvBlock && (
-            <div className="card">
-              <div className="card-head">
-                <div className="t">Conversas</div>
-                <span className="badge">no período</span>
-              </div>
-              {convStats.length > 0 && (
-                <div className="mini" style={{ marginBottom: showConvChart || showConvSrc ? 14 : 0 }}>
-                  {convStats.map((st, i) => <MiniStat key={i} l={st.l} n={st.n} />)}
-                </div>
-              )}
-              {showConvChart && inbox?.volume && (
-                <div style={{ marginBottom: showConvSrc ? 12 : 0 }}>
-                  <div className="tblock-sub">Volume por dia</div>
-                  <Chart
-                    svg={lineChart(
-                      inbox.volume.timeseries.map((t) => t.date.slice(5)),
-                      [
-                        { name: "recebidas", color: cor, data: inbox.volume.timeseries.map((t) => t.received), fill: true },
-                        { name: "enviadas", color: "#8E8E93", data: inbox.volume.timeseries.map((t) => t.sent) },
-                      ],
-                      { sel: inbox.volume.timeseries.length - 1 }
-                    )}
-                  />
-                </div>
-              )}
-              {showConvSrc && inbox?.sources && (
                 <div>
-                  <div className="tblock-sub">Fontes das conversas</div>
-                  {(() => {
-                    const rows = inbox.sources.sources.map((sr) => ({
-                      label: SOURCE_PT[sr.source] || sr.source,
-                      val: sr.received || sr.sent || sr.read,
-                    }));
-                    const max = Math.max(1, ...rows.map((r) => r.val));
-                    return rows.map((r, i) => (
-                      <BarRow key={i} k={r.label} v={r.val} max={max} color={cor} formatted={fmt(r.val)} />
-                    ));
-                  })()}
+                  <div className="t">Melhores horários</div>
+                  <div className="sub">engajamento médio por dia × turno (0–100)</div>
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* 9) AUDIÊNCIA (IG) — demografia por dimensão (id: audiencia) */}
-          {showDemographics && demoDims.length > 0 && (
-            <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 16 }}>
-              {demoDims.map(({ dim, items }) => {
-                const topD = [...items].sort((a, b) => b.value - a.value).slice(0, 8);
-                const max = Math.max(1, ...topD.map((t) => t.value));
-                return (
-                  <div className="card" key={dim}>
-                    <div className="card-head">
-                      <div className="t">Audiência · {DIM_PT[dim] || dim}</div>
-                      <span className="badge">seguidores</span>
-                    </div>
-                    {topD.map((t, i) => (
-                      <BarRow
-                        key={i}
-                        k={dim === "gender" ? GENDER_PT[t.dimension] || t.dimension : t.dimension}
-                        v={t.value}
-                        max={max}
-                        color={cor}
-                        formatted={fmt(t.value)}
-                      />
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* 10) OUTROS INDICADORES — séries diárias/por métrica extras + custom + lacunas */}
-          {showOther && (
-            <div className="card">
-              <div className="card-head">
-                <div className="t">Outros indicadores</div>
-                <span className="badge">{comparando ? "atual · comparação" : "no período"}</span>
               </div>
-              {daily && daily.length > 0 && otherDaily.map((it) => {
-                if (it.bind.src !== "dailyChart") return null;
-                const k = it.bind.key;
-                const series: LineSeries[] = [
-                  { name: pt(k), color: cor, data: daily.map((r) => (r.metrics as Record<string, number>)[k] ?? 0), fill: true },
-                ];
-                if (comparando && cmpDaily && cmpDaily.length) {
-                  series.push({ name: "Comparação", color: cor, data: cmpDaily.slice(0, daily.length).map((r) => (r.metrics as Record<string, number>)[k] ?? 0), dash: true });
-                }
-                return (
-                  <div key={it.id} style={{ marginBottom: 12 }}>
-                    <div className="tblock-sub">{it.label}</div>
-                    <Chart svg={lineChart(daily.map((r) => r.date.slice(5)), series, { sel: daily.length - 1 })} />
-                  </div>
-                );
-              })}
-              {serieKeys.map((k) => {
-                const vals = metrics[k].values!;
-                const cmpVals = cmpIns?.metrics?.[k]?.values || [];
-                const series: LineSeries[] = [
-                  { name: pt(k), color: cor, data: vals.map((v) => v.value), fill: true },
-                ];
-                if (comparando && cmpVals.length) {
-                  series.push({ name: "Comparação", color: cor, data: cmpVals.slice(0, vals.length).map((v) => v.value), dash: true });
-                }
-                return (
-                  <div key={k} style={{ marginBottom: 12 }}>
-                    <div className="tblock-sub">{pt(k)}</div>
-                    <Chart svg={lineChart(vals.map((v) => v.date.slice(5)), series, { sel: vals.length - 1 })} />
-                  </div>
-                );
-              })}
-              {(customKpis.length > 0 || gapKpis.length > 0) && (
-                <div className="grid kpis">
-                  {customKpis.map((c) => {
-                    const m = c.metric ? metrics[c.metric] : undefined;
-                    return <KpiCard key={c.id} lbl={c.label} val={m ? kfmt(m.total) : "—"} foot={m ? undefined : c.metric ? "sem dado" : "manual"} />;
-                  })}
-                  {gapKpis.map((it) => (
-                    <KpiCard key={it.id} lbl={it.label} val="—" foot="sem dado" />
+              {hasHeat ? (
+                <div className="heat">
+                  <div />
+                  {DIAS.map((d) => <div key={d} className="hh">{d}</div>)}
+                  {TURNOS.map((t, ti) => (
+                    <Fragment key={t.nome}>
+                      <div className="hh" style={{ justifyContent: "flex-end", paddingRight: 4 }}>{t.nome}</div>
+                      {heatGrid[ti].map((val, ci) => {
+                        const nv = heatMax > 0 ? val / heatMax : 0;
+                        return <div key={ci} className="hc" style={{ background: `rgba(0,187,197,${(0.14 + nv * 0.86).toFixed(2)})` }}>{Math.round(nv * 100)}</div>;
+                      })}
+                    </Fragment>
                   ))}
                 </div>
+              ) : (
+                <div style={{ fontSize: 12, color: "var(--label-3)" }}>sem dados de horário no período</div>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        </>
       )}
     </>
   );

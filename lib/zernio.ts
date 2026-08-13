@@ -257,6 +257,16 @@ export function postAnalytics(opts: { accountId?: string; platform?: string; fro
   return zernio<PostAnalyticsResp>(`/analytics?${q.toString()}`);
 }
 
+// ── Melhores horários (best-time): engajamento médio por dia da semana × hora ──
+export interface BestTimeSlot { day_of_week: number; hour: number; avg_engagement: number; post_count: number }
+export async function bestTime(accountId: string, platform: string, opts?: { fromDate?: string; toDate?: string }): Promise<BestTimeSlot[]> {
+  const q = new URLSearchParams({ accountId, platform });
+  if (opts?.fromDate) q.set("fromDate", opts.fromDate);
+  if (opts?.toDate) q.set("toDate", opts.toDate);
+  const r = await zernio<{ slots: BestTimeSlot[] }>(`/analytics/best-time?${q.toString()}`);
+  return r.slots || [];
+}
+
 // ── Toques em links do perfil por TIPO (WEBSITE/CALL/EMAIL/TEXT/DIRECTION) — IG ──
 export async function profileLinkTaps(accountId: string, opts?: { since?: string; until?: string }): Promise<Record<string, number>> {
   const q = new URLSearchParams({ accountId, metrics: "profile_links_taps", breakdown: "contact_button_type" });

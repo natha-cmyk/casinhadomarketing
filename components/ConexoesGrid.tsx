@@ -19,6 +19,7 @@ const AD_CONNECT: Record<string, string> = {
   linkedinads: "linkedin",
   tiktokads: "tiktok",
   pinterestads: "pinterest",
+  xads: "twitter",
 };
 
 // mapeia o id da rede → nome do glifo em ICONS (lib/nav)
