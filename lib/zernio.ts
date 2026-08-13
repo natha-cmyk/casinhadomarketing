@@ -106,4 +106,29 @@ export function accountInsights(
   return zernio<AnalyticsResponse>(`/analytics/${encodeURIComponent(platform)}/account-insights?${q.toString()}`);
 }
 
+// GET /analytics/{platform}/follower-history — série diária de seguidores (mesmo envelope)
+export function followerHistory(platform: string, accountId: string, opts?: { since?: string; until?: string }) {
+  const q = new URLSearchParams({ accountId });
+  if (opts?.since) q.set("since", opts.since);
+  if (opts?.until) q.set("until", opts.until);
+  return zernio<AnalyticsResponse>(`/analytics/${encodeURIComponent(platform)}/follower-history?${q.toString()}`);
+}
+
+// GET /analytics/instagram/demographics — audiência por idade/cidade/país/gênero (top 45)
+export interface DemographicsResponse {
+  success: boolean;
+  accountId: string;
+  platform: string;
+  metric: string;
+  breakdowns?: Record<string, { dimension: string; value: number }[]>;
+  metrics?: Record<string, { breakdowns?: { dimension: string; value: number }[] }>;
+  [k: string]: unknown;
+}
+export function demographics(accountId: string, opts?: { metric?: string; breakdown?: string }) {
+  const q = new URLSearchParams({ accountId });
+  q.set("metric", opts?.metric || "follower_demographics");
+  if (opts?.breakdown) q.set("breakdown", opts.breakdown);
+  return zernio<DemographicsResponse>(`/analytics/instagram/demographics?${q.toString()}`);
+}
+
 // TODO(zernio): POST /posts (publish do calendário) — {content, scheduledFor, timezone, platforms:[{platform,accountId}]}

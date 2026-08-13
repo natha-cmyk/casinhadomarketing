@@ -87,7 +87,7 @@ export const TEMPORAL = [
   "threads", "reddit", "pinterest", "bluesky", "snapchat", "googlebusiness",
   "ads", "canais", // Canais Pagos e Geração também usam período
 ];
-export const usesCompare = (v: string) => v === "instagram";
+export const usesCompare = (v: string) => SOCIAL_IDS.includes(v);
 
 // redes sociais (grupo "Canais") — itens condicionais no sidebar
 export const SOCIAL_IDS = [
