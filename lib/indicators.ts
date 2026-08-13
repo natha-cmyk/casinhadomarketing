@@ -10,19 +10,32 @@ const PANEL_PLATFORM: Record<string, string> = {
   youtube: "youtube", linkedin: "linkedin", x: "twitter",
 };
 
-// métricas reais por plataforma (espelha ACCOUNT_METRICS do lib/zernio; instagram e tiktok verificados ao vivo)
+// métricas reais por plataforma — o catálogo "estudo por canal": só os indicadores que a rede
+// REALMENTE entrega (verificado ao vivo). youtube/tiktok/linkedin corrigidos; threads sem métricas.
 const PLATFORM_METRICS: Record<string, string[]> = {
   instagram: ["reach", "views", "accounts_engaged", "total_interactions", "likes", "comments",
     "shares", "saves", "replies", "reposts", "follows_and_unfollows", "profile_links_taps"],
   facebook: ["reach", "views", "total_interactions", "likes", "comments", "shares", "post_engagements"],
+  // tiktok: 6 contadores lifetime (account-insights) — sem série
   tiktok: ["follower_count", "following_count", "likes_count", "video_count", "followers_gained", "followers_lost"],
-  youtube: ["views", "likes", "comments", "shares", "subscribers_gained", "subscribers_lost", "watch_time", "average_view_duration"],
-  linkedin: ["impressions", "clicks", "likes", "comments", "shares", "engagement", "unique_impressions"],
+  // youtube: channel-insights (totais no período) — sem série de canal
+  youtube: ["views", "estimatedMinutesWatched", "subscribersGained", "subscribersLost"],
+  // linkedin (pessoal): linkedin-aggregate (lifetime)
+  linkedin: ["impressions", "reach", "reactions", "comments", "shares", "saves", "sends"],
+  // threads: sem endpoint de analytics — só seguidores (KPI base)
   twitter: ["impressions", "likes", "replies", "reposts", "profile_visits", "engagements"],
 };
 
 // plataformas com caixa de entrada (inbox analytics)
 const INBOX_PLATFORMS = new Set(["instagram", "facebook"]);
+// plataformas com posting/série (daily-metrics, top conteúdos, best-time)
+const POSTING_PLATFORMS = new Set(["instagram", "facebook", "tiktok"]);
+// plataformas com "rendimento orgânico" / visitas ao site / taxas de marketing (base rica IG/FB)
+const ORGANIC_PLATFORMS = new Set(["instagram", "facebook"]);
+// plataformas com demografia de audiência
+const DEMO_PLATFORMS = new Set(["instagram", "youtube"]);
+// plataformas com série diária de seguidores (follower-history)
+const FOLLOWER_CHART_PLATFORMS = new Set(["instagram", "facebook", "tiktok"]);
 // métricas diárias uniformes (daily-metrics, derivadas dos posts)
 const DAILY_METRICS = ["reach", "impressions", "views", "likes", "comments", "shares", "saves"];
 
@@ -40,6 +53,11 @@ export const METRIC_LABEL: Record<string, string> = {
   profile_views: "Visitas ao perfil", post_engagements: "Engajamento de posts",
   follower_count: "Seguidores", following_count: "Seguindo", likes_count: "Curtidas (total)",
   video_count: "Vídeos", followers_gained: "Seguidores ganhos", followers_lost: "Seguidores perdidos",
+  // youtube (channel-insights)
+  estimatedMinutesWatched: "Tempo de exibição (min)", subscribersGained: "Inscritos ganhos",
+  subscribersLost: "Inscritos perdidos",
+  // linkedin (aggregate)
+  reactions: "Reações", sends: "Envios",
 };
 export const metricLabel = (k: string) => METRIC_LABEL[k] || k.replace(/_/g, " ");
 
@@ -79,28 +97,39 @@ const DOC_GAPS: Record<string, CatItem[]> = {
 export function socialCatalog(panel: string): CatItem[] {
   const plat = PANEL_PLATFORM[panel];
   if (!plat) return [];
+  const hasPosting = POSTING_PLATFORMS.has(plat);
   const items: CatItem[] = [
     { id: "seguidores", label: "Seguidores", desc: "base total + evolução", kind: "kpi", bind: { src: "follower" }, def: true, group: "Crescimento" },
-    { id: "ch_followers", label: "Evolução de seguidores", desc: "série diária", kind: "chart", bind: { src: "followerChart" }, def: true, group: "Crescimento" },
-    { id: "ch_key", label: "Série diária", desc: "métrica-chave por dia (varia por período)", kind: "chart", bind: { src: "none" }, def: true, group: "Crescimento" },
   ];
+  // evolução de seguidores (série) só onde a rede entrega follower-history
+  if (FOLLOWER_CHART_PLATFORMS.has(plat)) {
+    items.push({ id: "ch_followers", label: "Evolução de seguidores", desc: "série diária", kind: "chart", bind: { src: "followerChart" }, def: true, group: "Crescimento" });
+  }
+  // série diária (métrica-chave por dia) só onde há daily-metrics
+  if (hasPosting) {
+    items.push({ id: "ch_key", label: "Série diária", desc: "métrica-chave por dia (varia por período)", kind: "chart", bind: { src: "none" }, def: true, group: "Crescimento" });
+  }
   for (const key of PLATFORM_METRICS[plat] || []) {
     items.push({
       id: "m_" + key, label: metricLabel(key), kind: "kpi",
       bind: { src: "metric", key }, def: true, group: "Indicadores",
     });
   }
-  // razões calculadas (marketing) — sem novo dado, mas muito úteis
-  items.push(
-    { id: "der_eng_rate", label: "Taxa de engajamento", desc: "interações ÷ alcance", kind: "kpi", bind: { src: "derived", key: "eng_rate" }, def: true, group: "Taxas" },
-    { id: "der_reach_rate", label: "Alcance sobre a base", desc: "alcance ÷ seguidores", kind: "kpi", bind: { src: "derived", key: "reach_rate" }, def: true, group: "Taxas" },
-    { id: "der_save_rate", label: "Taxa de salvamento", desc: "salvos ÷ alcance", kind: "kpi", bind: { src: "derived", key: "save_rate" }, def: false, group: "Taxas" },
-  );
-  // conteúdo: rendimento orgânico (orgânico vs impulsionado) + mix por tipo — posting analytics
-  items.push(
-    { id: "organico", label: "Rendimento orgânico", desc: "alcance de posts orgânicos vs impulsionados", kind: "kpi", bind: { src: "content", key: "organicShare" }, def: true, group: "Alcance & mix" },
-    { id: "content_mix", label: "Mix de conteúdo", desc: "reels/vídeos, carrosséis e imagens no período", kind: "section", bind: { src: "content", key: "mix" }, def: true, group: "Conteúdo" },
-  );
+  // razões calculadas (marketing) — dependem de alcance/interações/salvos (base IG/FB)
+  if (ORGANIC_PLATFORMS.has(plat)) {
+    items.push(
+      { id: "der_eng_rate", label: "Taxa de engajamento", desc: "interações ÷ alcance", kind: "kpi", bind: { src: "derived", key: "eng_rate" }, def: true, group: "Taxas" },
+      { id: "der_reach_rate", label: "Alcance sobre a base", desc: "alcance ÷ seguidores", kind: "kpi", bind: { src: "derived", key: "reach_rate" }, def: true, group: "Taxas" },
+      { id: "der_save_rate", label: "Taxa de salvamento", desc: "salvos ÷ alcance", kind: "kpi", bind: { src: "derived", key: "save_rate" }, def: false, group: "Taxas" },
+    );
+  }
+  // conteúdo: rendimento orgânico (IG/FB) + mix por tipo (qualquer rede com posting)
+  if (ORGANIC_PLATFORMS.has(plat)) {
+    items.push({ id: "organico", label: "Rendimento orgânico", desc: "alcance de posts orgânicos vs impulsionados", kind: "kpi", bind: { src: "content", key: "organicShare" }, def: true, group: "Alcance & mix" });
+  }
+  if (hasPosting) {
+    items.push({ id: "content_mix", label: "Mix de conteúdo", desc: "reels/vídeos, carrosséis e imagens no período", kind: "section", bind: { src: "content", key: "mix" }, def: true, group: "Conteúdo" });
+  }
   if (plat === "instagram") {
     // visitas ao site: dimensão WEBSITE de profile_links_taps (breakdown por tipo)
     items.push(
@@ -110,14 +139,16 @@ export function socialCatalog(panel: string): CatItem[] {
       { id: "stories_count", label: "Stories ativos", desc: "stories publicados nas últimas 24h", kind: "kpi", bind: { src: "stories" }, def: true, group: "Conteúdo" },
     );
   }
-  // gráficos diários (série que muda por período) — daily-metrics
-  items.push(
-    { id: "d_reach", label: "Alcance por dia", desc: "série diária", kind: "chart", bind: { src: "dailyChart", key: "reach" }, def: true, group: "Séries diárias" },
-    { id: "d_impressions", label: "Impressões por dia", kind: "chart", bind: { src: "dailyChart", key: "impressions" }, def: false, group: "Séries diárias" },
-    { id: "d_likes", label: "Curtidas por dia", kind: "chart", bind: { src: "dailyChart", key: "likes" }, def: false, group: "Séries diárias" },
-  );
-  // top conteúdos (posting analytics) — REAL
-  items.push({ id: "posts", label: "Top conteúdos", desc: "ranking por engajamento", kind: "section", bind: { src: "posts" }, def: true, group: "Conteúdo" });
+  // gráficos diários (série que muda por período) — daily-metrics (só onde há posting)
+  if (hasPosting) {
+    items.push(
+      { id: "d_reach", label: "Alcance por dia", desc: "série diária", kind: "chart", bind: { src: "dailyChart", key: "reach" }, def: true, group: "Séries diárias" },
+      { id: "d_impressions", label: "Impressões por dia", kind: "chart", bind: { src: "dailyChart", key: "impressions" }, def: false, group: "Séries diárias" },
+      { id: "d_likes", label: "Curtidas por dia", kind: "chart", bind: { src: "dailyChart", key: "likes" }, def: false, group: "Séries diárias" },
+    );
+    // top conteúdos (posting analytics) — REAL
+    items.push({ id: "posts", label: "Top conteúdos", desc: "ranking por engajamento", kind: "section", bind: { src: "posts" }, def: true, group: "Conteúdo" });
+  }
   // inbox (conversas/DMs)
   if (INBOX_PLATFORMS.has(plat)) {
     items.push(
@@ -128,7 +159,7 @@ export function socialCatalog(panel: string): CatItem[] {
       { id: "inbox_src", label: "Fontes das conversas", kind: "section", bind: { src: "inbox", key: "sources" }, def: false, group: "Conversas" },
     );
   }
-  if (plat === "instagram") {
+  if (DEMO_PLATFORMS.has(plat)) {
     items.push({ id: "audiencia", label: "Audiência (demografia)", desc: "idade, gênero, país, cidade", kind: "section", bind: { src: "demographics" }, def: true, group: "Audiência" });
   }
   for (const g of DOC_GAPS[panel] || []) items.push(g);

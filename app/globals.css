@@ -606,3 +606,5 @@ svg.chartI{cursor:crosshair}
 .si-dim .bar-row .v{font-size:12px}
 /* chip multi-seleção ativo do "Desempenho no tempo": herda o acento da métrica */
 .perf-seg button.on{background:#fff;color:var(--label);box-shadow:inset 0 0 0 1px var(--chip-accent,var(--hairline-2)),0 1px 3px rgba(0,0,0,.10)}
+/* Desempenho no tempo: controles agrupados (tipo de gráfico + chips de métrica) */
+.perf-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end}

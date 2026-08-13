@@ -12,7 +12,7 @@ import { PageHead, KpiCard, DeltaChip, BarRow, MiniStat } from "@/components/ui"
 import { Ic } from "@/components/Ic";
 import { Chart } from "@/components/Chart";
 import { Spinner } from "@/components/Spinner";
-import { lineChart, type LineSeries } from "@/lib/charts";
+import { lineChart, barChart, pieChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
 import { REDES } from "@/lib/seed-data";
@@ -29,6 +29,10 @@ const zplat = (id: string) => ZP[id] || id;
 const COM_ANALYTICS = new Set(["instagram", "facebook", "tiktok", "youtube", "linkedin", "twitter"]);
 // plataformas com caixa de entrada (inbox)
 const COM_INBOX = new Set(["instagram", "facebook"]);
+// plataformas com posting/série diária (daily-metrics, top conteúdos, melhores horários)
+const COM_POSTING = new Set(["instagram", "facebook", "tiktok"]);
+// plataformas com "rendimento orgânico" (orgânico vs impulsionado) — base IG/FB
+const COM_ORGANIC = new Set(["instagram", "facebook"]);
 
 // URL do perfil público por plataforma (a partir de acct.username)
 const PROFILE_URL: Record<string, (u: string) => string> = {
@@ -52,7 +56,10 @@ const pt = (k: string) => METRIC_PT[k] || k.replace(/_/g, " ");
 // dimensões da audiência (demografia IG) → título PT
 const DIM_PT: Record<string, string> = { age: "Idade", gender: "Gênero", country: "País", city: "Cidade" };
 const DIM_ORDER = ["age", "gender", "country", "city"];
-const GENDER_PT: Record<string, string> = { M: "Masculino", F: "Feminino", U: "Não informado" };
+const GENDER_PT: Record<string, string> = {
+  M: "Masculino", F: "Feminino", U: "Não informado",
+  male: "Masculino", female: "Feminino", unknown: "Não informado",
+};
 
 // fontes das conversas (inbox) → PT
 const SOURCE_PT: Record<string, string> = { contact: "Cliente", platform: "Nós", recipient: "Lidas" };
@@ -185,6 +192,8 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [err, setErr] = useState<string | null>(null);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
+  // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras / pizza)
+  const [perfChart, setPerfChart] = useState<"line" | "bar" | "pie">("line");
 
   // fetch combinado (métricas + seguidores + série + daily + top + demografia) + comparação
   useEffect(() => {
@@ -339,6 +348,56 @@ export function SocialInsights({ rede }: { rede: string }) {
   const hasInbox = COM_INBOX.has(platform);
   const accountsEngaged = metrics.accounts_engaged?.total ?? null;
 
+  // ── KPIs-herói POR PLATAFORMA (estudo por canal): cada rede mostra os indicadores reais dela ──
+  const mtot = (k: string) => metrics[k]?.total ?? null;
+  const cmpMtot = (k: string) => (comparando ? cmpIns?.metrics?.[k]?.total ?? null : null);
+  const viewsDaily = daily && daily.length ? sum(daily.map((r) => r.metrics.views || 0)) : null;
+  interface Hero { lbl: string; val: string; foot?: string; cur?: number | null; cmp?: number | null }
+  let heroes: Hero[];
+  if (platform === "youtube") {
+    const netSub =
+      mtot("subscribersGained") != null || mtot("subscribersLost") != null
+        ? (mtot("subscribersGained") ?? 0) - (mtot("subscribersLost") ?? 0)
+        : null;
+    heroes = [
+      { lbl: "Inscritos", val: followersCount != null ? fmt(followersCount) : "—", foot: netSub != null ? `líquido ${netSub >= 0 ? "+" : ""}${fmt(netSub)} no período` : undefined, cur: followersCount, cmp: cmpFollLast },
+      { lbl: "Visualizações", val: mtot("views") != null ? kfmt(mtot("views")!) : "—", foot: "no período", cur: mtot("views"), cmp: cmpMtot("views") },
+      { lbl: "Tempo de exibição", val: mtot("estimatedMinutesWatched") != null ? `${kfmt(mtot("estimatedMinutesWatched")!)} min` : "—", foot: "estimado", cur: mtot("estimatedMinutesWatched"), cmp: cmpMtot("estimatedMinutesWatched") },
+      { lbl: "Inscritos líquidos", val: netSub != null ? `${netSub >= 0 ? "+" : ""}${fmt(netSub)}` : "—", foot: "ganhos − perdidos" },
+    ];
+  } else if (platform === "tiktok") {
+    heroes = [
+      { lbl: "Seguidores", val: followersCount != null ? fmt(followersCount) : "—", foot: net != null ? `líquido ${net >= 0 ? "+" : ""}${fmt(net)} no período` : undefined, cur: followersCount, cmp: cmpFollLast },
+      { lbl: "Curtidas (total)", val: mtot("likes_count") != null ? kfmt(mtot("likes_count")!) : "—", foot: "acumulado", cur: mtot("likes_count"), cmp: cmpMtot("likes_count") },
+      { lbl: "Vídeos", val: mtot("video_count") != null ? fmt(mtot("video_count")!) : "—", foot: "publicados", cur: mtot("video_count"), cmp: cmpMtot("video_count") },
+      { lbl: "Visualizações", val: viewsDaily != null ? kfmt(viewsDaily) : "—", foot: "no período" },
+    ];
+  } else if (platform === "linkedin") {
+    const liInter =
+      mtot("reactions") != null || mtot("comments") != null || mtot("shares") != null
+        ? (mtot("reactions") ?? 0) + (mtot("comments") ?? 0) + (mtot("shares") ?? 0)
+        : null;
+    heroes = [
+      { lbl: "Seguidores", val: followersCount != null ? fmt(followersCount) : "—", foot: "base atual", cur: followersCount, cmp: cmpFollLast },
+      { lbl: "Impressões", val: mtot("impressions") != null ? kfmt(mtot("impressions")!) : "—", foot: "acumulado", cur: mtot("impressions"), cmp: cmpMtot("impressions") },
+      { lbl: "Alcance", val: mtot("reach") != null ? kfmt(mtot("reach")!) : "—", foot: "acumulado", cur: mtot("reach"), cmp: cmpMtot("reach") },
+      { lbl: "Interações", val: liInter != null ? fmt(liInter) : "—", foot: "reações + coment. + compart." },
+    ];
+  } else if (platform === "threads") {
+    heroes = [
+      { lbl: "Seguidores", val: followersCount != null ? fmt(followersCount) : "—", foot: "base atual", cur: followersCount, cmp: cmpFollLast },
+    ];
+  } else {
+    // instagram / facebook (base rica original)
+    heroes = [
+      { lbl: "Seguidores", val: followersCount != null ? fmt(followersCount) : "—", foot: net != null ? `líquido ${net >= 0 ? "+" : ""}${fmt(net)} no período` : undefined, cur: followersCount, cmp: cmpFollLast },
+      { lbl: "Contas alcançadas", val: reachTotal != null ? kfmt(reachTotal) : "—", foot: "alcance", cur: reachTotal, cmp: cmpReachTotal },
+      { lbl: "Visualizações", val: viewsTotal != null ? kfmt(viewsTotal) : "—", foot: "impressões", cur: viewsTotal, cmp: cmpViewsTotal },
+      { lbl: "Interações", val: interactionsTotal != null ? kfmt(interactionsTotal) : "—", foot: "engajamento bruto", cur: interactionsTotal, cmp: cmpInterTotal },
+    ];
+  }
+  const isLimited = platform === "threads";
+
   // ── card "Desempenho no tempo" (assinatura): MULTI-seleção → cruza indicadores na mesma série ──
   const PERF_OPTS: { v: string; l: string }[] = [
     { v: "reach", l: "Alcance" }, { v: "impressions", l: "Impressões" }, { v: "views", l: "Visualizações" },
@@ -358,6 +417,43 @@ export function SocialInsights({ rede }: { rede: string }) {
     );
   const dget = (r: DailyMetricRow, k: string) => (r.metrics as Record<string, number>)[k] ?? 0;
   const showPerf = !!daily && daily.length > 0;
+  const CHART_TYPES: { v: "line" | "bar" | "pie"; l: string }[] = [
+    { v: "line", l: "Linha" }, { v: "bar", l: "Barras" }, { v: "pie", l: "Pizza" },
+  ];
+  // svg do card "Desempenho no tempo" conforme o tipo escolhido — MESMA informação, visual diferente
+  function perfSvg(): string {
+    if (!daily || !daily.length) return "";
+    const metricTotal = (m: string) => sum(daily.map((r) => dget(r, m)));
+    if (perfChart === "bar") {
+      // 1 métrica → barras por dia; várias → barra do total de cada métrica
+      if (perfMetrics.length === 1) {
+        const m = perfMetrics[0];
+        return barChart(daily.map((r) => r.date.slice(5)), daily.map((r) => dget(r, m)), perfColor(m), { h: 250, name: perfLbl(m) });
+      }
+      return barChart(perfMetrics.map(perfLbl), perfMetrics.map(metricTotal), perfMetrics.map(perfColor), { h: 250 });
+    }
+    if (perfChart === "pie") {
+      // composição: participação do total de cada métrica selecionada no período
+      return pieChart(perfMetrics.map((m) => ({ v: metricTotal(m), color: perfColor(m), label: perfLbl(m) })), 230, "no período");
+    }
+    // linha (default) — multi-série + comparação tracejada
+    return lineChart(
+      daily.map((r) => r.date.slice(5)),
+      [
+        ...perfMetrics.map((m) => ({
+          name: perfLbl(m), color: perfColor(m), data: daily.map((r) => dget(r, m)),
+          fill: perfMetrics.length === 1,
+        } as LineSeries)),
+        ...(comparando && cmpDaily && cmpDaily.length
+          ? [{
+              name: `Comparação · ${perfLbl(perfMetrics[0])}`, color: perfColor(perfMetrics[0]),
+              data: cmpDaily.slice(0, daily.length).map((r) => dget(r, perfMetrics[0])), dash: true,
+            } as LineSeries]
+          : []),
+      ],
+      { h: 250, sel: daily.length - 1 }
+    );
+  }
 
   // ── Mix de conteúdo (por tipo de mídia) ──
   const mixRows = content ? Object.entries(content.byType).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]) : [];
@@ -366,14 +462,16 @@ export function SocialInsights({ rede }: { rede: string }) {
 
   // ── Engajamento por tipo ──
   const engTypeRows = ([
-    { k: "Curtidas", key: "likes" }, { k: "Compartilhamentos", key: "shares" },
+    { k: "Curtidas", key: "likes" }, { k: "Reações", key: "reactions" }, { k: "Compartilhamentos", key: "shares" },
     { k: "Salvos", key: "saves" }, { k: "Comentários", key: "comments" }, { k: "Reposts", key: "reposts" },
   ] as const).filter((r) => metrics[r.key] != null);
   const engTypeMax = Math.max(1, ...engTypeRows.map((r) => metrics[r.key].total));
   const engTypeSum = sum(engTypeRows.map((r) => metrics[r.key].total));
 
-  // ── Rendimento orgânico ──
-  const showOrganic = shown("organico") && !!content;
+  // ── Rendimento orgânico (só IG/FB) ──
+  const showOrganic = COM_ORGANIC.has(platform) && shown("organico") && !!content;
+  // ── Melhores horários / posting-derived (só redes com posting) ──
+  const showHorarios = COM_POSTING.has(platform);
 
   // ── Seguidores ──
   const showSeg = shown("seguidores") && (novos != null || saida != null || followersCount != null);
@@ -434,33 +532,23 @@ export function SocialInsights({ rede }: { rede: string }) {
             </div>
           )}
 
-          {/* 4 KPIs */}
+          {/* KPIs-herói por plataforma (estudo por canal) */}
           <div className="grid kpis" style={{ marginBottom: 16 }}>
-            <KpiCard
-              lbl="Seguidores"
-              val={followersCount != null ? fmt(followersCount) : "—"}
-              foot={net != null ? `líquido ${net >= 0 ? "+" : ""}${fmt(net)} no período` : undefined}
-            >
-              {comparando && cmpFollLast != null && followersCount != null
-                ? <DeltaChip delta={computeDelta(followersCount, cmpFollLast, true)} scn />
-                : null}
-            </KpiCard>
-            <KpiCard lbl="Contas alcançadas" val={reachTotal != null ? kfmt(reachTotal) : "—"} foot="alcance">
-              {comparando && cmpReachTotal != null && reachTotal != null
-                ? <DeltaChip delta={computeDelta(reachTotal, cmpReachTotal, true)} scn />
-                : null}
-            </KpiCard>
-            <KpiCard lbl="Visualizações" val={viewsTotal != null ? kfmt(viewsTotal) : "—"} foot="impressões">
-              {comparando && cmpViewsTotal != null && viewsTotal != null
-                ? <DeltaChip delta={computeDelta(viewsTotal, cmpViewsTotal, true)} scn />
-                : null}
-            </KpiCard>
-            <KpiCard lbl="Interações" val={interactionsTotal != null ? kfmt(interactionsTotal) : "—"} foot="engajamento bruto">
-              {comparando && cmpInterTotal != null && interactionsTotal != null
-                ? <DeltaChip delta={computeDelta(interactionsTotal, cmpInterTotal, true)} scn />
-                : null}
-            </KpiCard>
+            {heroes.map((h, i) => (
+              <KpiCard key={i} lbl={h.lbl} val={h.val} foot={h.foot}>
+                {comparando && h.cmp != null && h.cur != null
+                  ? <DeltaChip delta={computeDelta(h.cur, h.cmp, true)} scn />
+                  : null}
+              </KpiCard>
+            ))}
           </div>
+
+          {isLimited && (
+            <div className="card" style={{ marginBottom: 16, fontSize: 13, color: "var(--label-2)" }}>
+              Métricas limitadas nesta rede: o Threads expõe apenas a base de seguidores. Alcance,
+              interações e série diária não estão disponíveis na API pública.
+            </div>
+          )}
 
           {/* Desempenho no tempo (assinatura) — largura total, MULTI-métrica (cruza indicadores) */}
           {showPerf && (
@@ -470,51 +558,45 @@ export function SocialInsights({ rede }: { rede: string }) {
                   <div className="t">Desempenho no tempo</div>
                   <div className="sub">Série diária · {perfMetrics.map(perfLbl).join(" + ")}</div>
                 </div>
-                <div className="seg small perf-seg" role="group" aria-label="Métricas (cruze indicadores)" style={{ flexWrap: "wrap" }}>
-                  {PERF_OPTS.map((o) => {
-                    const on = perfMetrics.includes(o.v);
-                    return (
+                <div className="perf-controls">
+                  <div className="seg small" role="group" aria-label="Tipo de gráfico">
+                    {CHART_TYPES.map((c) => (
                       <button
-                        key={o.v}
+                        key={c.v}
                         type="button"
-                        className={on ? "on" : ""}
-                        aria-pressed={on}
-                        onClick={() => togglePerf(o.v)}
-                        style={on ? ({ "--chip-accent": perfColor(o.v) } as CSSProperties) : undefined}
+                        className={perfChart === c.v ? "on" : ""}
+                        aria-pressed={perfChart === c.v}
+                        onClick={() => setPerfChart(c.v)}
                       >
-                        {o.l}
+                        {c.l}
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
+                  <div className="seg small perf-seg" role="group" aria-label="Métricas (cruze indicadores)" style={{ flexWrap: "wrap" }}>
+                    {PERF_OPTS.map((o) => {
+                      const on = perfMetrics.includes(o.v);
+                      return (
+                        <button
+                          key={o.v}
+                          type="button"
+                          className={on ? "on" : ""}
+                          aria-pressed={on}
+                          onClick={() => togglePerf(o.v)}
+                          style={on ? ({ "--chip-accent": perfColor(o.v) } as CSSProperties) : undefined}
+                        >
+                          {o.l}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-              <Chart
-                svg={lineChart(
-                  daily!.map((r) => r.date.slice(5)),
-                  [
-                    ...perfMetrics.map((m) => ({
-                      name: perfLbl(m),
-                      color: perfColor(m),
-                      data: daily!.map((r) => dget(r, m)),
-                      fill: perfMetrics.length === 1,
-                    } as LineSeries)),
-                    ...(comparando && cmpDaily && cmpDaily.length
-                      ? [{
-                          name: `Comparação · ${perfLbl(perfMetrics[0])}`,
-                          color: perfColor(perfMetrics[0]),
-                          data: cmpDaily.slice(0, daily!.length).map((r) => dget(r, perfMetrics[0])),
-                          dash: true,
-                        } as LineSeries]
-                      : []),
-                  ],
-                  { h: 250, sel: daily!.length - 1 }
-                )}
-              />
+              <Chart svg={perfSvg()} />
               <div className="legend">
                 {perfMetrics.map((m) => (
                   <span key={m}><i style={{ background: perfColor(m) }} />{perfLbl(m)}</span>
                 ))}
-                {comparando && cmpDaily && cmpDaily.length
+                {perfChart === "line" && comparando && cmpDaily && cmpDaily.length
                   ? <span><i className="dash" style={{ borderTopColor: perfColor(perfMetrics[0]) }} />Comparação · {perfLbl(perfMetrics[0])}</span>
                   : null}
               </div>
@@ -647,12 +729,13 @@ export function SocialInsights({ rede }: { rede: string }) {
           </div>
 
           {/* Top conteúdos + Melhores horários — auto-fit (sem coluna vazia quando só um renderiza) */}
+          {(showTop || showHorarios) && (
           <div className="si-flow-sm">
             {showTop && top?.posts && (
               <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
                 <div className="card-head">
                   <div>
-                    <div className="t">Top conteúdos do período</div>
+                    <div className="t">{platform === "tiktok" || platform === "youtube" ? "Top vídeos do período" : "Top conteúdos do período"}</div>
                     <div className="sub">por engajamento · via integração</div>
                   </div>
                 </div>
@@ -690,6 +773,7 @@ export function SocialInsights({ rede }: { rede: string }) {
               </div>
             )}
 
+            {showHorarios && (
             <div className="card pad-lg tcard" style={{ "--tcard-accent": "#8E5BE0" } as CSSProperties}>
               <div className="card-head">
                 <div>
@@ -715,13 +799,15 @@ export function SocialInsights({ rede }: { rede: string }) {
                 <div style={{ fontSize: 12, color: "var(--label-3)" }}>sem dados de horário no período</div>
               )}
             </div>
+            )}
           </div>
+          )}
 
           {/* Audiência — demografia (idade/gênero/país/cidade), cada dimensão num sub-card próprio */}
           {showDemo && (
             <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
               <div className="card-head">
-                <div><div className="t">Audiência</div><div className="sub">quem segue o perfil · por seguidores</div></div>
+                <div><div className="t">Audiência</div><div className="sub">{platform === "youtube" ? "quem assiste · espectadores (%)" : "quem segue o perfil · por seguidores"}</div></div>
               </div>
               <div className="si-demo">
                 {demoDims.map(({ dim, items }) => {

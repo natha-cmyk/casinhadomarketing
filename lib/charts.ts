@@ -97,7 +97,7 @@ export interface PieDatum {
   color: string;
   label: string;
 }
-export function pieChart(data: PieDatum[], size = 200): string {
+export function pieChart(data: PieDatum[], size = 200, centerLabel = "leads"): string {
   const r = size / 2, cx = r, cy = r, inner = r * 0.6, total = sum(data.map((d) => d.v)) || 1;
   let a0 = -Math.PI / 2;
   const arcs = data
@@ -111,5 +111,5 @@ export function pieChart(data: PieDatum[], size = 200): string {
       return `<path d="M${x0},${y0} A${r},${r} 0 ${large} 1 ${x1},${y1} L${ix0},${iy0} A${inner},${inner} 0 ${large} 0 ${ix1},${iy1} Z" fill="${d.color}" stroke="#fff" stroke-width="2"><title>${d.label}: ${fmt(d.v)} (${pct(d.v / total)})</title></path>`;
     })
     .join("");
-  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img">${arcs}<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="23" font-weight="700" fill="#121111">${fmt(total)}</text><text x="${cx}" y="${cy + 15}" text-anchor="middle" font-size="10.5" fill="#6E6E73">leads</text></svg>`;
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img">${arcs}<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="23" font-weight="700" fill="#121111">${fmt(total)}</text><text x="${cx}" y="${cy + 15}" text-anchor="middle" font-size="10.5" fill="#6E6E73">${centerLabel}</text></svg>`;
 }

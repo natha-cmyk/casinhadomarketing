@@ -189,6 +189,59 @@ export function adsInsights(
   return zernio<{ objectId: string; data: AdInsightRow[]; paging?: unknown }>(`/ads/insights?${q.toString()}`);
 }
 
+// ── YouTube (canal) ────────────────────────────────────────────
+// channel-insights: totais de views / tempo de exibição / inscritos (SEM série diária de canal).
+// A API limita o intervalo a 88 dias — clampamos o `since` pra caber.
+export interface YoutubeChannelInsights {
+  success?: boolean; accountId: string; platform: string;
+  dateRange?: { since: string; until: string };
+  metrics: Record<string, { total: number }>;
+  dataDelay?: string;
+}
+function clampSince(since?: string, until?: string, maxDays = 88): string | undefined {
+  if (!since || !until) return since;
+  const s = new Date(since).getTime(), u = new Date(until).getTime();
+  if (!isFinite(s) || !isFinite(u) || u - s <= maxDays * 864e5) return since;
+  const ns = new Date(u - maxDays * 864e5), p = (n: number) => String(n).padStart(2, "0");
+  return `${ns.getUTCFullYear()}-${p(ns.getUTCMonth() + 1)}-${p(ns.getUTCDate())}`;
+}
+export function youtubeChannelInsights(accountId: string, opts?: { since?: string; until?: string }) {
+  const since = clampSince(opts?.since, opts?.until, 88);
+  const q = new URLSearchParams({ accountId });
+  if (since) q.set("since", since);
+  if (opts?.until) q.set("until", opts.until);
+  return zernio<YoutubeChannelInsights>(`/analytics/youtube/channel-insights?${q.toString()}`);
+}
+// daily-views: a API expõe série de views por VÍDEO (requer videoId) — NÃO há série diária de
+// canal. Sem videoId, não existe série (retorna null; o painel esconde "Desempenho no tempo").
+export async function youtubeDailyViews(accountId: string, opts?: { since?: string; until?: string; videoId?: string }) {
+  if (!opts?.videoId) return null;
+  const since = clampSince(opts.since, opts.until, 88);
+  const q = new URLSearchParams({ accountId, videoId: opts.videoId });
+  if (since) q.set("since", since);
+  if (opts.until) q.set("until", opts.until);
+  try {
+    return await zernio<{ values?: { date: string; value: number }[] }>(`/analytics/youtube/daily-views?${q.toString()}`);
+  } catch { return null; }
+}
+
+// ── LinkedIn ────────────────────────────────────────────────────
+// Conta PESSOAL: só há analytics AGREGADO (lifetime), via este endpoint. account-insights não
+// responde JSON pra conta pessoal. Conta de empresa usaria /analytics/linkedin/org-aggregate-analytics.
+export interface LinkedinAggregate {
+  accountId: string; platform: string; accountType?: string; username?: string;
+  aggregation?: string; dateRange?: unknown;
+  analytics: Record<string, number>;
+  note?: string; lastUpdated?: string;
+}
+export function linkedinAggregate(accountId: string, opts?: { since?: string; until?: string }) {
+  const q = new URLSearchParams();
+  if (opts?.since) q.set("since", opts.since);
+  if (opts?.until) q.set("until", opts.until);
+  const qs = q.toString();
+  return zernio<LinkedinAggregate>(`/accounts/${encodeURIComponent(accountId)}/linkedin-aggregate-analytics${qs ? "?" + qs : ""}`);
+}
+
 // GET /analytics/{platform}/follower-history — série diária de seguidores (mesmo envelope)
 export function followerHistory(platform: string, accountId: string, opts?: { since?: string; until?: string }) {
   const q = new URLSearchParams({ accountId });
@@ -210,11 +263,14 @@ export interface DemographicsResponse {
   metrics?: Record<string, { breakdowns?: { dimension: string; value: number }[] }>;
   [k: string]: unknown;
 }
-export function demographics(accountId: string, opts?: { metric?: string; breakdown?: string }) {
+// platform: instagram (default) ou youtube — ambos devolvem { demographics:{age,gender,country,city?} }.
+// youtube NÃO usa o param `metric` (age/gender = % de espectadores; country = views).
+export function demographics(accountId: string, opts?: { metric?: string; breakdown?: string; platform?: string }) {
+  const plat = opts?.platform === "youtube" ? "youtube" : "instagram";
   const q = new URLSearchParams({ accountId });
-  q.set("metric", opts?.metric || "follower_demographics");
+  if (plat === "instagram") q.set("metric", opts?.metric || "follower_demographics");
   if (opts?.breakdown) q.set("breakdown", opts.breakdown);
-  return zernio<DemographicsResponse>(`/analytics/instagram/demographics?${q.toString()}`);
+  return zernio<DemographicsResponse>(`/analytics/${plat}/demographics?${q.toString()}`);
 }
 
 // ── Métricas diárias agregadas (derivadas dos posts) — série uniforme por plataforma ──
