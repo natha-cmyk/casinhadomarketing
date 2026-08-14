@@ -1,0 +1,6 @@
+-- Onboarding de 1º acesso: campos da empresa no Perfil + flag no Workspace.
+ALTER TABLE "Perfil" ADD COLUMN IF NOT EXISTS "ramo" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Perfil" ADD COLUMN IF NOT EXISTS "telefone" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Perfil" ADD COLUMN IF NOT EXISTS "emailContato" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Perfil" ADD COLUMN IF NOT EXISTS "estado" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Workspace" ADD COLUMN IF NOT EXISTS "onboarded" BOOLEAN NOT NULL DEFAULT false;

@@ -27,6 +27,7 @@ model Workspace {
   id              String        @id @default(cuid())
   nome            String
   zernioProfileId String? // profile da Zernio (contas conectadas deste workspace)
+  onboarded       Boolean       @default(false) // já passou pelo onboarding de 1º acesso?
   createdAt       DateTime      @default(now())
   memberships     Membership[]
   envConfig       EnvConfig?
@@ -86,7 +87,11 @@ model Perfil {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   empresa     String    @default("")
   segmento    String    @default("")
+  ramo        String    @default("") // ramo de atividade (onboarding)
+  telefone    String    @default("") // telefone principal de contato
+  emailContato String   @default("") // e-mail principal de contato
   cidade      String    @default("")
+  estado      String    @default("") // UF (onboarding: cidade + estado, sem endereço específico)
   site        String    @default("")
   canais      String[]  @default([])
   produtos    String[]  @default([])
