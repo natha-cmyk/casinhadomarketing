@@ -62,7 +62,7 @@ export function Sidebar() {
               {items.map((it) => (
                 <button
                   key={it.id}
-                  className={`nav-item${it.id === view ? " active" : ""}${it.live ? " live" : ""}`}
+                  className={`nav-item${it.id === view ? " active" : ""}`}
                   onClick={() => go(it.id)}
                   type="button"
                 >
@@ -70,7 +70,6 @@ export function Sidebar() {
                     <Ic name={it.icon} />
                   </span>
                   {it.label}
-                  {it.live && <span className="tag">live</span>}
                 </button>
               ))}
             </div>
