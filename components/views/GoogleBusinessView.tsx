@@ -373,8 +373,9 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
                 </div>
               )}
 
-              {/* Cards secundários */}
-              <div className="si-flow">
+              {/* Cards secundários — alinha ao topo p/ o card curto ("Como te encontram")
+                  não esticar à altura do card de Avaliações (elimina o espaço branco). */}
+              <div className="si-flow" style={{ alignItems: "flex-start" }}>
                 {showImpr && (
                   <div className="card pad-lg tcard" style={{ "--tcard-accent": CY } as CSSProperties}>
                     <div className="card-head">
