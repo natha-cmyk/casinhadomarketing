@@ -114,6 +114,16 @@ export function PainelView() {
   // ordena por relevância (seguidores desc; sem contagem vai pro fim)
   const ordered = [...list].sort((a, b) => (b.followersCount ?? -1) - (a.followersCount ?? -1));
 
+  // agrupa por plataforma: canal com 2+ contas vira um GRANDE WIDGET agrupando as contas
+  // (ex. vários Instagrams); canal com 1 conta segue como card individual.
+  const groups: { platform: string; accts: typeof ordered }[] = [];
+  const gi = new Map<string, number>();
+  for (const a of ordered) {
+    const idx = gi.get(a.platform);
+    if (idx == null) { gi.set(a.platform, groups.length); groups.push({ platform: a.platform, accts: [a] }); }
+    else groups[idx].accts.push(a);
+  }
+
   // agregados da empresa
   const totalFollowers = sum(list.map((a) => a.followersCount || 0));
   const totalReach = sum(list.map((a) => a.metrics?.reach ?? a.metrics?.impressions ?? 0));
@@ -240,21 +250,60 @@ export function PainelView() {
             </div>
           )}
 
-          {/* Um card estruturado por canal, ordenado por relevância */}
+          {/* Cards por canal: 1 conta = card individual; 2+ contas = GRANDE WIDGET agrupando */}
           <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))" }}>
-            {ordered.map((a) => (
-              <ChannelSummaryCard
-                key={`${a.platform}-${a.username || a.displayName || ""}`}
-                platform={a.platform}
-                displayName={a.displayName}
-                username={a.username}
-                followersCount={a.followersCount}
-                metrics={a.metrics || {}}
-                posts={a.posts}
-                cor={redeCor(a.platform)}
-                periodLabel={periodoLabel}
-              />
-            ))}
+            {groups.map((g) =>
+              g.accts.length === 1 ? (
+                <ChannelSummaryCard
+                  key={`${g.platform}-solo`}
+                  platform={g.platform}
+                  displayName={g.accts[0].displayName}
+                  username={g.accts[0].username}
+                  followersCount={g.accts[0].followersCount}
+                  metrics={g.accts[0].metrics || {}}
+                  posts={g.accts[0].posts}
+                  cor={redeCor(g.platform)}
+                  periodLabel={periodoLabel}
+                />
+              ) : (
+                <div
+                  key={`${g.platform}-multi`}
+                  style={{
+                    gridColumn: "1 / -1",
+                    border: `1px solid color-mix(in srgb, ${redeCor(g.platform)} 26%, var(--hairline))`,
+                    borderRadius: 16,
+                    padding: 16,
+                    background: `color-mix(in srgb, ${redeCor(g.platform)} 5%, #fff)`,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: 3, background: redeCor(g.platform), flex: "0 0 auto" }} />
+                    <b style={{ fontSize: 15 }}>{redeLabel(g.platform)}</b>
+                    <span style={{ fontSize: 12, color: "var(--label-3)", fontWeight: 600 }}>
+                      {g.accts.length} contas conectadas · {periodoLabel}
+                    </span>
+                  </div>
+                  <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12 }}>
+                    {g.accts.map((a) => (
+                      <ChannelSummaryCard
+                        key={`${g.platform}-${a.username || a.displayName || ""}`}
+                        platform={a.platform}
+                        displayName={a.displayName}
+                        username={a.username}
+                        followersCount={a.followersCount}
+                        metrics={a.metrics || {}}
+                        posts={a.posts}
+                        cor={redeCor(a.platform)}
+                        periodLabel={periodoLabel}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )
+            )}
           </div>
         </div>
       )}
