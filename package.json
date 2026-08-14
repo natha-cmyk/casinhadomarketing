@@ -16,6 +16,7 @@
     "vercel-build": "prisma generate && prisma migrate deploy && next build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "@prisma/client": "^6.19.3",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",

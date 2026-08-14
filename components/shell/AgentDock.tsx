@@ -1,10 +1,11 @@
 "use client";
-// Bolha de agentes — troca por seção, sugestões contextuais, resposta stub.
-// Seam: // TODO(openclaw) — cada envio chamaria o agente correspondente no OpenClaw.
+// Bolha de agentes — troca por seção, sugestões contextuais, LLM real.
+// Cada envio chama /api/agents/chat (streaming), com o período da toolbar como escopo.
+// Sem ANTHROPIC_API_KEY o endpoint devolve um aviso amigável (não quebra).
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { META, viewForPath } from "@/lib/nav";
+import { viewForPath } from "@/lib/nav";
 import { Ic } from "../Ic";
 
 interface Agent { nome: string; papel: string; cor: string; ini: string; intro: string; sugestoes: string[] }
@@ -30,20 +31,60 @@ export function AgentDock() {
   const open = useStore((s) => s.agentOpen);
   const toggle = useStore((s) => s.toggleAgent);
   const msgs = useStore((s) => s.agentMsgs[key]) || [];
-  const agentSend = useStore((s) => s.agentSend);
+  const push = useStore((s) => s.agentPush);
+  const setLast = useStore((s) => s.agentSetLast);
+  // escopo temporal (toolbar) — enviado ao agente pra ancorar a análise no período
+  const period = useStore((s) => s.period);
+  const year = useStore((s) => s.year);
+  const month = useStore((s) => s.month);
+  const week = useStore((s) => s.week);
+  const quarter = useStore((s) => s.quarter);
   const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
-  const secao = META[view]?.title || META[view]?.label || "esta seção";
 
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
-  }, [msgs.length, open]);
+  }, [msgs, open]);
 
-  const send = (t: string) => {
+  const send = async (t: string) => {
     const v = (t || "").trim();
-    if (!v) return;
-    agentSend(key, v, secao);
+    if (!v || busy) return;
     setText("");
+    push(key, { role: "user", text: v });
+    // histórico ANTES do placeholder do bot (inclui a mensagem recém-enviada)
+    const history = useStore.getState().agentMsgs[key] || [];
+    push(key, { role: "bot", text: "" });
+    setBusy(true);
+    try {
+      const res = await fetch("/api/agents/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentKey: key, messages: history, scope: { period, year, month, week, quarter } }),
+      });
+      const ct = res.headers.get("content-type") || "";
+      if (ct.includes("application/json")) {
+        const j = await res.json();
+        setLast(key, j.message || j.error || "Sem resposta.");
+      } else if (res.body) {
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let acc = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          acc += dec.decode(value, { stream: true });
+          setLast(key, acc);
+        }
+        if (!acc) setLast(key, "(sem resposta)");
+      } else {
+        setLast(key, "(sem resposta)");
+      }
+    } catch {
+      setLast(key, "Não consegui responder agora. Tente de novo em instantes.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const av = (
@@ -81,7 +122,7 @@ export function AgentDock() {
               ) : (
                 <div className="ag-msg ag-bot" key={i}>
                   {av}
-                  <div className="ag-bubble">{m.text}</div>
+                  <div className="ag-bubble">{m.text || (busy && i === msgs.length - 1 ? "…" : m.text)}</div>
                 </div>
               )
             )}
@@ -100,14 +141,15 @@ export function AgentDock() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && send(text)}
-              placeholder={`Pergunte ao ${a.nome}…`}
+              placeholder={busy ? `${a.nome} está pensando…` : `Pergunte ao ${a.nome}…`}
               autoComplete="off"
+              disabled={busy}
             />
-            <button onClick={() => send(text)} aria-label="Enviar" type="button">
+            <button onClick={() => send(text)} aria-label="Enviar" type="button" disabled={busy}>
               <Ic name="upload" />
             </button>
           </div>
-          <div className="ag-foot">Preview · respostas reais via OpenClaw</div>
+          <div className="ag-foot">Assistente com LLM · lê os dados do seu workspace no período selecionado</div>
         </div>
       )}
       <button

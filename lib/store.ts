@@ -139,8 +139,9 @@ export interface UIState {
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
   setInd: (id: string, val: boolean) => void; toggleCfgOpen: (panel: string) => void;
-  // agente
-  agentSend: (agentKey: string, text: string, secao: string) => void;
+  // agente (LLM real): empilha mensagem e atualiza a última (streaming)
+  agentPush: (agentKey: string, msg: { role: "user" | "bot"; text: string }) => void;
+  agentSetLast: (agentKey: string, text: string) => void;
   // OKR
   setObjetivo: (t: string) => void; setAreaNome: (areaId: string, nome: string) => void;
   addArea: () => void; removeArea: (areaId: string) => void;
@@ -269,14 +270,14 @@ export const useStore = create<UIState>((set) => ({
   setInd: (id, val) => set((s) => ({ ind: { ...s.ind, [id]: val } })),
   toggleCfgOpen: (panel) => set((s) => ({ cfgOpen: { ...s.cfgOpen, [panel]: !s.cfgOpen[panel] } })),
 
-  agentSend: (agentKey, text, secao) =>
+  agentPush: (agentKey, msg) =>
+    set((s) => ({ agentMsgs: { ...s.agentMsgs, [agentKey]: [...(s.agentMsgs[agentKey] || []), msg] } })),
+  agentSetLast: (agentKey, text) =>
     set((s) => {
-      const prev = s.agentMsgs[agentKey] || [];
-      const bot = {
-        role: "bot" as const,
-        text: `Anotado: "${text}". Quando eu estiver conectado ao OpenClaw, respondo com os dados reais de ${secao}. Por enquanto isto é um preview da conversa.`,
-      };
-      return { agentMsgs: { ...s.agentMsgs, [agentKey]: [...prev, { role: "user" as const, text }, bot] } };
+      const arr = s.agentMsgs[agentKey] || [];
+      if (!arr.length) return {};
+      const next = arr.slice(0, -1).concat({ ...arr[arr.length - 1], text });
+      return { agentMsgs: { ...s.agentMsgs, [agentKey]: next } };
     }),
 
   setObjetivo: (t) => set((s) => ({ okr: { ...s.okr, objetivo: t } })),
