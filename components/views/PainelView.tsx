@@ -11,7 +11,16 @@ import { PageHead, KpiCard } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { ChannelSummaryCard } from "@/components/ChannelSummaryCard";
 import { fmt, kfmt, sum } from "@/lib/format";
-import { daysInMonth, scopeLabelText, type Period } from "@/lib/scope";
+import { daysInMonth, scopeLabelText, MONTHS, MONTHS_FULL, type Period } from "@/lib/scope";
+
+// mesmo conjunto de períodos da Toolbar global (semana/mês/trimestre/ano)
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "semana", label: "Semana" },
+  { value: "mes", label: "Mês" },
+  { value: "trimestre", label: "Trimestre" },
+  { value: "ano", label: "Ano" },
+];
+const YEARS = [2024, 2025, 2026];
 
 const redeCor = (p: string) =>
   REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.cor || "#121111";
@@ -165,7 +174,8 @@ export function PainelView() {
         <Spinner texto="Carregando visão geral…" />
       ) : (
         <div className="grid" style={{ gap: 16 }}>
-          {/* Período analisado — deixa EXPLÍCITO de que janela são todos os números abaixo */}
+          {/* Filtro de período — mesmo controle dos outros painéis (Canais, Geração, ADS).
+              Troque a janela aqui mesmo; todos os números abaixo reagem via dateRange(s). */}
           <div
             style={{
               display: "flex",
@@ -185,13 +195,68 @@ export function PainelView() {
               📅
             </span>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--label-3)", textTransform: "uppercase" }}>
-              Período analisado
+              Período
             </span>
-            <span className="tnum" style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-.2px", color: "var(--label)" }}>
+
+            {/* segmented semana/mês/trimestre/ano */}
+            <div className="seg small">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.value}
+                  className={s.period === p.value ? "on" : ""}
+                  onClick={() => s.setPeriod(p.value)}
+                  type="button"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* sub-seletores finos (mês/W1–W4/trimestre) — iguais aos dos outros painéis */}
+            {s.period === "mes" && (
+              <select className="tb-select" value={s.month} onChange={(e) => s.setMonth(Number(e.target.value))} aria-label="Mês">
+                {MONTHS_FULL.map((m, i) => (
+                  <option key={i} value={i}>{m}</option>
+                ))}
+              </select>
+            )}
+            {s.period === "semana" && (
+              <>
+                <select className="tb-select" value={s.month} onChange={(e) => s.setMonth(Number(e.target.value))} aria-label="Mês">
+                  {MONTHS.map((m, i) => (
+                    <option key={i} value={i}>{m}</option>
+                  ))}
+                </select>
+                <select className="tb-select" value={s.week} onChange={(e) => s.setWeek(Number(e.target.value))} aria-label="Semana">
+                  {[0, 1, 2, 3].map((w) => (
+                    <option key={w} value={w}>{"W" + (w + 1)}</option>
+                  ))}
+                </select>
+              </>
+            )}
+            {s.period === "trimestre" && (
+              <select className="tb-select" value={s.quarter} onChange={(e) => s.setQuarter(Number(e.target.value))} aria-label="Trimestre">
+                {[0, 1, 2, 3].map((q) => (
+                  <option key={q} value={q}>{"Q" + (q + 1)}</option>
+                ))}
+              </select>
+            )}
+
+            {/* seletor de ano */}
+            <div className="seg small">
+              {YEARS.map((y) => (
+                <button key={y} className={s.year === y ? "on" : ""} onClick={() => s.setYear(y)} type="button">
+                  {y}
+                </button>
+              ))}
+            </div>
+
+            {/* rótulo do escopo atual — deixa EXPLÍCITO qual janela está em análise */}
+            <span className="tnum" style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "-.2px", color: "var(--label)" }}>
               {periodoLabel}
             </span>
             <span style={{ fontSize: 12, color: "var(--label-2)", fontWeight: 500 }}>
-              — todos os indicadores abaixo são deste período (dados fechados, não “hoje”)
+              — dados fechados deste período (não “hoje”)
             </span>
           </div>
 

@@ -117,6 +117,34 @@ export function AgentDock() {
   // ao mudar de tela, volta pro agente contextual (mas o usuário pode trocar de novo)
   useEffect(() => { setPicked(null); }, [view]);
 
+  // histórico do chat — persiste local com validade de 7 dias (renova a cada uso)
+  const allMsgs = useStore((s) => s.agentMsgs);
+  const [histReady, setHistReady] = useState(false);
+  const HKEY = "casinha_agent_hist";
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HKEY);
+      if (raw) {
+        const { savedAt, msgs } = JSON.parse(raw);
+        if (savedAt && Date.now() - savedAt < 7 * 864e5 && msgs && typeof msgs === "object") {
+          useStore.getState().set({ agentMsgs: msgs });
+        } else localStorage.removeItem(HKEY);
+      }
+    } catch { /* histórico corrompido: ignora */ }
+    setHistReady(true);
+  }, []);
+  useEffect(() => {
+    if (!histReady) return;
+    try { localStorage.setItem(HKEY, JSON.stringify({ savedAt: Date.now(), msgs: allMsgs })); } catch { /* quota */ }
+  }, [allMsgs, histReady]);
+
+  // limpa a conversa do agente atual
+  const clearThread = () => {
+    const next = { ...useStore.getState().agentMsgs };
+    delete next[key];
+    useStore.getState().set({ agentMsgs: next });
+  };
+
   const send = async (t: string) => {
     const v = (t || "").trim();
     if (!v || busy) return;
@@ -185,6 +213,11 @@ export function AgentDock() {
               </div>
             </div>
             <div className="ag-head-r">
+              {msgs.length > 0 && (
+                <button className="ag-x" onClick={clearThread} aria-label="Limpar conversa" title="Limpar conversa" type="button">
+                  🗑
+                </button>
+              )}
               {msgs.length > 0 && (
                 <button className="ag-x ag-x-txt" onClick={exportPdf} aria-label="Exportar PDF" title="Exportar conversa em PDF" type="button">
                   PDF
@@ -258,7 +291,7 @@ export function AgentDock() {
             </button>
           </div>
           <AgentLlmConnect />
-          <div className="ag-foot">Assistente com LLM · lê os dados do seu workspace no período selecionado</div>
+          <div className="ag-foot">Assistente com LLM · lê os dados do período · histórico salvo por 7 dias</div>
         </div>
       )}
       <div className="ag-fab-row">
