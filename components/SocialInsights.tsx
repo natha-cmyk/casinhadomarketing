@@ -339,9 +339,11 @@ export function SocialInsights({ rede }: { rede: string }) {
   const curFollLast = follVals.length ? follVals[follVals.length - 1].value : acct.followersCount ?? null;
   const cmpFollLast = cmpFollVals.length ? cmpFollVals[cmpFollVals.length - 1].value : null;
 
-  const desc =
-    `${acct.displayName || "conta conectada"} · dados reais das contas conectadas · ${range.since} → ${range.until}` +
-    (cmpRange ? ` · comparando ${range.since}→${range.until} vs ${cmpRange.since}→${cmpRange.until}` : "");
+  // legenda enxuta: o período já está explícito na toolbar e o perfil no seletor/título —
+  // então só mostramos a nota de comparação quando há comparação ativa (evita redundância).
+  const desc = cmpRange
+    ? `Comparando ${range.since}→${range.until} vs ${cmpRange.since}→${cmpRange.until}`
+    : "";
 
   // ── indicadores por CONFIG (Personalização liga/desliga); cada card opcional respeita shown(id) ──
   const shown = (id: string, custom = false) => indShown(s.paineis, rede, id, custom);
