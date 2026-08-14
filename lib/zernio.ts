@@ -415,6 +415,16 @@ export function publishPost(input: ZernioPublishInput) {
   });
 }
 
+// ── Mídia (presign) ────────────────────────────────────────────────────────
+// POST /media/presign → { uploadUrl, publicUrl, key, expiresIn }. Faz-se PUT do arquivo
+// DIRETO no uploadUrl (cloud storage, expira 1h, até 5GB) e usa-se publicUrl em mediaItems.
+export interface PresignInput { filename: string; contentType: string; size?: number }
+export interface PresignResp { uploadUrl: string; publicUrl: string; key: string; expiresIn: number }
+export function presignMedia(input: PresignInput) {
+  return zernio<PresignResp>("/media/presign", { method: "POST", body: JSON.stringify(input) });
+}
+export interface MediaItemInput { type: "image" | "video" | "gif" | "document"; url: string; filename?: string; mimeType?: string; size?: number; altText?: string }
+
 // GET /posts — lista posts (default: agendados) do profile, p/ reconciliar a fila local com a Zernio.
 export interface ZernioListedPost extends ZernioPost {
   title?: string;

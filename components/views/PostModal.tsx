@@ -1,8 +1,8 @@
 "use client";
 // Porta renderPostModal (blueprint 1475-1504) + savePost (1505-1515).
 // Modal de criação/edição de post do calendário de conteúdo.
-import { useState } from "react";
-import { useStore, newId, type PostItem } from "@/lib/store";
+import { useRef, useState } from "react";
+import { useStore, newId, type PostItem, type PostMedia } from "@/lib/store";
 import { savePosts } from "@/lib/api";
 import {
   CANAL_POST_COLORS,
@@ -74,11 +74,20 @@ interface Fields {
   pilar: string;
   funil: string;
   arquivo: string;
+  media: PostMedia[];
   legenda: string;
   cta: string;
   hashtags: string;
   status: string;
   contas: string[];
+}
+
+// MIME → tipo de MediaItem da Zernio
+function mimeToType(mime: string): PostMedia["type"] {
+  if (mime === "image/gif") return "gif";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  return "document";
 }
 
 export function PostModal() {
@@ -101,6 +110,9 @@ export function PostModal() {
   // Estado do disparo real (agendar/publicar via Zernio).
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
+  // Upload de mídia (presign Zernio → PUT direto no storage)
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   // Estado seed: post existente (edição) ou defaults do blueprint (novo).
   const [f, setF] = useState<Fields>(() => {
@@ -121,6 +133,7 @@ export function PostModal() {
         pilar: existing.pilar,
         funil: existing.funil,
         arquivo: existing.arquivo,
+        media: existing.media ?? [],
         legenda: existing.legenda,
         cta: existing.cta,
         hashtags: existing.hashtags,
@@ -142,6 +155,7 @@ export function PostModal() {
       pilar: "Espaços",
       funil: "Topo",
       arquivo: "",
+      media: [],
       legenda: "",
       cta: "",
       hashtags: "",
@@ -154,6 +168,34 @@ export function PostModal() {
   if (pm.mode === "edit" && !existing) return null;
 
   const upd = (patch: Partial<Fields>) => setF((prev) => ({ ...prev, ...patch }));
+
+  // Upload real: presign na nossa API → PUT do arquivo DIRETO no storage (não passa
+  // pelo servidor → sem limite de 4.5MB) → guarda publicUrl como MediaItem.
+  const onPickFile = async (file: File) => {
+    if (!file || uploading) return;
+    setUploading(true);
+    setMsg(null);
+    try {
+      const pres = await fetch("/api/posts/presign", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
+      });
+      const pj = await pres.json().catch(() => null);
+      if (!pres.ok || !pj?.uploadUrl) throw new Error(pj?.error || "não foi possível preparar o upload");
+      const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+      if (!put.ok) throw new Error(`upload falhou (${put.status})`);
+      const item: PostMedia = { type: mimeToType(file.type), url: pj.publicUrl, filename: file.name, mimeType: file.type, size: file.size };
+      setF((prev) => ({ ...prev, media: [...prev.media, item], arquivo: prev.arquivo || file.name }));
+      setMsg({ kind: "ok", text: `“${file.name}” enviado ✓` });
+    } catch (e) {
+      setMsg({ kind: "err", text: `Falha no upload: ${String((e as Error)?.message || e).slice(0, 90)}` });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+  const removeMedia = (url: string) => setF((prev) => ({ ...prev, media: prev.media.filter((m) => m.url !== url) }));
 
   const close = () => set({ postModal: null });
 
@@ -173,6 +215,7 @@ export function PostModal() {
       pilar: f.pilar,
       funil: f.funil,
       arquivo: f.arquivo,
+      media: f.media,
       legenda: f.legenda,
       cta: f.cta,
       hashtags: f.hashtags,
@@ -360,14 +403,42 @@ export function PostModal() {
               {sel("pmFunil", FUNIL_POST, f.funil, (v) => upd({ funil: v }))}
             </div>
           </div>
-          <label className="field-lbl">Capa / arquivo (png, jpeg, mp4, mov)</label>
+          <label className="field-lbl">Mídia (imagem, vídeo, gif ou pdf)</label>
           <input
-            className="field-edit"
+            ref={fileRef}
+            type="file"
             id="pmArquivo"
-            value={f.arquivo}
-            placeholder="nome-do-arquivo.mp4"
-            onChange={(e) => upd({ arquivo: e.target.value })}
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,application/pdf"
+            style={{ display: "none" }}
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) onPickFile(file); }}
           />
+          <button
+            type="button"
+            className="field-edit"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            style={{ textAlign: "left", cursor: uploading ? "default" : "pointer", color: uploading ? "var(--label-3)" : "var(--cyan)", fontWeight: 600 }}
+          >
+            {uploading ? "Enviando arquivo…" : "＋ Enviar arquivo"}
+          </button>
+          {f.media.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+              {f.media.map((m) => (
+                <div key={m.url} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", border: "1px solid var(--hairline)", borderRadius: 10, background: "var(--surface)" }}>
+                  {m.type === "image" || m.type === "gif" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.url} alt={m.filename || ""} style={{ width: 34, height: 34, borderRadius: 6, objectFit: "cover" }} />
+                  ) : (
+                    <span style={{ width: 34, height: 34, borderRadius: 6, display: "grid", placeItems: "center", background: "var(--cream)", fontSize: 11, fontWeight: 700, color: "var(--label-2)" }}>
+                      {m.type === "video" ? "▶" : "PDF"}
+                    </span>
+                  )}
+                  <span style={{ flex: 1, fontSize: 12.5, color: "var(--label)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.filename || m.url}</span>
+                  <button type="button" onClick={() => removeMedia(m.url)} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 13 }} aria-label="Remover">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
           <label className="field-lbl">Legenda</label>
           <textarea
             className="field-edit"
@@ -472,10 +543,10 @@ export function PostModal() {
               Salvar
             </button>
             {/* Disparo real via Zernio (POST /posts) */}
-            <button className="btn-link pm-pub" id="pmPublish" onClick={() => doPublish(true)} disabled={busy}>
+            <button className="btn-link pm-pub" id="pmPublish" onClick={() => doPublish(true)} disabled={busy || uploading}>
               {busy ? "Enviando…" : "Publicar agora"}
             </button>
-            <button className="btn-link ig" id="pmSchedule" onClick={() => doPublish(false)} disabled={busy}>
+            <button className="btn-link ig" id="pmSchedule" onClick={() => doPublish(false)} disabled={busy || uploading}>
               {busy ? "Agendando…" : "Agendar publicação"}
             </button>
           </div>

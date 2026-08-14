@@ -122,6 +122,8 @@ model Post {
   cta          String     @default("")
   hashtags     String     @default("")
   arquivo      String     @default("")
+  // mídia enviada (presign Zernio): [{ type, url, filename, mimeType, size? }]
+  media        Json       @default("[]")
   status       PostStatus @default(rascunho)
   contas       String[]   @default([])
   zernioPostId String?

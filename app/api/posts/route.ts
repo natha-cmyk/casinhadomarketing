@@ -18,6 +18,7 @@ export async function GET() {
         id: p.id, y, m, d, hora: p.hora, titulo: p.titulo, canal: p.canal, perfil: p.perfil,
         colab: p.colab, pilar: p.pilar, formato: p.formato, funil: p.funil, legenda: p.legenda,
         cta: p.cta, hashtags: p.hashtags, arquivo: p.arquivo, status: p.status, contas: p.contas,
+        media: Array.isArray(p.media) ? p.media : [],
       };
     });
     return NextResponse.json({ posts });
@@ -30,6 +31,7 @@ interface PostIn {
   id: string; y: number; m: number; d: number; hora: string; titulo: string; canal: string;
   perfil: string; colab: string; pilar: string; formato: string; funil: string; legenda: string;
   cta: string; hashtags: string; arquivo: string; status: string; contas: string[];
+  media?: unknown[];
 }
 
 export async function PUT(req: Request) {
@@ -46,6 +48,7 @@ export async function PUT(req: Request) {
         data: toDate(p.y, p.m, p.d), hora: p.hora, titulo: p.titulo, canal: p.canal, perfil: p.perfil,
         colab: p.colab, pilar: p.pilar, formato: p.formato, funil: p.funil, legenda: p.legenda,
         cta: p.cta, hashtags: p.hashtags, arquivo: p.arquivo, status: p.status as PostStatus, contas: p.contas,
+        media: (Array.isArray(p.media) ? p.media : []) as object[],
       };
       await prisma.post.upsert({
         where: { id: p.id },

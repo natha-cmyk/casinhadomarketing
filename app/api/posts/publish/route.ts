@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { PostStatus } from "@prisma/client";
 import { getActiveWorkspace } from "@/lib/auth";
-import { listAccounts, publishPost } from "@/lib/zernio";
+import { listAccounts, publishPost, type MediaItemInput } from "@/lib/zernio";
 
 // id da rede (Casinha) → plataforma Zernio. Só "x" diverge (→ twitter); o resto é 1:1.
 const REDE_TO_PLAT: Record<string, string> = { x: "twitter" };
@@ -67,9 +67,19 @@ export async function POST(req: Request) {
         { status: 400 }
       );
 
-    // Conteúdo = legenda (fallback: título). MÍDIA por ora só texto.
-    // TODO(midia): se post.arquivo, subir o arquivo via /media/presign e anexar em mediaItems.
+    // Conteúdo = legenda (fallback: título).
     const content = (post.legenda?.trim() || post.titulo || "").trim();
+
+    // Mídia: post.media (enviada via presign no modal) → mediaItems da Zernio.
+    const rawMedia = Array.isArray(post.media) ? (post.media as Record<string, unknown>[]) : [];
+    const mediaItems: MediaItemInput[] = rawMedia
+      .filter((m) => m && typeof m.url === "string")
+      .map((m) => ({
+        type: (["image", "video", "gif", "document"].includes(String(m.type)) ? m.type : "image") as MediaItemInput["type"],
+        url: String(m.url),
+        filename: m.filename ? String(m.filename) : undefined,
+        mimeType: m.mimeType ? String(m.mimeType) : undefined,
+      }));
 
     let res;
     try {
@@ -78,6 +88,7 @@ export async function POST(req: Request) {
         title: post.titulo || undefined,
         timezone: "America/Fortaleza",
         platforms,
+        ...(mediaItems.length ? { mediaItems } : {}),
         ...(publishNow ? { publishNow: true } : { scheduledFor: toISO(post.data, post.hora) }),
       });
     } catch (e) {
