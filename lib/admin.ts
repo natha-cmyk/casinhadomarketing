@@ -8,7 +8,7 @@ function adminList(): string[] {
   const env = process.env.ADMIN_EMAILS;
   const base = env
     ? env.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-    : ["jose@seahubcoworking.com.br"]; // bootstrap: dono da agência; sobreponha via ADMIN_EMAILS
+    : ["seahub@seahubcoworking.page"]; // bootstrap: conta admin da agência; sobreponha via ADMIN_EMAILS
   return base;
 }
 
