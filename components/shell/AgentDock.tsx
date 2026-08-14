@@ -33,12 +33,12 @@ function mdToHtml(md: string): string {
   return out.join("\n");
 }
 
-interface Agent { nome: string; papel: string; cor: string; ini: string; intro: string; sugestoes: string[] }
+interface Agent { nome: string; papel: string; cor: string; ini: string; icon: string; intro: string; sugestoes: string[] }
 const AGENTS: Record<string, Agent> = {
-  poseidon: { nome: "Poseidon", papel: "Performance, tráfego pago & dados", cor: "#00BBC5", ini: "Po", intro: "Sou o Poseidon Jackson — performance, tráfego pago e dados. Leio funil e mídia paga e transformo número em decisão. Me pergunte sobre ROAS, CPL, custo por resultado, ou peça um diagnóstico da campanha.", sugestoes: ["Diagnostique a mídia paga do período", "Onde estou perdendo eficiência?", "Resumo rápido do painel"] },
-  apollo: { nome: "Apollo", papel: "Conteúdo, criativos & SEO", cor: "#FF001E", ini: "Ap", intro: "Sou o Apollo Solace — conteúdo, criativos e SEO. Transformo briefing em peça pronta. Me peça pautas, roteiros, legendas, calendário editorial ou como aparecer mais nas buscas.", sugestoes: ["Monte um calendário da semana", "Escreva uma legenda pra um Reels", "Como aparecer mais no Google e no ChatGPT?"] },
-  athena: { nome: "Athena", papel: "Estratégia & orquestração", cor: "#8E5BE0", ini: "At", intro: "Sou a Athena Chase — estratégia e orquestração. Ponto de entrada quando você quer visão macro ou não sabe por onde começar. Priorizo demandas, estruturo campanhas e acompanho metas/OKR.", sugestoes: ["Por onde começo minha estratégia?", "Temos várias demandas — o que priorizar?", "Como estão os KRs e metas?"] },
-  dionisio: { nome: "Dionísio", papel: "CRM, WhatsApp & relacionamento", cor: "#FF9F0A", ini: "Di", intro: "Sou o Dionísio Castellan — CRM, WhatsApp e relacionamento. Cuido de como a marca fala com as pessoas. Me peça réguas de WhatsApp, organização de pipeline, reativação de base ou scripts.", sugestoes: ["Régua de WhatsApp pra quem pediu orçamento", "Como reativar a base inativa?", "Onde está o gargalo do funil?"] },
+  poseidon: { nome: "Poseidon", papel: "Performance, tráfego pago & dados", cor: "#00BBC5", ini: "Po", icon: "ag_data", intro: "Sou o Poseidon Jackson — performance, tráfego pago e dados. Leio funil e mídia paga e transformo número em decisão. Me pergunte sobre ROAS, CPL, custo por resultado, ou peça um diagnóstico da campanha.", sugestoes: ["Diagnostique a mídia paga do período", "Onde estou perdendo eficiência?", "Resumo rápido do painel"] },
+  apollo: { nome: "Apollo", papel: "Conteúdo, criativos & SEO", cor: "#FF001E", ini: "Ap", icon: "ag_content", intro: "Sou o Apollo Solace — conteúdo, criativos e SEO. Transformo briefing em peça pronta. Me peça pautas, roteiros, legendas, calendário editorial ou como aparecer mais nas buscas.", sugestoes: ["Monte um calendário da semana", "Escreva uma legenda pra um Reels", "Como aparecer mais no Google e no ChatGPT?"] },
+  athena: { nome: "Athena", papel: "Estratégia & orquestração", cor: "#8E5BE0", ini: "At", icon: "ag_strategy", intro: "Sou a Athena Chase — estratégia e orquestração. Ponto de entrada quando você quer visão macro ou não sabe por onde começar. Priorizo demandas, estruturo campanhas e acompanho metas/OKR.", sugestoes: ["Por onde começo minha estratégia?", "Temos várias demandas — o que priorizar?", "Como estão os KRs e metas?"] },
+  dionisio: { nome: "Dionísio", papel: "CRM, WhatsApp & relacionamento", cor: "#FF9F0A", ini: "Di", icon: "ag_crm", intro: "Sou o Dionísio Castellan — CRM, WhatsApp e relacionamento. Cuido de como a marca fala com as pessoas. Me peça réguas de WhatsApp, organização de pipeline, reativação de base ou scripts.", sugestoes: ["Régua de WhatsApp pra quem pediu orçamento", "Como reativar a base inativa?", "Onde está o gargalo do funil?"] },
 };
 // agente PADRÃO por tela (o usuário pode trocar pelo seletor). Base: doc Marketing OS —
 // canais/dados → Poseidon; calendário/conteúdo → Apollo; CRM → Dionísio; metas → Athena.
@@ -167,7 +167,7 @@ export function AgentDock() {
 
   const av = (
     <div className="ag-av" style={{ background: a.cor }}>
-      {a.ini}
+      <Ic name={a.icon} />
     </div>
   );
 
@@ -209,7 +209,7 @@ export function AgentDock() {
                   title={`${ag.nome} · ${ag.papel}`}
                   type="button"
                 >
-                  {ag.ini}
+                  <Ic name={ag.icon} />
                 </button>
               );
             })}
@@ -259,15 +259,22 @@ export function AgentDock() {
           <div className="ag-foot">Assistente com LLM · lê os dados do seu workspace no período selecionado</div>
         </div>
       )}
-      <button
-        className={`ag-fab${open ? " open" : ""}`}
-        style={{ "--agc": a.cor } as React.CSSProperties}
-        onClick={toggle}
-        aria-label={`Assistente ${a.nome}`}
-        type="button"
-      >
-        {open ? "✕" : a.ini}
-      </button>
+      <div className="ag-fab-row">
+        {!open && (
+          <button className="ag-cta" onClick={toggle} type="button">
+            Fale comigo pra melhorar sua análise
+          </button>
+        )}
+        <button
+          className={`ag-fab${open ? " open" : ""}`}
+          style={{ "--agc": a.cor } as React.CSSProperties}
+          onClick={toggle}
+          aria-label={`Assistente ${a.nome}`}
+          type="button"
+        >
+          {open ? "✕" : <Ic name="ag_chat" />}
+        </button>
+      </div>
     </div>
   );
 }

@@ -23,6 +23,12 @@ export const ICONS: Record<string, string> = {
   bluesky: '<path d="M12 10.5C10.5 8 7.5 6.2 6 6.5c-1.6.4-1.6 3 .3 5.3 1 1.2 3 2.4 5.7 2.4 2.7 0 4.7-1.2 5.7-2.4 1.9-2.3 1.9-4.9.3-5.3-1.5-.3-4.5 1.5-6 4z"/>',
   snapchat: '<path d="M12 4.5c2.6 0 3.8 2 3.8 4.6 0 .8 0 1.6-.1 2 .5.3 1.2.2 1.7 0 .7-.2 1.1.7.4 1.2-.5.4-1.4.5-1.6 1-.2.6.9 1.6 2 2 .6.2.4 1-.4 1.1-.7 0-1.2.4-1.4.9-.2.5-1 .2-1.7.2s-1.2.6-2.6.6-2-.6-2.6-.6-1.5.3-1.7-.2c-.2-.5-.7-.9-1.4-.9-.8-.1-1-.9-.4-1.1 1.1-.4 2.2-1.4 2-2-.2-.5-1.1-.6-1.6-1-.7-.5-.3-1.4.4-1.2.5.2 1.2.3 1.7 0-.1-.4-.1-1.2-.1-2C8.2 6.5 9.4 4.5 12 4.5z"/>',
   googlebusiness: '<path d="M5 9.5l1.2-4h11.6l1.2 4M5 9.5V19h14V9.5M4.5 9.5h15M6 9.5a2 2 0 0 0 4 0a2 2 0 0 0 4 0a2 2 0 0 0 4 0M9.5 19v-4.5h5V19"/>',
+  // ícones dos Assistentes do Panteão (por papel)
+  ag_data: '<path d="M4 20V11M9.3 20V5M14.6 20v-7M20 20V8"/>',
+  ag_content: '<path d="M4 20h3.5L18 9.5 14.5 6 4 16.5V20Z"/><path d="M13 7.5l3.5 3.5"/>',
+  ag_strategy: '<circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5 12 12"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><path d="M12 3.5V5M12 19v1.5M3.5 12H5M19 12h1.5"/>',
+  ag_crm: '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="13" width="4.2" height="6" rx="1.6"/><rect x="16.8" y="13" width="4.2" height="6" rx="1.6"/>',
+  ag_chat: '<path d="M5 5h14a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 19 15H10l-4.5 4V6.5A1.5 1.5 0 0 1 7 5Z"/><circle cx="9.5" cy="10" r=".9" fill="currentColor"/><circle cx="12.5" cy="10" r=".9" fill="currentColor"/><circle cx="15.5" cy="10" r=".9" fill="currentColor"/>',
 };
 
 export interface NavItem {

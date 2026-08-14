@@ -271,6 +271,14 @@ th.stick{z-index:3} table.data tr:hover td.stick{background:#fbfbfc}
 .ag-sw{width:30px;height:30px;border-radius:50%;border:2px solid transparent;background:#fff;color:var(--label-2);font-weight:800;font-size:10.5px;cursor:pointer;display:grid;place-items:center;transition:transform .12s,border-color .12s;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .ag-sw:hover{transform:translateY(-1px)}
 .ag-sw.on{color:#fff;background:var(--swc);border-color:var(--swc)}
+.ag-av svg{width:17px;height:17px}
+.ag-sw svg{width:15px;height:15px}
+/* FAB com cara de chat + CTA "fale comigo" */
+.ag-fab-row{display:flex;align-items:center;gap:10px}
+.ag-fab svg{width:22px;height:22px}
+.ag-cta{background:#fff;border:1px solid var(--hairline);border-radius:999px;padding:9px 15px;font-size:12.5px;font-weight:700;color:var(--label);box-shadow:0 6px 18px rgba(0,0,0,.14);white-space:nowrap;cursor:pointer;max-width:230px}
+.ag-cta:hover{border-color:var(--label-3)}
+@media(max-width:640px){.ag-cta{display:none}}
 .ag-x-txt{width:auto;padding:0 9px;font-size:10px;font-weight:800;letter-spacing:.3px;border-radius:8px}
 /* painel expandido: aba lateral ampla (tipo metade da tela) */
 .ag-panel.big{width:min(560px,calc(100vw - 40px));height:min(88vh,calc(100vh - 90px))}
