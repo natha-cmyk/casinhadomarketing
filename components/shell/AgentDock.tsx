@@ -7,6 +7,31 @@ import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { viewForPath } from "@/lib/nav";
 import { Ic } from "../Ic";
+import { AgentMarkdown } from "./AgentMarkdown";
+
+// markdown → HTML simples (só p/ exportar PDF via janela de impressão)
+function mdToHtml(md: string): string {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inl = (s: string) => esc(s)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  const lines = (md || "").replace(/\r/g, "").split("\n");
+  const out: string[] = []; let list: string[] | null = null; let para: string[] = [];
+  const fp = () => { if (para.length) { out.push(`<p>${inl(para.join(" "))}</p>`); para = []; } };
+  const fl = () => { if (list) { out.push(`<ul>${list.map((i) => `<li>${inl(i)}</li>`).join("")}</ul>`); list = null; } };
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (!t) { fp(); fl(); continue; }
+    const h = /^(#{1,6})\s+(.*)$/.exec(t);
+    const li = /^(?:[-*]|\d+[.)])\s+(.*)$/.exec(t);
+    if (h) { fp(); fl(); const lvl = Math.min(h[1].length, 3) + 2; out.push(`<h${lvl}>${inl(h[2])}</h${lvl}>`); }
+    else if (li) { fp(); if (!list) list = []; list.push(li[1]); }
+    else { fl(); para.push(t); }
+  }
+  fp(); fl();
+  return out.join("\n");
+}
 
 interface Agent { nome: string; papel: string; cor: string; ini: string; intro: string; sugestoes: string[] }
 const AGENTS: Record<string, Agent> = {
@@ -41,7 +66,39 @@ export function AgentDock() {
   const quarter = useStore((s) => s.quarter);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
+
+  // exporta a conversa atual num PDF (via janela de impressão do navegador)
+  const exportPdf = () => {
+    const rows = msgs
+      .map((m) =>
+        m.role === "user"
+          ? `<div class="q">${mdToHtml(m.text).replace(/<\/?p>/g, "")}</div>`
+          : `<div class="a">${mdToHtml(m.text)}</div>`
+      )
+      .join("");
+    const win = window.open("", "_blank", "width=820,height=1000");
+    if (!win) return;
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${a.nome} — Casinha do Marketing</title>
+<style>
+  *{box-sizing:border-box} body{font-family:Montserrat,-apple-system,system-ui,sans-serif;color:#121111;max-width:720px;margin:36px auto;padding:0 24px;line-height:1.5}
+  h1{font-size:20px;margin:0 0 2px} .sub{color:#8a8a8a;font-size:12px;margin:0 0 20px}
+  .q{background:#121111;color:#fff;border-radius:12px;padding:10px 14px;margin:16px 0 6px;font-weight:600}
+  .a{background:#f4f4f3;border-radius:12px;padding:12px 16px;margin:0 0 8px}
+  .a h3,.a h4,.a h5{margin:12px 0 4px;font-size:14px} .a p{margin:6px 0} .a ul{margin:6px 0;padding-left:20px}
+  code{background:#ececeb;padding:1px 5px;border-radius:5px;font-size:.9em}
+  .ft{margin-top:28px;color:#b5b5b5;font-size:10.5px;text-align:center}
+</style></head><body>
+  <h1>${a.nome} · ${a.papel}</h1>
+  <div class="sub">Casinha do Marketing — Seahub · assistente com LLM</div>
+  ${rows}
+  <div class="ft">Gerado pela Casinha do Marketing</div>
+</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  };
 
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
@@ -96,7 +153,7 @@ export function AgentDock() {
   return (
     <div id="agentDock">
       {open && (
-        <div className="ag-panel">
+        <div className={`ag-panel${expanded ? " big" : ""}`}>
           <div className="ag-head">
             <div className="ag-head-l">
               {av}
@@ -105,9 +162,19 @@ export function AgentDock() {
                 <span>{a.papel}</span>
               </div>
             </div>
-            <button className="ag-x" onClick={toggle} aria-label="Fechar" type="button">
-              ✕
-            </button>
+            <div className="ag-head-r">
+              {msgs.length > 0 && (
+                <button className="ag-x ag-x-txt" onClick={exportPdf} aria-label="Exportar PDF" title="Exportar conversa em PDF" type="button">
+                  PDF
+                </button>
+              )}
+              <button className="ag-x" onClick={() => setExpanded((v) => !v)} aria-label={expanded ? "Recolher" : "Expandir"} title={expanded ? "Recolher" : "Expandir"} type="button">
+                {expanded ? "⤡" : "⤢"}
+              </button>
+              <button className="ag-x" onClick={toggle} aria-label="Fechar" type="button">
+                ✕
+              </button>
+            </div>
           </div>
           <div className="ag-thread" ref={threadRef}>
             <div className="ag-msg ag-bot">
@@ -122,7 +189,9 @@ export function AgentDock() {
               ) : (
                 <div className="ag-msg ag-bot" key={i}>
                   {av}
-                  <div className="ag-bubble">{m.text || (busy && i === msgs.length - 1 ? "…" : m.text)}</div>
+                  <div className="ag-bubble">
+                    {m.text ? <AgentMarkdown text={m.text} /> : busy && i === msgs.length - 1 ? "…" : null}
+                  </div>
                 </div>
               )
             )}
