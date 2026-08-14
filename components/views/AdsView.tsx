@@ -239,7 +239,7 @@ export function AdsView() {
             </div>
 
             {/* Indicadores agrupados por tema — soma de todas as contas + manual */}
-            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--hairline)" }}>
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--hairline)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16, alignItems: "start" }}>
               <ThemeGroup title="Investimento" color="var(--red)">
                 <MiniStat l="Investimento" n={money(geral.spend)} />
                 <MiniStat l="CPC" n={geral.cpc ? money(geral.cpc) : "—"} />
@@ -306,12 +306,9 @@ function ThemeGroup({ title, color, children }: { title: string; color: string; 
 }
 
 // painel de uma ad account — minimizável; expandido mostra indicadores agrupados por tema
-// + narrativa própria + tabela de campanhas com filtro de busca
+// + narrativa própria + tabela de campanhas em largura total
 function AdAccountPanel({ a, open, onToggle }: { a: AdAccountData; open: boolean; onToggle: () => void }) {
   const t = a.totals || emptyTotals();
-  const [q, setQ] = useState("");
-  const query = q.trim().toLowerCase();
-  const filtered = query ? a.campaigns.filter((c) => c.name.toLowerCase().includes(query)) : a.campaigns;
 
   return (
     <div className={`card pad-lg${open ? " open" : ""}`} style={{ marginBottom: 12 }}>
@@ -336,56 +333,44 @@ function AdAccountPanel({ a, open, onToggle }: { a: AdAccountData; open: boolean
             {t.cpl > 0 ? <> (CPL {money(t.cpl)})</> : null}.
           </p>
 
-          {/* indicadores agrupados por tema */}
-          <ThemeGroup title="Investimento" color="var(--red)">
-            <MiniStat l="Investimento" n={money(t.spend)} />
-            <MiniStat l="CPC" n={t.cpc ? money(t.cpc) : "—"} />
-            <MiniStat l="CPM" n={t.cpm ? money(t.cpm) : "—"} />
-          </ThemeGroup>
+          {/* indicadores agrupados por tema — grid de largura total */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16, alignItems: "start" }}>
+            <ThemeGroup title="Investimento" color="var(--red)">
+              <MiniStat l="Investimento" n={money(t.spend)} />
+              <MiniStat l="CPC" n={t.cpc ? money(t.cpc) : "—"} />
+              <MiniStat l="CPM" n={t.cpm ? money(t.cpm) : "—"} />
+            </ThemeGroup>
 
-          <ThemeGroup title="Alcance" color="var(--cyan)">
-            <MiniStat l="Impressões" n={kfmt(t.impressions)} />
-            <MiniStat l="Alcance" n={kfmt(t.reach)} />
-            <MiniStat l="Frequência" n={fmt(t.frequency, 1)} />
-          </ThemeGroup>
+            <ThemeGroup title="Alcance" color="var(--cyan)">
+              <MiniStat l="Impressões" n={kfmt(t.impressions)} />
+              <MiniStat l="Alcance" n={kfmt(t.reach)} />
+              <MiniStat l="Frequência" n={fmt(t.frequency, 1)} />
+            </ThemeGroup>
 
-          <ThemeGroup title="Engajamento" color="var(--ink)">
-            <MiniStat l="Engaj. de posts" n={fmt(t.postEngagement)} />
-            <MiniStat l="Reações" n={fmt(t.reactions)} />
-            <MiniStat l="Comentários" n={fmt(t.comments)} />
-            <MiniStat l="Views de vídeo" n={fmt(t.videoViews)} />
-          </ThemeGroup>
+            <ThemeGroup title="Engajamento" color="var(--ink)">
+              <MiniStat l="Engaj. de posts" n={fmt(t.postEngagement)} />
+              <MiniStat l="Reações" n={fmt(t.reactions)} />
+              <MiniStat l="Comentários" n={fmt(t.comments)} />
+              <MiniStat l="Views de vídeo" n={fmt(t.videoViews)} />
+            </ThemeGroup>
 
-          <ThemeGroup title="Conversão" color="var(--excelente)">
-            <MiniStat l="Leads" n={fmt(t.leads)} />
-            <MiniStat l="Custo/lead" n={t.cpl ? money(t.cpl) : "—"} />
-            <MiniStat l="Conversas" n={fmt(t.messaging)} />
-            <MiniStat l="Page views (LP)" n={fmt(t.landingViews)} />
-            <MiniStat l="Compras" n={fmt(t.purchases)} />
-          </ThemeGroup>
+            <ThemeGroup title="Conversão" color="var(--excelente)">
+              <MiniStat l="Leads" n={fmt(t.leads)} />
+              <MiniStat l="Custo/lead" n={t.cpl ? money(t.cpl) : "—"} />
+              <MiniStat l="Conversas" n={fmt(t.messaging)} />
+              <MiniStat l="Page views (LP)" n={fmt(t.landingViews)} />
+              <MiniStat l="Compras" n={fmt(t.purchases)} />
+            </ThemeGroup>
+          </div>
 
-          {/* tabela de campanhas com filtro */}
+          {/* tabela de campanhas — largura total */}
           {a.campaigns.length > 0 && (
-            <div style={{ marginTop: 4 }}>
+            <div style={{ marginTop: 18 }}>
               <div className="card-head" style={{ marginBottom: 10 }}>
                 <div className="t" style={{ fontSize: 13 }}>Campanhas</div>
-                <input
-                  className="field-edit"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Filtrar campanhas…"
-                  style={{ maxWidth: 240 }}
-                  aria-label="Filtrar campanhas por nome"
-                />
+                <span className="badge">{a.campaigns.length}</span>
               </div>
-              {query && (
-                <div className="sub" style={{ fontSize: 12, color: "var(--label-3)", marginBottom: 8 }}>
-                  {filtered.length} de {a.campaigns.length} campanhas
-                </div>
-              )}
-              {filtered.length > 0
-                ? <CampanhaTable campaigns={filtered} adAccountId={a.id} />
-                : <div className="sub" style={{ fontSize: 12.5, color: "var(--label-3)" }}>Nenhuma campanha corresponde a “{q}”.</div>}
+              <CampanhaTable campaigns={a.campaigns} adAccountId={a.id} />
             </div>
           )}
         </>
@@ -394,25 +379,35 @@ function AdAccountPanel({ a, open, onToggle }: { a: AdAccountData; open: boolean
   );
 }
 
-// Lista de campanhas em linhas EXPANDÍVEIS. Colunas essenciais sempre visíveis
-// (Campanha · Objetivo · Investimento · CTR · Leads); clicar expande a viz agrupada.
+// Lista de campanhas em linhas EXPANDÍVEIS, ocupando toda a largura disponível.
+// Colunas sempre visíveis: Campanha · Objetivo · Investimento · Impressões · Cliques ·
+// CTR · CPC · CPL · Leads (manual mostra o subconjunto disponível); clicar expande a viz agrupada.
 function CampanhaTable({ campaigns, manual, adAccountId }: { campaigns: AdCampaign[]; manual?: boolean; adAccountId?: string }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
-  const colSpan = manual ? 5 : 6;
+  // colunas: chevron + nome + (objetivo) + spend + impr + cliques + ctr + (cpc) + (cpl) + leads
+  const colSpan = manual ? 7 : 10;
   return (
     <div className="rel-scroll">
-      <table className="rel-tbl ads-tbl">
+      <table className="rel-tbl ads-tbl" style={{ width: "100%", tableLayout: "auto" }}>
         <thead>
           <tr>
             <th style={{ width: 26 }} aria-hidden />
             <th style={{ textAlign: "left" }}>{manual ? "Canal / campanha" : "Campanha"}</th>
             {!manual && <th style={{ textAlign: "left" }}>Objetivo</th>}
-            <th>Investimento</th><th>CTR</th><th>Leads</th>
+            <th>Investimento</th>
+            <th>Impressões</th>
+            <th>Cliques</th>
+            <th>CTR</th>
+            {!manual && <th>CPC</th>}
+            {!manual && <th>CPL</th>}
+            <th>Leads</th>
           </tr>
         </thead>
         <tbody>
           {campaigns.map((c, i) => {
             const isOpen = !!open[i];
+            const cpc = c.cpc ?? (c.clicks ? c.spend / c.clicks : 0);
+            const cpl = c.cpl ?? (c.leads ? c.spend / c.leads : 0);
             return (
               <Fragment key={i}>
                 <tr onClick={() => setOpen((o) => ({ ...o, [i]: !o[i] }))} style={{ cursor: "pointer" }}>
@@ -422,7 +417,7 @@ function CampanhaTable({ campaigns, manual, adAccountId }: { campaigns: AdCampai
                       <path d="M6 9l6 6 6-6" />
                     </svg>
                   </td>
-                  <td className="rel-prod" style={{ textAlign: "left", maxWidth: 240, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</td>
+                  <td className="rel-prod" style={{ textAlign: "left", minWidth: 220, maxWidth: 420, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</td>
                   {!manual && (
                     <td style={{ textAlign: "left" }}>
                       <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--cyan)", background: "rgba(0,187,197,.10)", padding: "2px 8px", borderRadius: 20, whiteSpace: "nowrap" }}>
@@ -431,7 +426,11 @@ function CampanhaTable({ campaigns, manual, adAccountId }: { campaigns: AdCampai
                     </td>
                   )}
                   <td className="tnum">{money(c.spend)}</td>
+                  <td className="tnum">{kfmt(c.impressions)}</td>
+                  <td className="tnum">{fmt(c.clicks)}</td>
                   <td className="tnum">{pctv(c.ctr)}</td>
+                  {!manual && <td className="tnum">{cpc ? money(cpc) : "—"}</td>}
+                  {!manual && <td className="tnum">{cpl ? money(cpl) : "—"}</td>}
                   <td className="tnum">{fmt(c.leads)}</td>
                 </tr>
                 {isOpen && (
