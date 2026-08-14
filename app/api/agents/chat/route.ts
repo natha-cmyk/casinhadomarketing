@@ -18,6 +18,8 @@ interface Body {
   agentKey?: string;
   messages?: { role?: string; text?: string }[];
   scope?: { period?: string; year?: number; month?: number; week?: number; quarter?: number };
+  accounts?: import("@/lib/agents").AccountLite[]; // contas já carregadas no client (sem custo de integração)
+  panel?: unknown; // snapshot do que o painel está exibindo (fonte primária dos números ao vivo)
 }
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
@@ -120,7 +122,10 @@ export async function POST(req: Request) {
   }
 
   const scope = normalizeScope(body.scope);
-  const context = await buildContext(agentKey, ws, scope).catch(() => "Contexto indisponível no momento.");
+  const context = await buildContext(agentKey, ws, scope, {
+    accounts: Array.isArray(body.accounts) ? body.accounts.slice(0, 40) : [],
+    panel: body.panel,
+  }).catch(() => "Contexto indisponível no momento.");
   const system = `${agent.system}\n\n=== CONTEXTO DO WORKSPACE (dados reais) ===\n${context}\n=== FIM DO CONTEXTO ===`;
 
   const history: Msg[] = (body.messages || [])

@@ -64,6 +64,8 @@ export function AgentDock() {
   const month = useStore((s) => s.month);
   const week = useStore((s) => s.week);
   const quarter = useStore((s) => s.quarter);
+  const accounts = useStore((s) => s.zernioAccounts);
+  const panelSnapshot = useStore((s) => s.panelSnapshot);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -117,7 +119,16 @@ export function AgentDock() {
       const res = await fetch("/api/agents/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentKey: key, messages: history, scope: { period, year, month, week, quarter } }),
+        body: JSON.stringify({
+          agentKey: key,
+          messages: history,
+          scope: { period, year, month, week, quarter },
+          accounts: accounts.map((a) => ({
+            platform: a.platform, displayName: a.displayName, username: a.username,
+            followersCount: a.followersCount, enabled: a.enabled, adsStatus: a.adsStatus,
+          })),
+          panel: panelSnapshot,
+        }),
       });
       const ct = res.headers.get("content-type") || "";
       if (ct.includes("application/json")) {

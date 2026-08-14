@@ -91,6 +91,14 @@ export function PainelView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey]);
 
+  // publica o snapshot do overview (números na tela) p/ os agentes ancorarem — evita invenção
+  const setPanelSnapshot = s.setPanelSnapshot;
+  useEffect(() => {
+    if (!accounts) return;
+    setPanelSnapshot({ view: "overview", label: `${range.since} a ${range.until}`, data: { canais: accounts } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts, cacheKey]);
+
   // baseline p/ empty-state antes do fetch resolver: existe alguma conta social/analytics?
   const hasStoreConnected = storeAccounts.some((a) => a.enabled === true);
   const list = accounts ?? [];

@@ -1,259 +1,152 @@
 // Assistentes do Panteão — LLM real (server-only). NUNCA importar em client.
-// Cada agente é uma LLM (Claude via @anthropic-ai/sdk) com um system prompt próprio
-// e um bloco de CONTEXTO montado a partir dos dados REAIS do workspace (Prisma + Zernio),
-// escopado pelo período da toolbar. Marca: sempre "LLM" na UI (nunca nome de rede externa).
-// TODO(agents): evoluir de contexto injetado → tool-calling nas nossas APIs (streaming de
-//   ferramentas) + geração de relatório (PDF/DOCX) + edições como rascunho que o usuário confirma.
+// Cada agente é uma LLM (via /api/agents/chat) com system prompt próprio + um bloco de
+// CONTEXTO montado de fontes RÁPIDAS: banco (Prisma) + snapshot do que o painel JÁ
+// carregou na tela do usuário. NÃO faz chamada de integração ao vivo aqui — isso evita
+// timeout da função E evita invenção (o número do agente = o número que o painel mostra).
+// Marca: sempre "LLM" na UI.
+// TODO(agents): tool-calling p/ buscar dado sob demanda + relatório PDF server-side + edições como rascunho.
 import type { Workspace } from "@prisma/client";
 import { prisma } from "./prisma";
-import {
-  MONTHS_FULL, daysInMonth, weekRange, quarterOf, type Period, type Scope,
-} from "./scope";
-import {
-  listAccounts, accountInsightsFull, youtubeChannelInsights, linkedinAggregate,
-  gbpPerformance, postAnalytics, listAdAccounts, adsInsights,
-  type ZernioAccount, type AdInsightRow,
-} from "./zernio";
+import { MONTHS_FULL, daysInMonth, weekRange, quarterOf, type Period, type Scope } from "./scope";
 
 export type AgentKey = "poseidon" | "apollo" | "athena" | "dionisio";
 
 interface AgentDef { nome: string; papel: string; system: string }
+
+// conta conectada, enviada pelo client (já carregada no store) — sem custo de integração aqui
+export interface AccountLite {
+  platform: string; displayName?: string; username?: string;
+  followersCount?: number; enabled?: boolean; adsStatus?: string;
+}
 
 const BASE_RULES = `
 Você é um assistente da Casinha do Marketing — o painel/SO de marketing da agência.
 Regras (CRITÉRIO É INEGOCIÁVEL — o cliente confia nesses números pra decidir):
 - Responda SEMPRE em português do Brasil, tom claro, direto e acionável (estrategista sênior falando com o cliente).
 - RASTREABILIDADE: todo número/valor que você citar TEM que aparecer LITERALMENTE no contexto abaixo. É PROIBIDO estimar, arredondar inventando, deduzir, extrapolar ou "preencher" valores que não estão no contexto. Não faça contas que dependam de dados ausentes.
-- Se um dado NÃO estiver no contexto (ou aparecer como "sem métricas"/"carregando"/"não conectado"), diga explicitamente que ainda não tem esse número — NUNCA invente. É melhor dizer "não tenho esse dado conectado" do que chutar.
-- Não afirme causa/efeito sem base nos dados. Recomendações podem ser qualitativas, mas números, não.
-- Seja conciso: comece pela conclusão, depois o porquê. Poucos parágrafos ou lista curta.
+- Se um dado NÃO estiver no contexto, diga explicitamente que ainda não tem esse número conectado — NUNCA invente. É melhor dizer "não tenho esse dado conectado aqui" do que chutar.
+- Priorize o bloco "O QUE O USUÁRIO ESTÁ VENDO NO PAINEL" como fonte primária dos números — é o que está na tela dele.
+- Não afirme causa/efeito sem base nos dados. Recomendações podem ser qualitativas; números, não.
+- Seja conciso: comece pela conclusão, depois o porquê. Poucos parágrafos ou lista curta. Markdown simples (títulos, negrito, listas).
 - Ao citar um número, diga o período. Sugira 1–2 próximos passos concretos quando fizer sentido.
 - Você é uma LLM integrada ao painel. Nunca cite nomes de ferramentas/APIs externas de integração.`;
 
 export const AGENTS: Record<AgentKey, AgentDef> = {
   poseidon: {
-    nome: "Poseidon",
-    papel: "Dados & mídia paga",
+    nome: "Poseidon", papel: "Dados & mídia paga",
     system: `${BASE_RULES}
 
-Seu papel (Poseidon): dados de desempenho e mídia paga. Você lê os painéis sociais e as contas de anúncio. Domine performance, alcance, frequência, ROAS, custo por conversa/resultado e eficiência de investimento. Aponte onde o dinheiro rende mais e onde há desperdício.`,
+Seu papel (Poseidon): dados de desempenho e mídia paga. Analise performance, alcance, frequência, ROAS, custo por resultado e eficiência de investimento — SEMPRE a partir dos números do painel/contexto. Se o investimento ou os resultados não estiverem no contexto, diga que ainda não estão conectados aqui (não invente valor de mídia paga).`,
   },
   apollo: {
-    nome: "Apollo",
-    papel: "Conteúdo & canais",
+    nome: "Apollo", papel: "Conteúdo & canais",
     system: `${BASE_RULES}
 
-Seu papel (Apollo): conteúdo e calendário editorial. Você conhece os canais conectados, o que está agendado/publicado e a produção por rede. Ajude com pautas, roteiros, legendas, CTAs e cadência de publicação. Quando pedirem conteúdo, escreva de fato (pronto pra usar).`,
+Seu papel (Apollo): conteúdo e calendário editorial. Conhece os canais conectados e o que está agendado/publicado. Ajude com pautas, roteiros, legendas, CTAs e cadência. Quando pedirem conteúdo, escreva de fato (pronto pra usar).`,
   },
   athena: {
-    nome: "Athena",
-    papel: "Metas & OKR",
+    nome: "Athena", papel: "Metas & OKR",
     system: `${BASE_RULES}
 
-Seu papel (Athena): metas e OKR. Você acompanha objetivo, áreas e KRs (alvo x realizado). Avalie progresso, aponte o que está no ritmo e o que está atrasado, e recomende prioridades pra destravar os resultados do período.`,
+Seu papel (Athena): metas e OKR. Acompanha objetivo, áreas e KRs (alvo x realizado). Avalie progresso, aponte o que está no ritmo e o que está atrasado, recomende prioridades.`,
   },
   dionisio: {
-    nome: "Dionísio",
-    papel: "Persona & público",
+    nome: "Dionísio", papel: "Persona & público",
     system: `${BASE_RULES}
 
-Seu papel (Dionísio): público, personas e CRM. Você conhece as personas cadastradas e os leads/oportunidades (canal, produto, status, motivo de perda, valor). Ajude a entender quem converte, gargalos do funil, segmentos pra reativar e como falar com cada persona.`,
+Seu papel (Dionísio): público, personas e CRM. Conhece as personas cadastradas e os leads/oportunidades (canal, produto, status, motivo de perda, valor). Ajude a entender quem converte, gargalos do funil, segmentos pra reativar e como falar com cada persona.`,
   },
 };
 
-// ── período (Scope) → intervalo ISO (since/until), limitado a hoje ────────────
-function isoRange(s: Scope): { since: string; until: string; label: string } {
+// ── período (Scope) → rótulo legível ─────────────────────────────────────────
+function periodLabel(s: Scope): string {
+  const { period, year, month, week, quarter } = s;
+  if (period === "semana") { const [d1, d2] = weekRange(year, month, week).split("–"); return `Semana ${week + 1} (${d1}–${d2} de ${MONTHS_FULL[month]} ${year})`; }
+  if (period === "trimestre") return `${(quarter ?? quarterOf(month)) + 1}º trimestre de ${year}`;
+  if (period === "ano") return `Ano de ${year}`;
+  return `${MONTHS_FULL[month]} de ${year}`;
+}
+function isoRange(s: Scope): { since: string; until: string } {
   const pad = (n: number) => String(n).padStart(2, "0");
   const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const today = new Date();
-  const cap = (d: Date) => (d > today ? today : d);
   const { period, year, month, week, quarter } = s;
-  let start: Date, end: Date, label: string;
-  if (period === "semana") {
-    const [d1, d2] = weekRange(year, month, week).split("–").map(Number);
-    start = new Date(year, month, d1);
-    end = new Date(year, month, d2);
-    label = `Semana ${week + 1} (${d1}–${d2} de ${MONTHS_FULL[month]} ${year})`;
-  } else if (period === "trimestre") {
-    const q = quarter ?? quarterOf(month);
-    start = new Date(year, q * 3, 1);
-    end = new Date(year, q * 3 + 2, daysInMonth(year, q * 3 + 2));
-    label = `${q + 1}º trimestre de ${year}`;
-  } else if (period === "ano") {
-    start = new Date(year, 0, 1);
-    end = new Date(year, 11, 31);
-    label = `Ano de ${year}`;
-  } else {
-    start = new Date(year, month, 1);
-    end = new Date(year, month, daysInMonth(year, month));
-    label = `${MONTHS_FULL[month]} de ${year}`;
-  }
-  return { since: iso(start), until: iso(cap(end)), label };
-}
-
-// limita cada chamada externa (Zernio pode ser lento) — evita FUNCTION_INVOCATION_TIMEOUT
-function withTimeout<T>(p: Promise<T>, ms: number, fb?: T): Promise<T | undefined> {
-  return Promise.race([
-    p.catch(() => fb),
-    new Promise<T | undefined>((res) => setTimeout(() => res(fb), ms)),
-  ]);
+  let start: Date, end: Date;
+  if (period === "semana") { const [d1, d2] = weekRange(year, month, week).split("–").map(Number); start = new Date(year, month, d1); end = new Date(year, month, d2); }
+  else if (period === "trimestre") { const q = quarter ?? quarterOf(month); start = new Date(year, q * 3, 1); end = new Date(year, q * 3 + 2, daysInMonth(year, q * 3 + 2)); }
+  else if (period === "ano") { start = new Date(year, 0, 1); end = new Date(year, 11, 31); }
+  else { start = new Date(year, month, 1); end = new Date(year, month, daysInMonth(year, month)); }
+  return { since: iso(start), until: iso(end) };
 }
 
 const nBR = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const money = (v: number) => "R$ " + v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-// achata {k:{total}}|{k:number} → {k:number}
-function flat(raw?: Record<string, { total?: number } | number> | null): Record<string, number> {
-  const out: Record<string, number> = {};
-  if (!raw) return out;
-  for (const [k, v] of Object.entries(raw)) {
-    const t = typeof v === "number" ? v : num((v as { total?: number })?.total);
-    if (Number.isFinite(t)) out[k] = t;
-  }
-  return out;
-}
-
 const ADS_ONLY = new Set(["metaads", "googleads", "linkedinads", "tiktokads", "pinterestads", "snapchatads"]);
-const IG_LIKE = new Set(["instagram", "facebook", "tiktok", "twitter"]);
-const RESULT_ACTIONS = new Set(["lead", "onsite_conversion.messaging_conversation_started_7d", "purchase", "offsite_conversion.fb_pixel_lead"]);
 
-// soma os resultados (lead/conversa/compra) das linhas de insight de anúncio
-function adResults(rows: AdInsightRow[]): number {
-  let r = 0;
-  for (const row of rows) for (const a of row.actions || []) if (RESULT_ACTIONS.has(a.action_type)) r += num(a.value);
-  return r;
-}
-
-// ── contexto: Perfil (comum a todos) ─────────────────────────────────────────
+// ── perfil (comum) ───────────────────────────────────────────────────────────
 async function perfilBlock(ws: Workspace): Promise<string> {
   const p = await prisma.perfil.findUnique({ where: { workspaceId: ws.id } }).catch(() => null);
   if (!p) return `Empresa: ${ws.nome}.`;
-  const parts = [
+  return [
     p.empresa && `Empresa: ${p.empresa}`,
     p.segmento && `Segmento: ${p.segmento}`,
     p.cidade && `Cidade: ${p.cidade}`,
     p.produtos?.length && `Produtos/serviços: ${p.produtos.join(", ")}`,
-  ].filter(Boolean);
-  return parts.join(". ") + ".";
+  ].filter(Boolean).join(". ") + ".";
 }
 
-// ── Poseidon: contas sociais (alcance/seguidores) + mídia paga (gasto/resultado) ──
-async function poseidonBlock(ws: Workspace, r: { since: string; until: string }): Promise<string> {
-  if (!ws.zernioProfileId) return "Nenhuma conta conectada ainda.";
-  const acc = await withTimeout(listAccounts(ws.zernioProfileId), 5000);
-  const accounts: ZernioAccount[] = acc?.accounts || [];
-  const social = accounts.filter((a) => !ADS_ONLY.has(String(a.platform)) && (a.enabled === true || (a as Record<string, unknown>).analyticsEnabled === true));
-
-  // social e ads rodam em PARALELO, cada seção com TETO de tempo (a integração de Ads
-  // é a mais lenta) — garante que o contexto nunca estoura o timeout da função Vercel.
-  const socialLines: string[] = [];
-  let spend = 0, reach = 0, impressions = 0, clicks = 0, results = 0;
-  let hasAds = false;
-
-  const socialTask = withTimeout(Promise.all(
-    social.slice(0, 5).map(async (a) => {
-      const plat = String(a.platform);
-      let m: Record<string, number> = {};
-      if (plat === "youtube") m = flat((await withTimeout(youtubeChannelInsights(a._id, r), 3000))?.metrics);
-      else if (plat === "linkedin") m = flat((await withTimeout(linkedinAggregate(a._id, r), 3000))?.analytics);
-      else if (plat === "googlebusiness") m = flat((await withTimeout(gbpPerformance(a._id, { fromDate: r.since, toDate: r.until }), 3000))?.metrics);
-      else if (IG_LIKE.has(plat)) m = flat((await withTimeout(accountInsightsFull(plat, a._id, r), 3000))?.metrics);
-      const nome = a.displayName || (a as Record<string, unknown>).username as string || plat;
-      const bits = [
-        a.followersCount != null && `${nBR(num(a.followersCount))} seguidores`,
-        m.reach != null && `alcance ${nBR(m.reach)}`,
-        m.views != null && `${nBR(m.views)} views`,
-        m.total_interactions != null && `${nBR(m.total_interactions)} interações`,
-      ].filter(Boolean);
-      socialLines.push(`- ${nome} (${plat}): ${bits.join(", ") || "sem métricas no período"}`);
-    })
-  ), 4000);
-
-  const adsTask = withTimeout(Promise.all(
-    accounts.slice(0, 3).map(async (a) => {
-      const adRes = await withTimeout(listAdAccounts(a._id), 2500);
-      await Promise.all(
-        (adRes?.accounts || []).slice(0, 2).map(async (ad) => {
-          const ins = await withTimeout(adsInsights(a._id, ad.id, { since: r.since, until: r.until, level: "account" }), 3000);
-          for (const row of ins?.data || []) {
-            hasAds = true;
-            spend += num(row.spend); reach += num(row.reach); impressions += num(row.impressions);
-            clicks += num(row.clicks);
-          }
-          results += adResults(ins?.data || []);
-        })
-      );
-    })
-  ), 4500);
-
-  await Promise.all([socialTask, adsTask]);
-
-  // dados manuais de campanha (vendas/receita que a mídia não entrega)
-  const cfg = await prisma.envConfig.findUnique({ where: { workspaceId: ws.id } }).catch(() => null);
-  const manual = (cfg?.adConfig as { manualCampaigns?: { vendas?: number; receita?: number; campanha?: string }[] } | null)?.manualCampaigns || [];
-  const receita = manual.reduce((s, c) => s + num(c.receita), 0);
-  const vendas = manual.reduce((s, c) => s + num(c.vendas), 0);
-
-  const out: string[] = [];
-  out.push("CANAIS SOCIAIS:");
-  out.push(socialLines.length ? socialLines.join("\n") : "- (sem contas sociais conectadas)");
-  if (hasAds) {
-    const cpr = results ? spend / results : null;
-    out.push("\nMÍDIA PAGA (nível conta, período):");
-    out.push(`- Investimento: ${money(spend)} · Alcance: ${nBR(reach)} · Impressões: ${nBR(impressions)} · Cliques: ${nBR(clicks)}`);
-    out.push(`- Resultados (leads/conversas/compras): ${nBR(results)}${cpr != null ? ` · Custo por resultado: ${money(cpr)}` : ""}`);
-  } else {
-    out.push("\nMÍDIA PAGA: nenhuma conta de anúncio conectada (ou sem dados no período).");
-  }
-  if (receita || vendas) {
-    const roas = spend ? receita / spend : null;
-    out.push(`\nDADOS MANUAIS informados: ${nBR(vendas)} vendas · Receita ${money(receita)}${roas != null ? ` · ROAS ${roas.toFixed(2)}` : ""}.`);
-  }
+// contas conectadas (vindas do client — sem chamada de integração)
+function accountsBlock(accounts: AccountLite[]): string {
+  if (!accounts.length) return "Nenhuma conta conectada ainda (ou o painel ainda não carregou).";
+  const social = accounts.filter((a) => !ADS_ONLY.has(a.platform));
+  const ads = accounts.filter((a) => a.adsStatus === "connected" || a.adsStatus === "active" || ADS_ONLY.has(a.platform));
+  const lines = social.map((a) => {
+    const nome = a.displayName || a.username || a.platform;
+    return `- ${nome} (${a.platform})${a.followersCount != null ? ` · ${nBR(num(a.followersCount))} seguidores` : ""}`;
+  });
+  const out = [`CANAIS CONECTADOS (${social.length}):`, ...(lines.length ? lines : ["- (nenhum)"])];
+  if (ads.length) out.push(`Contas com mídia paga conectada: ${ads.map((a) => a.displayName || a.platform).join(", ")}.`);
   return out.join("\n");
 }
 
-// ── Apollo: calendário (agendado/publicado) + canais + produção de conteúdo ──
-async function apolloBlock(ws: Workspace, r: { since: string; until: string }): Promise<string> {
+// ── Poseidon: contas + dados manuais de campanha (Prisma) — SEM mídia ao vivo ──
+async function poseidonBlock(ws: Workspace, accounts: AccountLite[]): Promise<string> {
+  const cfg = await prisma.envConfig.findUnique({ where: { workspaceId: ws.id } }).catch(() => null);
+  const manual = (cfg?.adConfig as { manualCampaigns?: { vendas?: number; receita?: number; leadsQualificados?: number; campaignName?: string }[] } | null)?.manualCampaigns || [];
+  const receita = manual.reduce((s, c) => s + num(c.receita), 0);
+  const vendas = manual.reduce((s, c) => s + num(c.vendas), 0);
+  const out = [accountsBlock(accounts)];
+  if (receita || vendas) out.push(`\nDADOS MANUAIS de campanha informados: ${nBR(vendas)} vendas · Receita ${money(receita)}.`);
+  out.push("\nNúmeros de mídia paga ao vivo (investimento/alcance/resultados) vêm do bloco do painel abaixo, quando presente. Se não estiverem lá, não invente — diga que ainda não estão carregados aqui.");
+  return out.join("\n");
+}
+
+// ── Apollo: calendário (Prisma) + canais (client) ────────────────────────────
+async function apolloBlock(ws: Workspace, r: { since: string; until: string }, accounts: AccountLite[]): Promise<string> {
   const posts = await prisma.post.findMany({
     where: { workspaceId: ws.id, data: { gte: new Date(r.since), lte: new Date(r.until + "T23:59:59") } },
     orderBy: { data: "asc" },
   }).catch(() => []);
-
   const byStatus: Record<string, number> = {};
   const byCanal: Record<string, number> = {};
-  for (const p of posts) {
-    byStatus[p.status] = (byStatus[p.status] || 0) + 1;
-    byCanal[p.canal] = (byCanal[p.canal] || 0) + 1;
-  }
-  const proximos = posts
-    .filter((p) => p.status === "agendado" || p.status === "rascunho")
-    .slice(0, 8)
+  for (const p of posts) { byStatus[p.status] = (byStatus[p.status] || 0) + 1; byCanal[p.canal] = (byCanal[p.canal] || 0) + 1; }
+  const proximos = posts.filter((p) => p.status === "agendado" || p.status === "rascunho").slice(0, 8)
     .map((p) => `- ${p.data.toLocaleDateString("pt-BR")} ${p.hora} · ${p.canal} · "${p.titulo}"${p.formato ? ` (${p.formato})` : ""}`);
-
-  // canais conectados (com timeout — não pode travar a função)
-  let canais: string[] = [];
-  if (ws.zernioProfileId) {
-    const acc = await withTimeout(listAccounts(ws.zernioProfileId), 4000);
-    canais = (acc?.accounts || []).filter((a) => a.enabled === true).map((a) => `${a.displayName || a.platform} (${a.platform})`);
-  }
-
-  const out: string[] = [];
-  out.push(`CANAIS CONECTADOS: ${canais.length ? canais.join(", ") : "nenhum ainda"}.`);
-  out.push(`CALENDÁRIO no período (${posts.length} posts): ${Object.entries(byStatus).map(([k, v]) => `${v} ${k}`).join(", ") || "vazio"}.`);
-  if (Object.keys(byCanal).length) out.push(`Distribuição por canal: ${Object.entries(byCanal).map(([k, v]) => `${k}: ${v}`).join(", ")}.`);
+  const out = [accountsBlock(accounts)];
+  out.push(`\nCALENDÁRIO no período (${posts.length} posts): ${Object.entries(byStatus).map(([k, v]) => `${v} ${k}`).join(", ") || "vazio"}.`);
+  if (Object.keys(byCanal).length) out.push(`Por canal: ${Object.entries(byCanal).map(([k, v]) => `${k}: ${v}`).join(", ")}.`);
   if (proximos.length) out.push(`PRÓXIMOS/RASCUNHOS:\n${proximos.join("\n")}`);
   return out.join("\n");
 }
 
-// ── Athena: OKR (objetivo, áreas, KRs alvo x realizado) ──────────────────────
+// ── Athena: OKR (Prisma) ─────────────────────────────────────────────────────
 async function athenaBlock(ws: Workspace): Promise<string> {
   const [obj, areas] = await Promise.all([
     prisma.objetivo.findUnique({ where: { workspaceId: ws.id } }).catch(() => null),
     prisma.area.findMany({ where: { workspaceId: ws.id }, orderBy: { ordem: "asc" }, include: { krs: { orderBy: { ordem: "asc" } } } }).catch(() => []),
   ]);
-  const out: string[] = [];
-  out.push(`OBJETIVO: ${obj?.texto || "(não definido)"}.`);
+  const out = [`OBJETIVO: ${obj?.texto || "(não definido)"}.`];
   if (!areas.length) { out.push("Nenhuma área/KR cadastrado."); return out.join("\n"); }
   for (const a of areas) {
     out.push(`\nÁrea: ${a.nome}`);
@@ -265,28 +158,20 @@ async function athenaBlock(ws: Workspace): Promise<string> {
   return out.join("\n");
 }
 
-// ── Dionísio: personas + leads/CRM (canal, produto, status, perda, valor) ────
+// ── Dionísio: personas + leads/CRM (Prisma) ──────────────────────────────────
 async function dionisioBlock(ws: Workspace): Promise<string> {
   const [personas, leads] = await Promise.all([
     prisma.persona.findMany({ where: { workspaceId: ws.id }, orderBy: { ordem: "asc" } }).catch(() => []),
     prisma.lead.findMany({ where: { workspaceId: ws.id }, orderBy: { createdAt: "desc" }, take: 500 }).catch(() => []),
   ]);
-
-  const out: string[] = [];
-  out.push("PERSONAS:");
+  const out = ["PERSONAS:"];
   if (personas.length) {
     for (const p of personas.slice(0, 8)) {
-      const d = (p.detalhes as { consome?: string[]; gosta?: string[] } | null) || {};
-      const bits = [
-        p.representa && `representa: ${p.representa}`,
-        p.canais && `canais: ${p.canais}`,
-        p.dores?.length && `dores: ${p.dores.join("; ")}`,
-        d.consome?.length && `consome: ${d.consome.join(", ")}`,
-      ].filter(Boolean);
+      const d = (p.detalhes as { consome?: string[] } | null) || {};
+      const bits = [p.representa && `representa: ${p.representa}`, p.canais && `canais: ${p.canais}`, p.dores?.length && `dores: ${p.dores.join("; ")}`, d.consome?.length && `consome: ${d.consome.join(", ")}`].filter(Boolean);
       out.push(`- ${p.nome} (${p.tag})${bits.length ? ` — ${bits.join(" · ")}` : ""}`);
     }
   } else out.push("- nenhuma persona cadastrada.");
-
   out.push(`\nCRM — LEADS (${leads.length} recentes):`);
   if (leads.length) {
     const by = (f: (l: (typeof leads)[number]) => string | null | undefined) => {
@@ -305,27 +190,36 @@ async function dionisioBlock(ws: Workspace): Promise<string> {
   return out.join("\n");
 }
 
-// monta o bloco de CONTEXTO do agente (dados reais, escopados pelo período)
-export async function buildContext(agentKey: AgentKey, ws: Workspace, scope: Scope): Promise<string> {
-  const r = isoRange(scope);
-  const perfil = await perfilBlock(ws).catch(() => `Empresa: ${ws.nome}.`);
-  const bodyP = (async () => {
-    if (agentKey === "poseidon") return poseidonBlock(ws, r);
-    if (agentKey === "apollo") return apolloBlock(ws, r);
-    if (agentKey === "athena") return athenaBlock(ws);
-    if (agentKey === "dionisio") return dionisioBlock(ws);
-    return "";
-  })();
-  // TETO global: se o corpo demorar (>7s), respondemos com perfil + aviso em vez de travar a função.
-  const body = await withTimeout(
-    bodyP.catch((e) => `(falha ao carregar alguns dados: ${String(e).slice(0, 120)})`),
-    7000,
-    "(alguns dados do período ainda estavam carregando — respondo com o contexto disponível; pode pedir de novo pra eu detalhar)"
-  );
-  return `PERÍODO ANALISADO: ${r.label}.\nPERFIL: ${perfil}\n\n${body ?? ""}`;
+// snapshot do painel (o que o usuário está vendo agora) — fonte primária dos números ao vivo
+function panelBlock(panel: unknown): string {
+  if (!panel) return "";
+  let s = "";
+  try { s = typeof panel === "string" ? panel : JSON.stringify(panel); } catch { s = ""; }
+  if (!s || s === "{}" || s === "null") return "";
+  if (s.length > 4500) s = s.slice(0, 4500) + " …(truncado)";
+  return `\n=== O QUE O USUÁRIO ESTÁ VENDO NO PAINEL AGORA (fonte primária dos números ao vivo) ===\n${s}\n=== FIM DO PAINEL ===`;
 }
 
-// normaliza o Scope recebido do client (defaults seguros)
+export async function buildContext(
+  agentKey: AgentKey, ws: Workspace, scope: Scope,
+  opts?: { accounts?: AccountLite[]; panel?: unknown }
+): Promise<string> {
+  const accounts = opts?.accounts || [];
+  const r = isoRange(scope);
+  const perfil = await perfilBlock(ws).catch(() => `Empresa: ${ws.nome}.`);
+  let body = "";
+  try {
+    if (agentKey === "poseidon") body = await poseidonBlock(ws, accounts);
+    else if (agentKey === "apollo") body = await apolloBlock(ws, r, accounts);
+    else if (agentKey === "athena") body = await athenaBlock(ws);
+    else if (agentKey === "dionisio") body = await dionisioBlock(ws);
+  } catch (e) {
+    body = `(falha ao carregar dados do banco: ${String(e).slice(0, 120)})`;
+  }
+  return `PERÍODO ANALISADO: ${periodLabel(scope)}.\nPERFIL: ${perfil}\n\n${body}${panelBlock(opts?.panel)}`;
+}
+
+// normaliza o Scope recebido do client
 export function normalizeScope(s: { period?: string; year?: number; month?: number; week?: number; quarter?: number } | undefined): Scope {
   const now = new Date();
   const period = (["semana", "mes", "trimestre", "ano"].includes(String(s?.period)) ? s!.period : "mes") as Period;

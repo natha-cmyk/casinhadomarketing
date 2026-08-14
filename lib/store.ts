@@ -84,6 +84,8 @@ export interface UIState {
   paineis: Record<string, Record<string, boolean>>; cfgOpen: Record<string, boolean>; impOpen: boolean;
   // agente
   agentOpen: boolean; agentMsgs: Record<string, { role: "user" | "bot"; text: string }[]>;
+  // snapshot do que o painel atual exibe (números na tela) — enviado aos agentes p/ ancorar
+  panelSnapshot: { view: string; label?: string; data: unknown } | null;
   // metas / persona / concorrência
   metasEdit: boolean; personaIdx: number; personaPhotos: Record<number, string>;
   compIcons: Record<string, string>; compEdit: string | null;
@@ -142,6 +144,7 @@ export interface UIState {
   // agente (LLM real): empilha mensagem e atualiza a última (streaming)
   agentPush: (agentKey: string, msg: { role: "user" | "bot"; text: string }) => void;
   agentSetLast: (agentKey: string, text: string) => void;
+  setPanelSnapshot: (snap: { view: string; label?: string; data: unknown } | null) => void;
   // OKR
   setObjetivo: (t: string) => void; setAreaNome: (areaId: string, nome: string) => void;
   addArea: () => void; removeArea: (areaId: string) => void;
@@ -180,7 +183,7 @@ export const useStore = create<UIState>((set) => ({
   redes: {},
   contas: {},
   paineis: {}, cfgOpen: {}, impOpen: false,
-  agentOpen: false, agentMsgs: {},
+  agentOpen: false, agentMsgs: {}, panelSnapshot: null,
   metasEdit: false, personaIdx: 0, personaPhotos: {}, compIcons: {}, compEdit: null,
   calCanal: "todos", calPerfil: "todos", calCV: "todos", calMonth: CUR_MONTH, calYear: CUR_YEAR,
   postModal: null,
@@ -279,6 +282,7 @@ export const useStore = create<UIState>((set) => ({
       const next = arr.slice(0, -1).concat({ ...arr[arr.length - 1], text });
       return { agentMsgs: { ...s.agentMsgs, [agentKey]: next } };
     }),
+  setPanelSnapshot: (snap) => set({ panelSnapshot: snap }),
 
   setObjetivo: (t) => set((s) => ({ okr: { ...s.okr, objetivo: t } })),
   setAreaNome: (areaId, nome) =>
