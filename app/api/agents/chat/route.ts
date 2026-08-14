@@ -12,7 +12,8 @@ import { getActiveWorkspace } from "@/lib/auth";
 import { AGENTS, buildContext, normalizeScope, type AgentKey } from "@/lib/agents";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const runtime = "nodejs";
+export const maxDuration = 300; // Pro + Fluid Compute permite streaming longo da LLM
 
 interface Body {
   agentKey?: string;
