@@ -5,6 +5,13 @@ import { useEffect, useState } from "react";
 
 interface Status { connected: boolean; provider: string; model: string; agencyFallback: boolean }
 
+const KEY_URL: Record<string, string> = {
+  openrouter: "https://openrouter.ai/keys",
+  anthropic: "https://console.anthropic.com/settings/keys",
+  openai: "https://platform.openai.com/api-keys",
+  gemini: "https://aistudio.google.com/apikey",
+};
+
 export function AgentLlmConnect() {
   const [status, setStatus] = useState<Status | null>(null);
   const [open, setOpen] = useState(false);
@@ -60,16 +67,18 @@ export function AgentLlmConnect() {
         <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 7 }}>
           <select value={provider} onChange={(e) => setProvider(e.target.value)} style={inp}>
             <option value="openrouter">OpenRouter (recomendado)</option>
-            <option value="anthropic">Anthropic</option>
+            <option value="anthropic">Claude (Anthropic)</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Gemini (Google)</option>
           </select>
           <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Cole sua API key" autoComplete="off" style={inp} />
-          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider === "openrouter" ? "modelo (opcional, ex. anthropic/claude-sonnet-4.5)" : "modelo (opcional, ex. claude-opus-5)"} style={inp} />
+          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="modelo (opcional)" style={inp} />
           {msg && <div style={{ fontSize: 11, color: "var(--red)" }}>{msg}</div>}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button onClick={save} disabled={busy || !key.trim()} style={{ border: 0, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: busy || !key.trim() ? "default" : "pointer", background: key.trim() ? "var(--ink)" : "var(--hairline)", color: key.trim() ? "#fff" : "var(--label-3)" }}>
               {busy ? "Salvando…" : "Salvar"}
             </button>
-            <a href={provider === "openrouter" ? "https://openrouter.ai/keys" : "https://console.anthropic.com/settings/keys"} target="_blank" rel="noopener" style={{ fontSize: 11, color: "var(--label-3)" }}>onde pego a chave?</a>
+            <a href={KEY_URL[provider] || KEY_URL.openrouter} target="_blank" rel="noopener" style={{ fontSize: 11, color: "var(--label-3)" }}>onde pego a chave?</a>
           </div>
         </div>
       )}

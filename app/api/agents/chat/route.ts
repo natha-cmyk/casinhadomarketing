@@ -26,10 +26,17 @@ interface Body {
 
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
-// ── OpenRouter (OpenAI-compatible /chat/completions, streaming SSE) ───────────
-async function streamOpenRouter(system: string, history: Msg[], apiKey: string, modelIn: string): Promise<ReadableStream<Uint8Array>> {
-  const model = modelIn || "anthropic/claude-sonnet-4.5";
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+// provedores OpenAI-compatíveis: base URL + modelo padrão por provider
+const OPENAI_COMPAT: Record<string, { base: string; model: string }> = {
+  openrouter: { base: "https://openrouter.ai/api/v1", model: "anthropic/claude-sonnet-4.5" },
+  openai: { base: "https://api.openai.com/v1", model: "gpt-4o" },
+  gemini: { base: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.0-flash" },
+};
+
+// ── OpenAI-compatible /chat/completions (OpenRouter/OpenAI/Gemini), streaming SSE ──
+async function streamOpenAICompat(base: string, defModel: string, system: string, history: Msg[], apiKey: string, modelIn: string): Promise<ReadableStream<Uint8Array>> {
+  const model = modelIn || defModel;
+  const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -136,9 +143,10 @@ export async function POST(req: Request) {
   while (history.length && history[0].role !== "user") history.shift();
   if (!history.length) return NextResponse.json({ error: "sem mensagem" }, { status: 400 });
 
+  const compat = OPENAI_COMPAT[llm.provider];
   const stream = llm.provider === "anthropic"
     ? await streamAnthropic(system, history, llm.apiKey, llm.model)
-    : await streamOpenRouter(system, history, llm.apiKey, llm.model);
+    : await streamOpenAICompat((compat || OPENAI_COMPAT.openrouter).base, (compat || OPENAI_COMPAT.openrouter).model, system, history, llm.apiKey, llm.model);
   return new Response(stream, {
     headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
   });

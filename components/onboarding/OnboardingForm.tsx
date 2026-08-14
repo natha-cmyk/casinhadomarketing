@@ -1,10 +1,20 @@
 "use client";
-// Onboarding de 1º acesso — WIZARD multi-passo com animação.
-// Passos: 0 boas-vindas (animada) · 1 empresa (obrig.) · 2 LLM (OBRIGATÓRIO) ·
-//         3 redes (pular) · 4 CRM (pular) · 5 produtos/canais (pular) → entra.
+// Onboarding de 1º acesso — WIZARD centralizado (desktop + mobile) com animação.
+// 0 boas-vindas · 1 empresa (obrig., telefone com máscara, ramo dropdown, estado→cidade IBGE)
+// 2 LLM (OBRIGATÓRIO, 4 provedores) · 3 redes (conectar de verdade / pular) · 4 CRM (pular)
+// 5 produtos/canais (pular) → botão central animado "Entrar na plataforma".
 import { useEffect, useState } from "react";
+import { useStore } from "@/lib/store";
+import { ConexoesGrid } from "@/components/ConexoesGrid";
 
 const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
+const RAMOS = ["Saúde", "Consultoria", "Imobiliária", "Engenharia", "Direito", "Educação", "Tecnologia", "Comércio / Varejo", "Alimentação", "Beleza & Estética", "Contabilidade", "Marketing & Publicidade", "Coworking / Espaços", "Serviços financeiros", "Turismo & Hotelaria", "Construção civil", "Indústria"];
+const PROVIDERS = [
+  { v: "openrouter", label: "OpenRouter (recomendado)", url: "https://openrouter.ai/keys" },
+  { v: "anthropic", label: "Claude (Anthropic)", url: "https://console.anthropic.com/settings/keys" },
+  { v: "openai", label: "OpenAI", url: "https://platform.openai.com/api-keys" },
+  { v: "gemini", label: "Gemini (Google)", url: "https://aistudio.google.com/apikey" },
+];
 const TOTAL = 6;
 
 interface Initial { empresa: string; telefone: string; emailContato: string; ramo: string; cidade: string; estado: string; site: string }
@@ -12,23 +22,49 @@ interface Initial { empresa: string; telefone: string; emailContato: string; ram
 const inp: React.CSSProperties = { width: "100%", border: "1px solid var(--hairline)", borderRadius: 10, padding: "10px 12px", font: "inherit", fontSize: 14, outline: "none", background: "#fff" };
 const lbl: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, color: "var(--label-2)", textTransform: "uppercase", letterSpacing: ".4px", display: "block", marginBottom: 5 };
 
+function maskPhone(v: string): string {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : "";
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
 export function OnboardingForm({ initial, redes }: { initial: Initial; redes: string[] }) {
   const [step, setStep] = useState(0);
-  const [f, setF] = useState<Initial>(initial);
+  const ramoInicialCustom = initial.ramo && !RAMOS.includes(initial.ramo);
+  const [f, setF] = useState<Initial>({ ...initial, telefone: maskPhone(initial.telefone) });
+  const [ramoSel, setRamoSel] = useState(ramoInicialCustom ? "__outro__" : initial.ramo);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const upd = (p: Partial<Initial>) => setF((prev) => ({ ...prev, ...p }));
 
-  // LLM (passo obrigatório)
+  // cidades por estado (IBGE)
+  const [cidades, setCidades] = useState<string[]>([]);
+  const [loadingCid, setLoadingCid] = useState(false);
+  useEffect(() => {
+    if (!f.estado) { setCidades([]); return; }
+    setLoadingCid(true);
+    fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${f.estado}/municipios?orderBy=nome`)
+      .then((r) => r.json())
+      .then((arr: { nome: string }[]) => setCidades(Array.isArray(arr) ? arr.map((m) => m.nome) : []))
+      .catch(() => setCidades([]))
+      .finally(() => setLoadingCid(false));
+  }, [f.estado]);
+
+  // store: carrega contas conectadas p/ o passo de redes refletir o estado atual
+  const setZernioAccounts = useStore((s) => s.setZernioAccounts);
+  useEffect(() => {
+    fetch("/api/zernio/accounts").then((r) => r.json()).then((d) => { if (d?.accounts) setZernioAccounts(d.accounts); }).catch(() => {});
+  }, [setZernioAccounts]);
+
+  // LLM (obrigatório)
   const [llmConnected, setLlmConnected] = useState(false);
   const [provider, setProvider] = useState("openrouter");
   const [key, setKey] = useState("");
   const [model, setModel] = useState("");
-  useEffect(() => {
-    fetch("/api/agents/llm").then((r) => r.json()).then((s) => { if (s?.connected) setLlmConnected(true); }).catch(() => {});
-  }, []);
+  useEffect(() => { fetch("/api/agents/llm").then((r) => r.json()).then((s) => { if (s?.connected) setLlmConnected(true); }).catch(() => {}); }, []);
 
-  const empresaOk = !!f.empresa.trim() && !!f.telefone.trim() && !!f.emailContato.trim() && !!f.ramo.trim();
+  const empresaOk = !!f.empresa.trim() && f.telefone.replace(/\D/g, "").length >= 10 && !!f.emailContato.trim() && !!f.ramo.trim();
 
   const saveLlm = async () => {
     if (!key.trim() || busy) return;
@@ -37,11 +73,9 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
       const r = await fetch("/api/agents/llm", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider, apiKey: key, model }) });
       const j = await r.json().catch(() => null);
       setBusy(false);
-      if (r.ok && j?.ok) { setLlmConnected(true); setKey(""); }
-      else setErr(j?.error || "Falha ao conectar a LLM.");
+      if (r.ok && j?.ok) { setLlmConnected(true); setKey(""); } else setErr(j?.error || "Falha ao conectar a LLM.");
     } catch { setBusy(false); setErr("Erro de rede."); }
   };
-
   const finish = async () => {
     if (busy) return;
     setBusy(true); setErr(null);
@@ -52,15 +86,13 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
       setErr(j?.error || "Não foi possível concluir."); setBusy(false);
     } catch { setErr("Erro de rede."); setBusy(false); }
   };
-
   const next = () => { setErr(null); setStep((s) => Math.min(s + 1, TOTAL - 1)); };
   const back = () => { setErr(null); setStep((s) => Math.max(s - 1, 0)); };
 
   return (
-    <div style={{ minHeight: "100dvh", overflowY: "auto", background: "var(--surface)", display: "flex", justifyContent: "center", padding: "40px 20px 80px" }}>
-      <style>{`@keyframes obUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes obPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}`}</style>
-      <div key={step} style={{ width: "100%", maxWidth: 560, animation: "obUp .45s cubic-bezier(.22,.61,.36,1)" }}>
-        {/* progresso (some na boas-vindas) */}
+    <div style={{ minHeight: "100dvh", overflowY: "auto", background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
+      <style>{`@keyframes obUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes obPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}@keyframes obPop{0%{opacity:0;transform:scale(.85)}60%{transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}`}</style>
+      <div key={step} style={{ width: "100%", maxWidth: 560, margin: "auto", animation: "obUp .45s cubic-bezier(.22,.61,.36,1)" }}>
         {step > 0 && (
           <div style={{ display: "flex", gap: 6, marginBottom: 22 }}>
             {Array.from({ length: TOTAL - 1 }).map((_, i) => (
@@ -71,12 +103,10 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
 
         {/* 0 — BOAS-VINDAS */}
         {step === 0 && (
-          <div style={{ textAlign: "center", padding: "40px 0" }}>
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
             <div style={{ width: 56, height: 56, borderRadius: 16, margin: "0 auto 20px", background: "linear-gradient(150deg,var(--red),#c60018)", display: "grid", placeItems: "center", color: "#fff", fontWeight: 800, fontSize: 26, animation: "obPulse 2.4s ease-in-out infinite" }}>C</div>
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--cyan)", textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 10 }}>Bem-vindo 🎉</div>
-            <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-.5px", margin: "0 0 14px", lineHeight: 1.25 }}>
-              Bem-vindo à Casinha do Marketing, a plataforma de gestão de relatórios e produção de conteúdo do seu marketing.
-            </h1>
+            <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-.5px", margin: "0 0 14px", lineHeight: 1.25 }}>Bem-vindo à Casinha do Marketing, a plataforma de gestão de relatórios e produção de conteúdo do seu marketing.</h1>
             <p style={{ fontSize: 14.5, color: "var(--label-2)", margin: "0 0 28px" }}>Vamos configurar agora o seu ambiente em alguns passos. Bora lá?</p>
             <button onClick={next} style={{ border: 0, borderRadius: 999, width: 54, height: 54, cursor: "pointer", background: "var(--ink)", color: "#fff", fontSize: 22 }} aria-label="Começar">→</button>
           </div>
@@ -86,22 +116,32 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
         {step === 1 && (
           <Card title="Sua empresa" sub="Dados básicos pra começar (você edita depois na Personalização).">
             {redes.length > 0 && (
-              <div style={{ background: "color-mix(in srgb, var(--cyan) 8%, #fff)", border: "1px solid color-mix(in srgb, var(--cyan) 22%, transparent)", borderRadius: 10, padding: "9px 12px", marginBottom: 14, fontSize: 12, color: "var(--label-2)" }}>
-                <b>Redes detectadas:</b> {redes.join(" · ")}
-              </div>
+              <div style={{ background: "color-mix(in srgb, var(--cyan) 8%, #fff)", border: "1px solid color-mix(in srgb, var(--cyan) 22%, transparent)", borderRadius: 10, padding: "9px 12px", marginBottom: 14, fontSize: 12, color: "var(--label-2)" }}><b>Redes detectadas:</b> {redes.join(" · ")}</div>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <Field label="Nome da empresa *"><input style={inp} value={f.empresa} onChange={(e) => upd({ empresa: e.target.value })} placeholder="Ex.: Seahub Coworking" /></Field>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <Field label="Telefone *"><input style={inp} value={f.telefone} onChange={(e) => upd({ telefone: e.target.value })} placeholder="(84) 90000-0000" /></Field>
+                <Field label="Telefone *"><input style={inp} value={f.telefone} onChange={(e) => upd({ telefone: maskPhone(e.target.value) })} placeholder="(84) 90000-0000" inputMode="numeric" /></Field>
                 <Field label="E-mail de contato *"><input style={inp} value={f.emailContato} onChange={(e) => upd({ emailContato: e.target.value })} placeholder="contato@empresa.com" /></Field>
               </div>
-              <Field label="Ramo de atividade *"><input style={inp} value={f.ramo} onChange={(e) => upd({ ramo: e.target.value })} placeholder="Ex.: Coworking / espaços compartilhados" /></Field>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
-                <Field label="Cidade"><input style={inp} value={f.cidade} onChange={(e) => upd({ cidade: e.target.value })} placeholder="Ex.: Natal" /></Field>
+              <Field label="Ramo de atividade *">
+                <select style={inp} value={ramoSel} onChange={(e) => { const v = e.target.value; setRamoSel(v); upd({ ramo: v === "__outro__" ? "" : v }); }}>
+                  <option value="">Selecione…</option>
+                  {RAMOS.map((r) => <option key={r} value={r}>{r}</option>)}
+                  <option value="__outro__">Outro (especificar)</option>
+                </select>
+                {ramoSel === "__outro__" && <input style={{ ...inp, marginTop: 8 }} value={f.ramo} onChange={(e) => upd({ ramo: e.target.value })} placeholder="Digite o ramo de atividade" />}
+              </Field>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
                 <Field label="Estado">
-                  <select style={inp} value={f.estado} onChange={(e) => upd({ estado: e.target.value })}>
+                  <select style={inp} value={f.estado} onChange={(e) => upd({ estado: e.target.value, cidade: "" })}>
                     <option value="">UF</option>{UFS.map((uf) => <option key={uf}>{uf}</option>)}
+                  </select>
+                </Field>
+                <Field label="Cidade">
+                  <select style={inp} value={f.cidade} onChange={(e) => upd({ cidade: e.target.value })} disabled={!f.estado || loadingCid}>
+                    <option value="">{!f.estado ? "escolha o estado" : loadingCid ? "carregando…" : "Selecione…"}</option>
+                    {cidades.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </Field>
               </div>
@@ -121,15 +161,14 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <Field label="Provedor">
                   <select style={inp} value={provider} onChange={(e) => setProvider(e.target.value)}>
-                    <option value="openrouter">OpenRouter (recomendado)</option>
-                    <option value="anthropic">Anthropic</option>
+                    {PROVIDERS.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
                   </select>
                 </Field>
                 <Field label="API key"><input type="password" style={inp} value={key} onChange={(e) => setKey(e.target.value)} placeholder="Cole sua chave" autoComplete="off" /></Field>
-                <Field label="Modelo (opcional)"><input style={inp} value={model} onChange={(e) => setModel(e.target.value)} placeholder={provider === "openrouter" ? "ex. anthropic/claude-sonnet-4.5" : "ex. claude-opus-5"} /></Field>
+                <Field label="Modelo (opcional)"><input style={inp} value={model} onChange={(e) => setModel(e.target.value)} placeholder="deixe em branco pro padrão" /></Field>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <button onClick={saveLlm} disabled={busy || !key.trim()} style={btn(!!key.trim())}>{busy ? "Conectando…" : "Conectar LLM"}</button>
-                  <a href={provider === "openrouter" ? "https://openrouter.ai/keys" : "https://console.anthropic.com/settings/keys"} target="_blank" rel="noopener" style={{ fontSize: 12, color: "var(--label-3)" }}>onde pego a chave?</a>
+                  <a href={PROVIDERS.find((p) => p.v === provider)?.url} target="_blank" rel="noopener" style={{ fontSize: 12, color: "var(--label-3)" }}>onde pego a chave?</a>
                 </div>
               </div>
             )}
@@ -138,22 +177,37 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
           </Card>
         )}
 
-        {/* 3 — REDES (pular) */}
+        {/* 3 — REDES (conectar de verdade / pular) */}
         {step === 3 && (
-          <StepOptional title="Conectar redes sociais" sub="Conecte Instagram, Facebook, TikTok, YouTube e mais pra popular os painéis com dados reais." onBack={back} onSkip={next} />
+          <Card title="Conectar redes sociais" sub="Conecte agora pra já entrar com os painéis populados — ou deixe pra configurar dentro da plataforma.">
+            <div style={{ maxHeight: "48vh", overflowY: "auto", margin: "0 -4px", padding: "0 4px" }}>
+              <ConexoesGrid grupos={["social", "conversas"]} />
+            </div>
+            <Nav onBack={back} onNext={next} nextLabel="Deixar pra depois →" />
+          </Card>
         )}
+
         {/* 4 — CRM (pular) */}
         {step === 4 && (
-          <StepOptional title="Conectar CRM" sub="Traga seus leads e oportunidades (ClickUp/webhook) pra aba Geração." onBack={back} onSkip={next} />
+          <Card title="Conectar CRM" sub="Traga seus leads e oportunidades (ClickUp/webhook) pra aba Geração. Dá pra fazer depois, dentro da plataforma, em Geração por canais.">
+            <Nav onBack={back} onNext={next} nextLabel="Deixar pra configurar dentro da plataforma →" />
+          </Card>
         )}
+
         {/* 5 — PRODUTOS & CANAIS (pular) → finaliza */}
         {step === 5 && (
-          <StepOptional
-            title="Produtos & canais" sub="Cadastre seus produtos/serviços e canais de conteúdo. Dá pra fazer depois, dentro da plataforma."
-            onBack={back} onSkip={finish} skipLabel={busy ? "Entrando…" : "Entrar na plataforma →"} skipPrimary
-          />
+          <div style={{ textAlign: "center" }}>
+            <div className="card" style={{ padding: "22px 24px", textAlign: "left" }}>
+              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Produtos & canais</div>
+              <div style={{ fontSize: 13, color: "var(--label-2)", marginBottom: 16, lineHeight: 1.5 }}>Cadastre seus produtos/serviços e canais de conteúdo com os campos personalizados — dá pra fazer depois, na Personalização.</div>
+              <button onClick={back} style={{ border: 0, background: "transparent", color: "var(--label-3)", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>← voltar</button>
+            </div>
+            <button onClick={finish} disabled={busy} style={{ ...btn(!busy), marginTop: 22, padding: "13px 26px", fontSize: 15, borderRadius: 999, animation: "obPop .5s ease-out" }}>
+              {busy ? "Entrando…" : "Entrar na plataforma 🚀"}
+            </button>
+            {err && <div style={{ color: "var(--red)", fontSize: 12.5, marginTop: 10 }}>{err}</div>}
+          </div>
         )}
-        {step === 5 && err && <div style={{ color: "var(--red)", fontSize: 12.5, marginTop: 10, textAlign: "center" }}>{err}</div>}
       </div>
     </div>
   );
@@ -176,18 +230,6 @@ function Nav({ onBack, onNext, nextDisabled, nextLabel }: { onBack: () => void; 
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 22 }}>
       <button onClick={onBack} style={{ border: 0, background: "transparent", color: "var(--label-3)", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>← voltar</button>
       <button onClick={onNext} disabled={nextDisabled} style={btn(!nextDisabled)}>{nextLabel}</button>
-    </div>
-  );
-}
-function StepOptional({ title, sub, onBack, onSkip, skipLabel = "Deixar pra configurar dentro da plataforma", skipPrimary }: { title: string; sub: string; onBack: () => void; onSkip: () => void; skipLabel?: string; skipPrimary?: boolean }) {
-  return (
-    <div className="card" style={{ padding: "22px 24px" }}>
-      <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>{title}</div>
-      <div style={{ fontSize: 13, color: "var(--label-2)", marginBottom: 20, lineHeight: 1.5 }}>{sub}</div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <button onClick={onBack} style={{ border: 0, background: "transparent", color: "var(--label-3)", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>← voltar</button>
-        <button onClick={onSkip} style={skipPrimary ? btn(true) : { border: "1px solid var(--hairline)", background: "#fff", color: "var(--label)", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{skipLabel}</button>
-      </div>
     </div>
   );
 }

@@ -4,10 +4,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { logEvent } from "@/lib/events";
+import { LLM_PROVIDERS } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
 
-const PROVIDERS = new Set(["openrouter", "anthropic"]);
+const PROVIDERS = new Set<string>(LLM_PROVIDERS);
 
 export async function GET() {
   const wsId = await getActiveWorkspaceId();

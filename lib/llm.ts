@@ -3,8 +3,10 @@
 // Sem nenhuma → os agentes caem no "modo mínimo" (sem análise profunda).
 import { prisma } from "./prisma";
 
+export const LLM_PROVIDERS = ["openrouter", "anthropic", "openai", "gemini"] as const;
+
 export interface ResolvedLlm {
-  provider: "openrouter" | "anthropic";
+  provider: string; // openrouter | anthropic | openai | gemini
   apiKey: string;
   model: string;
   source: "workspace" | "agency";
@@ -14,7 +16,7 @@ export async function resolveLlm(workspaceId: string): Promise<ResolvedLlm | nul
   const cfg = await prisma.llmConfig.findUnique({ where: { workspaceId } }).catch(() => null);
   if (cfg?.apiKey) {
     return {
-      provider: cfg.provider === "anthropic" ? "anthropic" : "openrouter",
+      provider: (LLM_PROVIDERS as readonly string[]).includes(cfg.provider) ? cfg.provider : "openrouter",
       apiKey: cfg.apiKey,
       model: cfg.model || "",
       source: "workspace",
