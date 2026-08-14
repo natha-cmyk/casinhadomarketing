@@ -266,6 +266,11 @@ th.stick{z-index:3} table.data tr:hover td.stick{background:#fbfbfc}
 .ag-input button svg{width:17px;height:17px}
 .ag-foot{font-size:10.5px;color:var(--label-3);text-align:center;padding:0 0 9px}
 .ag-head-r{display:flex;align-items:center;gap:6px}
+/* seletor de agente (troca entre os 4 sem sair do dock) */
+.ag-switch{display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid var(--hairline);background:var(--surface)}
+.ag-sw{width:30px;height:30px;border-radius:50%;border:2px solid transparent;background:#fff;color:var(--label-2);font-weight:800;font-size:10.5px;cursor:pointer;display:grid;place-items:center;transition:transform .12s,border-color .12s;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.ag-sw:hover{transform:translateY(-1px)}
+.ag-sw.on{color:#fff;background:var(--swc);border-color:var(--swc)}
 .ag-x-txt{width:auto;padding:0 9px;font-size:10px;font-weight:800;letter-spacing:.3px;border-radius:8px}
 /* painel expandido: aba lateral ampla (tipo metade da tela) */
 .ag-panel.big{width:min(560px,calc(100vw - 40px));height:min(88vh,calc(100vh - 90px))}

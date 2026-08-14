@@ -40,18 +40,25 @@ const AGENTS: Record<string, Agent> = {
   athena: { nome: "Athena", papel: "Estratégia & orquestração", cor: "#8E5BE0", ini: "At", intro: "Sou a Athena Chase — estratégia e orquestração. Ponto de entrada quando você quer visão macro ou não sabe por onde começar. Priorizo demandas, estruturo campanhas e acompanho metas/OKR.", sugestoes: ["Por onde começo minha estratégia?", "Temos várias demandas — o que priorizar?", "Como estão os KRs e metas?"] },
   dionisio: { nome: "Dionísio", papel: "CRM, WhatsApp & relacionamento", cor: "#FF9F0A", ini: "Di", intro: "Sou o Dionísio Castellan — CRM, WhatsApp e relacionamento. Cuido de como a marca fala com as pessoas. Me peça réguas de WhatsApp, organização de pipeline, reativação de base ou scripts.", sugestoes: ["Régua de WhatsApp pra quem pediu orçamento", "Como reativar a base inativa?", "Onde está o gargalo do funil?"] },
 };
+// agente PADRÃO por tela (o usuário pode trocar pelo seletor). Base: doc Marketing OS —
+// canais/dados → Poseidon; calendário/conteúdo → Apollo; CRM → Dionísio; metas → Athena.
 const AGENT_BY_VIEW: Record<string, keyof typeof AGENTS> = {
   overview: "poseidon", ads: "poseidon", canais: "poseidon", concorrencia: "poseidon", config: "poseidon",
-  calendario: "apollo", instagram: "apollo", tiktok: "apollo", linkedin: "apollo", youtube: "apollo",
-  x: "apollo", facebook: "apollo", threads: "apollo", reddit: "apollo", pinterest: "apollo",
-  bluesky: "apollo", snapchat: "apollo", googlebusiness: "apollo",
-  metas: "athena", persona: "dionisio",
+  instagram: "poseidon", tiktok: "poseidon", linkedin: "poseidon", youtube: "poseidon", x: "poseidon",
+  facebook: "poseidon", threads: "poseidon", reddit: "poseidon", pinterest: "poseidon",
+  bluesky: "poseidon", snapchat: "poseidon", googlebusiness: "poseidon",
+  calendario: "apollo",
+  metas: "athena",
+  persona: "dionisio", geracao: "dionisio",
 };
 
 export function AgentDock() {
   const pathname = usePathname();
   const view = viewForPath(pathname);
-  const key = (AGENT_BY_VIEW[view] || "poseidon") as string;
+  const defaultKey = (AGENT_BY_VIEW[view] || "poseidon") as string;
+  // agente escolhido manualmente pelo seletor (sobrepõe o padrão da tela)
+  const [picked, setPicked] = useState<string | null>(null);
+  const key = picked ?? defaultKey;
   const a = AGENTS[key];
   const open = useStore((s) => s.agentOpen);
   const toggle = useStore((s) => s.toggleAgent);
@@ -105,6 +112,9 @@ export function AgentDock() {
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [msgs, open]);
+
+  // ao mudar de tela, volta pro agente contextual (mas o usuário pode trocar de novo)
+  useEffect(() => { setPicked(null); }, [view]);
 
   const send = async (t: string) => {
     const v = (t || "").trim();
@@ -186,6 +196,23 @@ export function AgentDock() {
                 ✕
               </button>
             </div>
+          </div>
+          <div className="ag-switch">
+            {(Object.keys(AGENTS) as string[]).map((k) => {
+              const ag = AGENTS[k];
+              return (
+                <button
+                  key={k}
+                  className={`ag-sw${k === key ? " on" : ""}`}
+                  style={{ "--swc": ag.cor } as React.CSSProperties}
+                  onClick={() => setPicked(k)}
+                  title={`${ag.nome} · ${ag.papel}`}
+                  type="button"
+                >
+                  {ag.ini}
+                </button>
+              );
+            })}
           </div>
           <div className="ag-thread" ref={threadRef}>
             <div className="ag-msg ag-bot">
