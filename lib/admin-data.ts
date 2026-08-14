@@ -38,3 +38,11 @@ export async function adminUsers() {
 }
 
 export type AdminWorkspace = Awaited<ReturnType<typeof adminOverview>>["workspaces"][number];
+
+export async function adminEvents(limit = 120) {
+  return prisma.event.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: { workspace: { select: { nome: true } } },
+  });
+}

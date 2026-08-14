@@ -42,6 +42,24 @@ model Workspace {
   leads           Lead[]
   historico       HistoricalMetric[]
   llmConfig       LlmConfig?
+  events          Event[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// Audit log — rastreio de eventos (quem fez o quê). Ex.: publicou post,
+// completou onboarding, conectou LLM/CRM/conta. Exibido no Admin.
+// ─────────────────────────────────────────────────────────────
+model Event {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor       String    @default("") // e-mail de quem fez a ação
+  type        String // ex.: post.published, onboarding.completed, llm.connected
+  target      String    @default("") // ex.: título do post, plataforma
+  meta        Json      @default("{}")
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
+import { logEvent } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
       create: { workspaceId: wsId, provider, apiKey, model },
       update: { provider, apiKey, model },
     });
+    await logEvent(wsId, "llm.connected", provider);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: String(e).slice(0, 200) }, { status: 500 });

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import type { PostStatus } from "@prisma/client";
 import { getActiveWorkspace } from "@/lib/auth";
 import { listAccounts, publishPost, type MediaItemInput } from "@/lib/zernio";
+import { logEvent } from "@/lib/events";
 
 // id da rede (Casinha) → plataforma Zernio. Só "x" diverge (→ twitter); o resto é 1:1.
 const REDE_TO_PLAT: Record<string, string> = { x: "twitter" };
@@ -107,6 +108,7 @@ export async function POST(req: Request) {
     const zernioPostId = res?.post?._id || null;
 
     await prisma.post.update({ where: { id: post.id }, data: { status, zernioPostId } });
+    await logEvent(ws.id, publishNow ? "post.published" : "post.scheduled", post.titulo || "(sem título)", { canais: post.contas });
 
     return NextResponse.json({ ok: true, status, zernioPostId, canaisIgnorados });
   } catch (e) {
