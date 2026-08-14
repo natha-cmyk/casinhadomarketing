@@ -1,7 +1,8 @@
 "use client";
 // Geração por Canais — CRM do cliente (vive no ClickUp, fora da integração social).
 // Conecta via ClickUp nativo (API REST) ou webhook genérico e mostra leads/oportunidades
-// por canal, produto, status/etapa e motivo de perda, respeitando o período da toolbar.
+// por canal, categoria, produto, qualificação, status/etapa e motivo de perda, respeitando
+// o período da toolbar. O usuário mapeia os campos personalizados do ClickUp por dimensão.
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { PageHead, KpiCard, BarRow, MiniStat } from "@/components/ui";
@@ -18,6 +19,11 @@ interface CrmConfig {
   fieldMap: Record<string, string>;
   webhookSecret: string | null;
 }
+interface CrmField {
+  name: string;
+  type: string;
+  options: string[];
+}
 interface Row {
   key: string;
   count: number;
@@ -27,10 +33,13 @@ interface LeadRow {
   id: string;
   title: string | null;
   channel: string | null;
+  category: string | null;
   product: string | null;
+  qualification: string | null;
   status: string | null;
   value: number;
   lossReason: string | null;
+  outcome: "won" | "lost" | "open";
   createdAt: string;
 }
 interface LeadsData {
@@ -38,11 +47,14 @@ interface LeadsData {
   total: number;
   totalValue: number;
   pipelineValue: number;
+  wonValue: number;
   won: number;
   lost: number;
   open: number;
   byChannel: Row[];
+  byCategory: Row[];
   byProduct: Row[];
+  byQualification: Row[];
   byStatus: Row[];
   lossReasons: Row[];
   leads: LeadRow[];
@@ -66,15 +78,23 @@ function dateRange(scope: { period: Period; year: number; month: number; quarter
   return { since: iso(since), until: iso(until) };
 }
 
-const FIELD_KEYS: { k: string; lbl: string }[] = [
-  { k: "channel", lbl: "Canal" },
-  { k: "product", lbl: "Produto" },
-  { k: "status", lbl: "Status / etapa" },
-  { k: "value", lbl: "Valor (R$)" },
-  { k: "lossReason", lbl: "Motivo de perda" },
+// dimensões que o sync sabe interpretar (mesmas chaves do fieldMap no backend).
+const FIELD_KEYS: { k: string; lbl: string; hint: string }[] = [
+  { k: "channel", lbl: "Canal / origem", hint: "de onde veio o lead" },
+  { k: "category", lbl: "Categoria de produto", hint: "família / linha" },
+  { k: "product", lbl: "Tipo de produto", hint: "produto específico" },
+  { k: "qualification", lbl: "Qualificação / tipo", hint: "classificação do lead" },
+  { k: "status", lbl: "Status / etapa", hint: "andamento no funil" },
+  { k: "value", lbl: "Valor (R$)", hint: "ticket / receita" },
+  { k: "lossReason", lbl: "Motivo de perda", hint: "quando perdido" },
 ];
 
 const CHANNEL_COLORS = ["var(--cyan)", "var(--red)", "var(--excelente)", "var(--atencao)", "var(--ink)"];
+const OUTCOME = {
+  won: { lbl: "Ganho", color: "var(--excelente)" },
+  lost: { lbl: "Perdido", color: "var(--red)" },
+  open: { lbl: "Em aberto", color: "var(--cyan)" },
+} as const;
 
 export function GeracaoView() {
   const s = useStore();
@@ -177,7 +197,7 @@ export function GeracaoView() {
       <PageHead
         eyebrow="COMERCIAL · FUNIL"
         title="Geração por Canais"
-        desc="De onde vêm os leads — por canal, produto, etapa e motivo de perda."
+        desc="De onde vêm os leads — por canal, produto, qualificação, etapa e motivo de perda."
         right={
           connected ? (
             <div style={{ display: "flex", gap: 8 }}>
@@ -239,8 +259,48 @@ function ConnectCard({
     config?.provider === "webhook" ? config : null
   );
 
+  // detecção dos campos personalizados da lista do ClickUp
+  const [fields, setFields] = useState<CrmField[] | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [detectErr, setDetectErr] = useState<string | null>(null);
+
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const webhookUrl = webhook && workspaceId ? `${origin}/api/crm/webhook/${workspaceId}` : "";
+
+  // nomes de campos disponíveis p/ os selects (une detectados + o que já estiver mapeado)
+  const fieldNames = useMemo(() => {
+    const set = new Set<string>();
+    (fields ?? []).forEach((f) => f.name && set.add(f.name));
+    Object.values(fieldMap).forEach((v) => v && set.add(v));
+    return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [fields, fieldMap]);
+
+  async function detectFields() {
+    if (!token.trim() || !listId.trim()) return;
+    setDetecting(true);
+    setDetectErr(null);
+    // persiste token+listId (o GET lê a config salva) preservando o mapa atual
+    const saved = await onSave({ provider: "clickup", clickupToken: token, clickupListId: listId, fieldMap });
+    if (!saved) {
+      setDetecting(false);
+      setDetectErr("Não foi possível salvar a conexão antes de detectar.");
+      return;
+    }
+    try {
+      const r = await fetch("/api/crm/sync", { method: "GET", cache: "no-store" });
+      const d = await r.json();
+      if (d?.ok && Array.isArray(d.fields)) {
+        setFields(d.fields as CrmField[]);
+        if (!d.fields.length) setDetectErr("Nenhum campo personalizado encontrado nessa lista.");
+      } else {
+        setDetectErr(d?.error || "Não foi possível detectar os campos.");
+      }
+    } catch (e) {
+      setDetectErr(String(e));
+    } finally {
+      setDetecting(false);
+    }
+  }
 
   async function saveClickup() {
     setSaving(true);
@@ -261,7 +321,7 @@ function ConnectCard({
   }
 
   return (
-    <div className="card pad-lg" style={{ maxWidth: 620 }}>
+    <div className="card pad-lg" style={{ maxWidth: 680 }}>
       <div className="card-head" style={{ marginBottom: 14 }}>
         <div>
           <div className="t">Conectar CRM</div>
@@ -281,8 +341,8 @@ function ConnectCard({
       {mode === "clickup" && (
         <div>
           <div className="pm-hint" style={{ marginBottom: 12 }}>
-            Cole o <b>token pessoal</b> do ClickUp e o <b>List ID</b> da lista do funil. O mapeamento de campos é opcional —
-            use os nomes dos campos personalizados da sua lista.
+            Cole o <b>token pessoal</b> do ClickUp e o <b>List ID</b> da lista do funil. Depois clique em{" "}
+            <b>Detectar campos</b> pra mapear cada dimensão ao campo personalizado certo.
           </div>
           <div style={{ marginBottom: 10 }}>
             <label className="field-lbl">Token do ClickUp</label>
@@ -294,32 +354,78 @@ function ConnectCard({
               autoComplete="off"
             />
           </div>
-          <div style={{ marginBottom: 14 }}>
-            <label className="field-lbl">List ID</label>
-            <input
-              className="field-edit"
-              value={listId}
-              onChange={(e) => setListId(e.target.value)}
-              placeholder="Ex.: 901234567"
-            />
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
+            <div style={{ flex: 1 }}>
+              <label className="field-lbl">List ID</label>
+              <input
+                className="field-edit"
+                value={listId}
+                onChange={(e) => setListId(e.target.value)}
+                placeholder="Ex.: 901234567"
+              />
+            </div>
+            <button
+              className="btn-link"
+              onClick={detectFields}
+              disabled={detecting || !token.trim() || !listId.trim()}
+              type="button"
+            >
+              {detecting ? "Detectando…" : "Detectar campos"}
+            </button>
           </div>
 
-          <div className="field-lbl" style={{ marginBottom: 8 }}>Mapeamento de campos (opcional)</div>
-          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10, marginBottom: 16 }}>
+          {detectErr && <div className="auth-err" style={{ marginBottom: 12 }}>{detectErr}</div>}
+
+          {fields && fields.length > 0 && (
+            <div className="pm-hint" style={{ marginBottom: 12 }}>
+              <b>{fields.length}</b> {fields.length === 1 ? "campo detectado" : "campos detectados"}:{" "}
+              {fields.map((f) => f.name).join(" · ")}
+            </div>
+          )}
+
+          <div className="field-lbl" style={{ marginBottom: 8 }}>
+            Mapeamento de campos {fields ? "" : "(opcional — ou detecte acima)"}
+          </div>
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10, marginBottom: 16 }}
+          >
             {FIELD_KEYS.map((f) => (
               <div key={f.k}>
-                <label className="field-lbl">{f.lbl}</label>
-                <input
-                  className="field-edit"
-                  value={fieldMap[f.k] ?? ""}
-                  onChange={(e) => setFieldMap((p) => ({ ...p, [f.k]: e.target.value }))}
-                  placeholder="nome do campo"
-                />
+                <label className="field-lbl">
+                  {f.lbl} <span style={{ color: "var(--label-3)", fontWeight: 400 }}>· {f.hint}</span>
+                </label>
+                {fieldNames.length > 0 ? (
+                  <select
+                    className="field-edit"
+                    value={fieldMap[f.k] ?? ""}
+                    onChange={(e) => setFieldMap((p) => ({ ...p, [f.k]: e.target.value }))}
+                  >
+                    <option value="">— automático / não mapear —</option>
+                    {fieldNames.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className="field-edit"
+                    value={fieldMap[f.k] ?? ""}
+                    onChange={(e) => setFieldMap((p) => ({ ...p, [f.k]: e.target.value }))}
+                    placeholder="nome do campo"
+                  />
+                )}
               </div>
             ))}
           </div>
 
-          <button className="btn-link ig" onClick={saveClickup} disabled={saving || !token.trim() || !listId.trim()} type="button">
+          <button
+            className="btn-link ig"
+            onClick={saveClickup}
+            disabled={saving || !token.trim() || !listId.trim()}
+            type="button"
+          >
             {saving ? "Salvando…" : "Conectar ClickUp"}
           </button>
         </div>
@@ -362,6 +468,43 @@ function ConnectCard({
   );
 }
 
+// ── card de agrupamento (canal / categoria / produto / qualificação) ──
+function GroupCard({
+  title,
+  rows,
+  color,
+  empty,
+}: {
+  title: string;
+  rows: Row[];
+  color: string | ((i: number) => string);
+  empty: string;
+}) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="t">{title}</div>
+        <span className="badge">{rows.length}</span>
+      </div>
+      {rows.length ? (
+        rows.map((r, i) => (
+          <BarRow
+            key={r.key}
+            k={r.key}
+            v={r.count}
+            max={max}
+            color={typeof color === "function" ? color(i) : color}
+            formatted={r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}
+          />
+        ))
+      ) : (
+        <div className="sub" style={{ color: "var(--label-3)" }}>{empty}</div>
+      )}
+    </div>
+  );
+}
+
 // ── Dashboard de leads ──
 function Dashboard({ data }: { data: LeadsData }) {
   if (data.total === 0) {
@@ -376,9 +519,8 @@ function Dashboard({ data }: { data: LeadsData }) {
     );
   }
 
-  const chMax = Math.max(1, ...data.byChannel.map((r) => r.count));
-  const prMax = Math.max(1, ...data.byProduct.map((r) => r.count));
   const stMax = Math.max(1, ...data.byStatus.map((r) => r.count));
+  const cycle = (i: number) => CHANNEL_COLORS[i % CHANNEL_COLORS.length];
 
   return (
     <>
@@ -386,37 +528,34 @@ function Dashboard({ data }: { data: LeadsData }) {
         <KpiCard lbl="Total de leads" val={fmt(data.total)} foot="no período" />
         <KpiCard lbl="Oportunidades em aberto" val={fmt(data.open)} foot="em negociação" />
         <KpiCard lbl="Valor em pipeline" val={money(data.pipelineValue)} foot="oportunidades abertas" />
-        <KpiCard lbl="Ganhos / perdidos" val={`${fmt(data.won)} / ${fmt(data.lost)}`} foot={`R$ total ${money(data.totalValue)}`} />
+        <KpiCard
+          lbl="Ganhos / perdidos"
+          val={`${fmt(data.won)} / ${fmt(data.lost)}`}
+          foot={`R$ ganho ${money(data.wonValue)}`}
+        />
       </div>
 
       <div className="grid two-col" style={{ marginBottom: 16 }}>
-        <div className="card">
-          <div className="card-head"><div className="t">Por canal</div><span className="badge">{data.byChannel.length}</span></div>
-          {data.byChannel.length ? (
-            data.byChannel.map((r, i) => (
-              <BarRow key={r.key} k={r.key} v={r.count} max={chMax} color={CHANNEL_COLORS[i % CHANNEL_COLORS.length]} />
-            ))
-          ) : (
-            <div className="sub" style={{ color: "var(--label-3)" }}>Sem canal informado.</div>
-          )}
-        </div>
+        <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." />
+        <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." />
+      </div>
 
-        <div className="card">
-          <div className="card-head"><div className="t">Por produto</div><span className="badge">{data.byProduct.length}</span></div>
-          {data.byProduct.length ? (
-            data.byProduct.map((r, i) => (
-              <BarRow key={r.key} k={r.key} v={r.count} max={prMax} color={CHANNEL_COLORS[i % CHANNEL_COLORS.length]} />
-            ))
-          ) : (
-            <div className="sub" style={{ color: "var(--label-3)" }}>Sem produto informado.</div>
-          )}
-        </div>
+      <div className="grid two-col" style={{ marginBottom: 16 }}>
+        <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." />
+        <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." />
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-head"><div className="t">Funil por status / etapa</div></div>
         {data.byStatus.map((r) => (
-          <BarRow key={r.key} k={r.key} v={r.count} max={stMax} color="var(--cyan)" />
+          <BarRow
+            key={r.key}
+            k={r.key}
+            v={r.count}
+            max={stMax}
+            color="var(--cyan)"
+            formatted={r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}
+          />
         ))}
         <div className="mini" style={{ marginTop: 12 }}>
           <MiniStat l="Valor total" n={money(data.totalValue)} />
@@ -427,7 +566,7 @@ function Dashboard({ data }: { data: LeadsData }) {
       </div>
 
       {data.lossReasons.length > 0 && (
-        <div className="card">
+        <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-head"><div className="t">Motivos de perda</div><span className="badge">{data.lost}</span></div>
           <div className="top-list">
             {data.lossReasons.map((r) => (
@@ -439,12 +578,97 @@ function Dashboard({ data }: { data: LeadsData }) {
                     style={{ width: `${(r.count / Math.max(1, data.lost)) * 100}%`, background: "var(--red)" }}
                   />
                 </div>
-                <div className="v tnum">{fmt(r.count)}</div>
+                <div className="v tnum">{r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}</div>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      <LeadsTable leads={data.leads} />
     </>
+  );
+}
+
+// ── tabela de leads (amostra) ──
+function LeadsTable({ leads }: { leads: LeadRow[] }) {
+  if (!leads.length) return null;
+  const th: React.CSSProperties = {
+    textAlign: "left",
+    padding: "8px 10px",
+    fontSize: 11,
+    letterSpacing: ".02em",
+    textTransform: "uppercase",
+    color: "var(--label-3)",
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  };
+  const td: React.CSSProperties = {
+    padding: "9px 10px",
+    fontSize: 13,
+    borderTop: "1px solid var(--hairline, rgba(0,0,0,.06))",
+    verticalAlign: "top",
+  };
+  const dim = (v: string | null) => (v && v.trim() ? v : "—");
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="t">Leads</div>
+        <span className="badge">{leads.length}</span>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={th}>Lead</th>
+              <th style={th}>Canal</th>
+              <th style={th}>Categoria</th>
+              <th style={th}>Produto</th>
+              <th style={th}>Qualificação</th>
+              <th style={th}>Status</th>
+              <th style={{ ...th, textAlign: "right" }}>Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {leads.map((l) => {
+              const oc = OUTCOME[l.outcome];
+              return (
+                <tr key={l.id}>
+                  <td style={td}>
+                    <div style={{ fontWeight: 600 }}>{dim(l.title)}</div>
+                    {l.lossReason && l.lossReason.trim() && (
+                      <div style={{ fontSize: 11.5, color: "var(--red)" }}>Perda: {l.lossReason}</div>
+                    )}
+                  </td>
+                  <td style={td}>{dim(l.channel)}</td>
+                  <td style={td}>{dim(l.category)}</td>
+                  <td style={td}>{dim(l.product)}</td>
+                  <td style={td}>{dim(l.qualification)}</td>
+                  <td style={td}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: oc.color,
+                      }}
+                    >
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: oc.color, display: "inline-block" }} />
+                      {dim(l.status)}
+                    </span>
+                  </td>
+                  <td style={{ ...td, textAlign: "right" }} className="tnum">
+                    {l.value > 0 ? money(l.value) : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

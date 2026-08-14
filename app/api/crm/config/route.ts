@@ -7,6 +7,21 @@ import { getActiveWorkspaceId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+// dimensões do lead que o sync sabe interpretar (o fieldMap mapeia dimensão -> nome do campo ClickUp).
+const FIELD_KEYS = ["channel", "category", "product", "qualification", "status", "value", "lossReason"] as const;
+
+// mantém só chaves conhecidas, valores como string aparada; descarta vazios (heurística assume o resto).
+function cleanFieldMap(input: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (input && typeof input === "object") {
+    for (const k of FIELD_KEYS) {
+      const v = (input as Record<string, unknown>)[k];
+      if (typeof v === "string" && v.trim()) out[k] = v.trim();
+    }
+  }
+  return out;
+}
+
 export async function GET() {
   try {
     const ws = await getActiveWorkspaceId();
@@ -34,7 +49,7 @@ export async function PUT(req: Request) {
       provider,
       clickupToken: (b.clickupToken ?? existing?.clickupToken ?? "") || null,
       clickupListId: (b.clickupListId ?? existing?.clickupListId ?? "") || null,
-      fieldMap: b.fieldMap ?? existing?.fieldMap ?? {},
+      fieldMap: b.fieldMap !== undefined ? cleanFieldMap(b.fieldMap) : existing?.fieldMap ?? {},
       webhookSecret,
     };
 

@@ -1,37 +1,27 @@
-// POST /api/crm/sync — importa tarefas do ClickUp como Leads (provider=clickup).
-// Busca a lista configurada, mapeia cada task -> Lead via fieldMap e faz UPSERT por (workspaceId, extId).
+// /api/crm/sync — integração ClickUp do funil (leads/oportunidades).
+//   POST  → importa as tasks da lista configurada como Leads (upsert por workspaceId+extId).
+//   GET   → detecta os campos personalizados da lista (pra o usuário mapear na UI).
+// Cada task vira um Lead, resolvendo os custom_fields do ClickUp (dropdowns/labels → rótulo,
+// não o id cru), aplicando o fieldMap do usuário e, quando faltar, uma heurística por nome.
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// custom field do ClickUp -> valor legível (resolve dropdowns/labels via type_config.options)
-function readCustomField(cf: ClickUpCustomField): string | null {
-  const v = cf?.value;
-  if (v == null || v === "") return null;
-  const opts = cf?.type_config?.options ?? [];
-  if (cf.type === "drop_down") {
-    const opt = opts.find((o) => o.orderindex === v || o.id === v);
-    return (opt?.name ?? opt?.label ?? String(v)) || null;
-  }
-  if (cf.type === "labels" && Array.isArray(v)) {
-    const names = v.map((id) => {
-      const opt = opts.find((o) => o.id === id);
-      return opt?.label ?? opt?.name ?? String(id);
-    });
-    return names.join(", ") || null;
-  }
-  if (typeof v === "object") return JSON.stringify(v);
-  return String(v);
+// ── tipos ClickUp ──
+interface ClickUpOption {
+  id: string;
+  name?: string;
+  label?: string;
+  orderindex?: unknown;
 }
-
 interface ClickUpCustomField {
   id: string;
   name: string;
   type: string;
   value?: unknown;
-  type_config?: { options?: { id: string; name?: string; label?: string; orderindex?: unknown }[] };
+  type_config?: { options?: ClickUpOption[] };
 }
 interface ClickUpTask {
   id: string;
@@ -41,6 +31,155 @@ interface ClickUpTask {
   custom_fields?: ClickUpCustomField[];
 }
 
+// dimensões do lead que sabemos interpretar (ordem = prioridade da heurística).
+// category vem antes de product pra "Categoria de Produto" não ser roubado por "produto";
+// product vem antes de qualification pra "Tipo de Produto" não cair no genérico "tipo".
+type Dim = "channel" | "category" | "product" | "qualification" | "status" | "value" | "lossReason";
+const DIMS: Dim[] = ["channel", "category", "product", "qualification", "status", "value", "lossReason"];
+
+// sinônimos (já sem acento/minúsculos) — casados por substring contra o nome normalizado do campo.
+// dentro de cada dimensão, os mais específicos vêm primeiro (ordenados por comprimento no uso).
+const SYNONYMS: Record<Dim, string[]> = {
+  channel: ["canal", "origem", "source", "fonte"],
+  category: ["categoria de produto", "categoria", "linha de produto", "segmento de produto", "segmento"],
+  product: ["tipo de produto", "produto", "servico", "serviço"],
+  qualification: ["qualificacao", "qualificação", "classificacao", "classificação", "lead score", "tipo de lead", "tipo"],
+  status: ["status", "etapa", "estagio", "estágio", "fase", "pipeline"],
+  value: ["valor", "value", "ticket medio", "ticket", "receita"],
+  lossReason: ["motivo de perda", "motivo", "perda", "loss reason", "loss"],
+};
+
+// normaliza: minúsculo + remove acentos.
+function norm(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+// custom field do ClickUp -> valor legível (resolve dropdowns/labels via type_config.options).
+function readCustomField(cf: ClickUpCustomField): string | null {
+  const v = cf?.value;
+  if (v == null || v === "") return null;
+  const type = cf?.type;
+  const opts = cf?.type_config?.options ?? [];
+  const labelOf = (id: unknown): string => {
+    const opt = opts.find((o) => String(o.id) === String(id) || String(o.orderindex) === String(id));
+    return (opt?.name ?? opt?.label ?? String(id)) as string;
+  };
+
+  if (type === "drop_down") return labelOf(v) || null;
+  if (type === "labels") {
+    const arr = Array.isArray(v) ? v : [v];
+    const names = arr.map(labelOf).filter(Boolean);
+    return names.length ? names.join(", ") : null;
+  }
+  if (type === "checkbox") return v === true || v === "true" ? "Sim" : "Não";
+  if (type === "number" || type === "currency" || type === "money") return String(v);
+  if (type === "users" && Array.isArray(v)) {
+    const names = v.map((u) => (u && typeof u === "object" ? (u as { username?: string }).username : String(u))).filter(Boolean);
+    return names.length ? names.join(", ") : null;
+  }
+  if (typeof v === "object") {
+    // formula/rollup costumam aninhar { value }
+    const nested = (v as { value?: unknown }).value;
+    if (nested != null) return String(nested);
+    return JSON.stringify(v);
+  }
+  return String(v);
+}
+
+// valor monetário robusto: aceita number, "1500.50" e "R$ 1.500,50" (pt-BR). null se não houver.
+function parseMoney(raw: string | null): number | null {
+  if (raw == null) return null;
+  let s = String(raw).trim().replace(/[^\d.,-]/g, "");
+  if (!s) return null;
+  if (s.includes(".") && s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); // . milhar, , decimal
+  else if (s.includes(",")) s = s.replace(",", ".");
+  const n = Number(s);
+  return isNaN(n) ? null : n;
+}
+
+// resolve todas as dimensões de uma task: fieldMap explícito (prioridade) + heurística por nome.
+function resolveDims(task: ClickUpTask, fm: Record<string, string>): Record<Dim, string | null> {
+  const fields = task.custom_fields ?? [];
+  const used = new Set<string>();
+  const out = {} as Record<Dim, string | null>;
+
+  // 1) mapeamento explícito do usuário (por nome do campo, case-insensitive)
+  for (const dim of DIMS) {
+    const wanted = fm[dim];
+    if (wanted && wanted.trim()) {
+      const cf = fields.find((c) => norm(c.name || "") === norm(wanted));
+      if (cf) {
+        out[dim] = readCustomField(cf);
+        used.add(cf.id);
+        continue;
+      }
+    }
+    out[dim] = null;
+  }
+
+  // 2) heurística por sinônimos — só para dimensões que o usuário NÃO mapeou explicitamente
+  for (const dim of DIMS) {
+    if (fm[dim] && fm[dim].trim()) continue; // usuário mandou; respeitamos (mesmo que dê null)
+    if (out[dim] != null) continue;
+    const syns = [...SYNONYMS[dim]].sort((a, b) => b.length - a.length); // específicos primeiro
+    for (const cf of fields) {
+      if (used.has(cf.id)) continue;
+      const name = norm(cf.name || "");
+      if (!name) continue;
+      if (syns.some((syn) => name.includes(syn))) {
+        out[dim] = readCustomField(cf);
+        used.add(cf.id);
+        break;
+      }
+    }
+  }
+
+  return out;
+}
+
+// ── GET: detecta campos da lista pra a UI de mapeamento ──
+export async function GET() {
+  try {
+    const ws = await getActiveWorkspaceId();
+    if (!ws) return NextResponse.json({ ok: false, error: "unauth" }, { status: 401 });
+
+    const cfg = await prisma.crmConfig.findUnique({ where: { workspaceId: ws } });
+    if (!cfg || cfg.provider !== "clickup" || !cfg.clickupToken || !cfg.clickupListId) {
+      return NextResponse.json({ ok: false, error: "Configure o token e o List ID do ClickUp." }, { status: 400 });
+    }
+
+    const url = `https://api.clickup.com/api/v2/list/${encodeURIComponent(cfg.clickupListId)}/field`;
+    let res: Response;
+    try {
+      res = await fetch(url, { headers: { Authorization: cfg.clickupToken }, cache: "no-store" });
+    } catch {
+      return NextResponse.json({ ok: false, error: "Não foi possível falar com o ClickUp." }, { status: 502 });
+    }
+    if (res.status === 401) {
+      return NextResponse.json({ ok: false, error: "Token do ClickUp inválido ou sem acesso." }, { status: 400 });
+    }
+    if (!res.ok) {
+      return NextResponse.json({ ok: false, error: `ClickUp respondeu ${res.status}. Verifique o List ID.` }, { status: 400 });
+    }
+
+    const body = (await res.json()) as { fields?: ClickUpCustomField[] };
+    const fields = (Array.isArray(body?.fields) ? body.fields : []).map((f) => ({
+      name: f.name,
+      type: f.type,
+      options: (f.type_config?.options ?? []).map((o) => o.name ?? o.label ?? "").filter(Boolean),
+    }));
+
+    return NextResponse.json({ ok: true, fields });
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
+  }
+}
+
+// ── POST: importa as tasks como leads ──
 export async function POST() {
   try {
     const ws = await getActiveWorkspaceId();
@@ -75,25 +214,24 @@ export async function POST() {
     const tasks = Array.isArray(body?.tasks) ? body.tasks : [];
 
     const fm = (cfg.fieldMap ?? {}) as Record<string, string>;
-    const pick = (task: ClickUpTask, leadField: string): string | null => {
-      const cfName = fm[leadField];
-      if (!cfName) return null;
-      const cf = (task.custom_fields ?? []).find(
-        (c) => c.name?.toLowerCase() === cfName.toLowerCase()
-      );
-      return cf ? readCustomField(cf) : null;
-    };
 
     let imported = 0;
     for (const t of tasks) {
-      const channel = pick(t, "channel");
-      const product = pick(t, "product");
-      const lossReason = pick(t, "lossReason");
-      const statusMapped = pick(t, "status");
-      const status = statusMapped ?? t.status?.status ?? null;
-      const valueRaw = pick(t, "value");
-      const value = valueRaw != null ? Number(String(valueRaw).replace(/[^0-9.-]/g, "")) || 0 : 0;
+      const dims = resolveDims(t, fm);
+      const nativeStatus = t.status?.status ?? null;
+
+      const channel = dims.channel;
+      const category = dims.category;
+      const product = dims.product ?? category; // coluna product nunca vazia se houver categoria
+      const qualification = dims.qualification;
+      const status = dims.status ?? nativeStatus; // fallback: status nativo da task
+      const lossReason = dims.lossReason;
+      const value = parseMoney(dims.value) ?? 0; // nunca inventa: sem valor → 0
+
       const createdAt = t.date_created ? new Date(Number(t.date_created)) : new Date();
+
+      // guardamos as dimensões resolvidas em raw._parsed (schema não tem colunas p/ category/qualification)
+      const parsed = { channel, category, product, qualification, status, value: dims.value != null ? value : null, lossReason };
 
       const data = {
         source: "clickup",
@@ -101,11 +239,11 @@ export async function POST() {
         channel,
         product,
         status,
-        stage: t.status?.status ?? null,
+        stage: nativeStatus,
         value,
         lossReason,
         createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
-        raw: t as unknown as object,
+        raw: { ...(t as unknown as Record<string, unknown>), _parsed: parsed } as object,
       };
 
       await prisma.lead.upsert({
