@@ -90,6 +90,14 @@ function isoRange(s: Scope): { since: string; until: string; label: string } {
   return { since: iso(start), until: iso(cap(end)), label };
 }
 
+// limita cada chamada externa (Zernio pode ser lento) — evita FUNCTION_INVOCATION_TIMEOUT
+function withTimeout<T>(p: Promise<T>, ms: number, fb?: T): Promise<T | undefined> {
+  return Promise.race([
+    p.catch(() => fb),
+    new Promise<T | undefined>((res) => setTimeout(() => res(fb), ms)),
+  ]);
+}
+
 const nBR = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 const money = (v: number) => "R$ " + v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -132,22 +140,24 @@ async function perfilBlock(ws: Workspace): Promise<string> {
 // ── Poseidon: contas sociais (alcance/seguidores) + mídia paga (gasto/resultado) ──
 async function poseidonBlock(ws: Workspace, r: { since: string; until: string }): Promise<string> {
   if (!ws.zernioProfileId) return "Nenhuma conta conectada ainda.";
-  let accounts: ZernioAccount[] = [];
-  try { accounts = (await listAccounts(ws.zernioProfileId)).accounts; } catch { /* segue vazio */ }
+  const acc = await withTimeout(listAccounts(ws.zernioProfileId), 5000);
+  const accounts: ZernioAccount[] = acc?.accounts || [];
   const social = accounts.filter((a) => !ADS_ONLY.has(String(a.platform)) && (a.enabled === true || (a as Record<string, unknown>).analyticsEnabled === true));
 
-  // desempenho social (alcance/interações) — best-effort, limitado
+  // social e ads rodam em PARALELO, cada seção com TETO de tempo (a integração de Ads
+  // é a mais lenta) — garante que o contexto nunca estoura o timeout da função Vercel.
   const socialLines: string[] = [];
-  await Promise.all(
-    social.slice(0, 6).map(async (a) => {
+  let spend = 0, reach = 0, impressions = 0, clicks = 0, results = 0;
+  let hasAds = false;
+
+  const socialTask = withTimeout(Promise.all(
+    social.slice(0, 5).map(async (a) => {
       const plat = String(a.platform);
       let m: Record<string, number> = {};
-      try {
-        if (plat === "youtube") m = flat((await youtubeChannelInsights(a._id, r)).metrics);
-        else if (plat === "linkedin") m = flat((await linkedinAggregate(a._id, r)).analytics);
-        else if (plat === "googlebusiness") m = flat((await gbpPerformance(a._id, { fromDate: r.since, toDate: r.until })).metrics);
-        else if (IG_LIKE.has(plat)) m = flat((await accountInsightsFull(plat, a._id, r)).metrics);
-      } catch { /* ignora conta que falhou */ }
+      if (plat === "youtube") m = flat((await withTimeout(youtubeChannelInsights(a._id, r), 3000))?.metrics);
+      else if (plat === "linkedin") m = flat((await withTimeout(linkedinAggregate(a._id, r), 3000))?.analytics);
+      else if (plat === "googlebusiness") m = flat((await withTimeout(gbpPerformance(a._id, { fromDate: r.since, toDate: r.until }), 3000))?.metrics);
+      else if (IG_LIKE.has(plat)) m = flat((await withTimeout(accountInsightsFull(plat, a._id, r), 3000))?.metrics);
       const nome = a.displayName || (a as Record<string, unknown>).username as string || plat;
       const bits = [
         a.followersCount != null && `${nBR(num(a.followersCount))} seguidores`,
@@ -157,27 +167,26 @@ async function poseidonBlock(ws: Workspace, r: { since: string; until: string })
       ].filter(Boolean);
       socialLines.push(`- ${nome} (${plat}): ${bits.join(", ") || "sem métricas no período"}`);
     })
-  );
+  ), 4000);
 
-  // mídia paga: por conta social, agrega insights das ad accounts (nível conta)
-  let spend = 0, reach = 0, impressions = 0, clicks = 0, results = 0;
-  let hasAds = false;
-  await Promise.all(
-    accounts.slice(0, 8).map(async (a) => {
-      try {
-        const { accounts: adAccts } = await listAdAccounts(a._id);
-        for (const ad of (adAccts || []).slice(0, 4)) {
-          const ins = await adsInsights(a._id, ad.id, { since: r.since, until: r.until, level: "account" });
-          for (const row of ins.data || []) {
+  const adsTask = withTimeout(Promise.all(
+    accounts.slice(0, 3).map(async (a) => {
+      const adRes = await withTimeout(listAdAccounts(a._id), 2500);
+      await Promise.all(
+        (adRes?.accounts || []).slice(0, 2).map(async (ad) => {
+          const ins = await withTimeout(adsInsights(a._id, ad.id, { since: r.since, until: r.until, level: "account" }), 3000);
+          for (const row of ins?.data || []) {
             hasAds = true;
             spend += num(row.spend); reach += num(row.reach); impressions += num(row.impressions);
             clicks += num(row.clicks);
           }
-          results += adResults(ins.data || []);
-        }
-      } catch { /* conta sem ads ou falha */ }
+          results += adResults(ins?.data || []);
+        })
+      );
     })
-  );
+  ), 4500);
+
+  await Promise.all([socialTask, adsTask]);
 
   // dados manuais de campanha (vendas/receita que a mídia não entrega)
   const cfg = await prisma.envConfig.findUnique({ where: { workspaceId: ws.id } }).catch(() => null);
@@ -221,13 +230,11 @@ async function apolloBlock(ws: Workspace, r: { since: string; until: string }): 
     .slice(0, 8)
     .map((p) => `- ${p.data.toLocaleDateString("pt-BR")} ${p.hora} · ${p.canal} · "${p.titulo}"${p.formato ? ` (${p.formato})` : ""}`);
 
-  // canais conectados
+  // canais conectados (com timeout — não pode travar a função)
   let canais: string[] = [];
   if (ws.zernioProfileId) {
-    try {
-      const { accounts } = await listAccounts(ws.zernioProfileId);
-      canais = accounts.filter((a) => a.enabled === true).map((a) => `${a.displayName || a.platform} (${a.platform})`);
-    } catch { /* ignora */ }
+    const acc = await withTimeout(listAccounts(ws.zernioProfileId), 4000);
+    canais = (acc?.accounts || []).filter((a) => a.enabled === true).map((a) => `${a.displayName || a.platform} (${a.platform})`);
   }
 
   const out: string[] = [];
@@ -301,16 +308,20 @@ async function dionisioBlock(ws: Workspace): Promise<string> {
 export async function buildContext(agentKey: AgentKey, ws: Workspace, scope: Scope): Promise<string> {
   const r = isoRange(scope);
   const perfil = await perfilBlock(ws).catch(() => `Empresa: ${ws.nome}.`);
-  let body = "";
-  try {
-    if (agentKey === "poseidon") body = await poseidonBlock(ws, r);
-    else if (agentKey === "apollo") body = await apolloBlock(ws, r);
-    else if (agentKey === "athena") body = await athenaBlock(ws);
-    else if (agentKey === "dionisio") body = await dionisioBlock(ws);
-  } catch (e) {
-    body = `(falha ao carregar alguns dados: ${String(e).slice(0, 120)})`;
-  }
-  return `PERÍODO ANALISADO: ${r.label}.\nPERFIL: ${perfil}\n\n${body}`;
+  const bodyP = (async () => {
+    if (agentKey === "poseidon") return poseidonBlock(ws, r);
+    if (agentKey === "apollo") return apolloBlock(ws, r);
+    if (agentKey === "athena") return athenaBlock(ws);
+    if (agentKey === "dionisio") return dionisioBlock(ws);
+    return "";
+  })();
+  // TETO global: se o corpo demorar (>7s), respondemos com perfil + aviso em vez de travar a função.
+  const body = await withTimeout(
+    bodyP.catch((e) => `(falha ao carregar alguns dados: ${String(e).slice(0, 120)})`),
+    7000,
+    "(alguns dados do período ainda estavam carregando — respondo com o contexto disponível; pode pedir de novo pra eu detalhar)"
+  );
+  return `PERÍODO ANALISADO: ${r.label}.\nPERFIL: ${perfil}\n\n${body ?? ""}`;
 }
 
 // normaliza o Scope recebido do client (defaults seguros)
