@@ -17,9 +17,10 @@ const redeId = (platform: string) => REDE_ID[platform] || platform;
 const REDE_LABEL: Record<string, string> = Object.fromEntries(REDES.map((r) => [r.id, r.label]));
 const redeLabel = (id: string) => REDE_LABEL[id] || id;
 
-// id da rede → nome do ícone em lib/nav (ICONS)
+// id da rede → nome do ícone em lib/nav (ICONS).
+// ATENÇÃO: o glifo do Instagram em ICONS chama-se "ig" (não "instagram").
 const ICON_OF: Record<string, string> = {
-  instagram: "instagram", facebook: "facebook", tiktok: "tiktok", youtube: "youtube",
+  instagram: "ig", facebook: "facebook", tiktok: "tiktok", youtube: "youtube",
   linkedin: "linkedin", x: "x", threads: "threads", googlebusiness: "googlebusiness",
   pinterest: "pinterest", reddit: "reddit", snapchat: "snapchat", bluesky: "bluesky",
 };
@@ -130,6 +131,7 @@ export function ChannelSummaryCard({
   metrics,
   posts,
   cor,
+  periodLabel,
 }: {
   platform: string;
   displayName?: string;
@@ -138,6 +140,7 @@ export function ChannelSummaryCard({
   metrics: Record<string, number>;
   posts?: number | null;
   cor: string;
+  periodLabel?: string;
 }) {
   const id = redeId(platform);
   const label = redeLabel(id);
@@ -238,6 +241,13 @@ export function ChannelSummaryCard({
           </div>
         ))}
       </div>
+
+      {/* período dos indicadores — reforço explícito de que os números são da janela selecionada */}
+      {periodLabel && (
+        <div style={{ fontSize: 11, color: "var(--label-3)", fontWeight: 500, marginTop: -4 }}>
+          Indicadores no período: <span style={{ color: "var(--label-2)", fontWeight: 600 }}>{periodLabel}</span>
+        </div>
+      )}
 
       {/* rodapé: produção de conteúdo no período (só redes com posting) */}
       {posts != null && (

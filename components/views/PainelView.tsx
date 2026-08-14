@@ -11,7 +11,7 @@ import { PageHead, KpiCard } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { ChannelSummaryCard } from "@/components/ChannelSummaryCard";
 import { fmt, kfmt, sum } from "@/lib/format";
-import { daysInMonth, type Period } from "@/lib/scope";
+import { daysInMonth, scopeLabelText, type Period } from "@/lib/scope";
 
 const redeCor = (p: string) =>
   REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.cor || "#121111";
@@ -61,6 +61,15 @@ export function PainelView() {
   const s = useStore();
   const storeAccounts = useStore((st) => st.zernioAccounts);
   const range = dateRange(s);
+  // rótulo legível do escopo selecionado na toolbar (ex.: "Agosto de 2026"),
+  // para deixar EXPLÍCITO de que período são os números do overview.
+  const periodoLabel = scopeLabelText({
+    period: s.period,
+    year: s.year,
+    month: s.month,
+    week: s.week,
+    quarter: s.quarter,
+  });
   const cacheKey = `${range.since}|${range.until}`;
 
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(SUMMARY_CACHE.get(cacheKey) ?? null);
@@ -146,7 +155,37 @@ export function PainelView() {
         <Spinner texto="Carregando visão geral…" />
       ) : (
         <div className="grid" style={{ gap: 16 }}>
-          {/* KPIs-herói agregados da empresa */}
+          {/* Período analisado — deixa EXPLÍCITO de que janela são todos os números abaixo */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+              padding: "11px 16px",
+              borderRadius: 12,
+              background: "color-mix(in srgb, var(--cyan) 8%, #fff)",
+              border: "1px solid color-mix(in srgb, var(--cyan) 22%, transparent)",
+            }}
+          >
+            <span
+              aria-hidden
+              style={{ display: "grid", placeItems: "center", color: "var(--cyan)", flex: "0 0 auto" }}
+            >
+              📅
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--label-3)", textTransform: "uppercase" }}>
+              Período analisado
+            </span>
+            <span className="tnum" style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-.2px", color: "var(--label)" }}>
+              {periodoLabel}
+            </span>
+            <span style={{ fontSize: 12, color: "var(--label-2)", fontWeight: 500 }}>
+              — todos os indicadores abaixo são deste período (dados fechados, não “hoje”)
+            </span>
+          </div>
+
+          {/* KPIs-herói agregados da empresa (no período selecionado) */}
           <div className="grid kpis">
             <KpiCard lbl="Seguidores (total)" val={totalFollowers ? fmt(totalFollowers) : "—"} foot="somados nas redes" />
             <KpiCard lbl="Canais conectados" val={fmt(list.length)} foot="com dados no período" />
@@ -160,7 +199,7 @@ export function PainelView() {
               <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--label-3)", textTransform: "uppercase" }}>
-                    Produção de conteúdo
+                    Produção de conteúdo <span style={{ color: "var(--label-2)", fontWeight: 600 }}>· {periodoLabel}</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
                     <span className="tnum" style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-1px", lineHeight: 1, color: "var(--label)" }}>
@@ -213,6 +252,7 @@ export function PainelView() {
                 metrics={a.metrics || {}}
                 posts={a.posts}
                 cor={redeCor(a.platform)}
+                periodLabel={periodoLabel}
               />
             ))}
           </div>
