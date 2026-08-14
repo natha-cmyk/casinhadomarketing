@@ -41,6 +41,22 @@ model Workspace {
   crmConfig       CrmConfig?
   leads           Lead[]
   historico       HistoricalMetric[]
+  llmConfig       LlmConfig?
+}
+
+// ─────────────────────────────────────────────────────────────
+// LLM por workspace (BYO-LLM): cada empresa conecta a PRÓPRIA fonte de LLM
+// (OpenRouter/Anthropic). Os agentes rodam com essa chave; sem ela, modo chatbot mínimo.
+// A chave da agência (env) é só fallback de teste.
+// ─────────────────────────────────────────────────────────────
+model LlmConfig {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider    String    @default("openrouter") // openrouter | anthropic
+  apiKey      String // TODO(segurança): cifrar em repouso
+  model       String    @default("") // slug opcional; default por provider
+  updatedAt   DateTime  @updatedAt
 }
 
 enum Role {

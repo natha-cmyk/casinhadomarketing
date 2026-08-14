@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { AGENTS, buildContext, normalizeScope, type AgentKey } from "@/lib/agents";
+import { resolveLlm } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,12 +27,12 @@ interface Body {
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
 // ── OpenRouter (OpenAI-compatible /chat/completions, streaming SSE) ───────────
-async function streamOpenRouter(system: string, history: Msg[]): Promise<ReadableStream<Uint8Array>> {
-  const model = process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4.5";
+async function streamOpenRouter(system: string, history: Msg[], apiKey: string, modelIn: string): Promise<ReadableStream<Uint8Array>> {
+  const model = modelIn || "anthropic/claude-sonnet-4.5";
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
       "X-Title": "Casinha do Marketing",
     },
@@ -75,11 +76,11 @@ async function streamOpenRouter(system: string, history: Msg[]): Promise<Readabl
   });
 }
 
-// ── Anthropic direto (fallback) ──────────────────────────────────────────────
-async function streamAnthropic(system: string, history: Msg[]): Promise<ReadableStream<Uint8Array>> {
+// ── Anthropic direto ─────────────────────────────────────────────────────────
+async function streamAnthropic(system: string, history: Msg[], apiKey: string, modelIn: string): Promise<ReadableStream<Uint8Array>> {
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic();
-  const model = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+  const client = new Anthropic({ apiKey });
+  const model = modelIn || "claude-opus-5";
   const messages = history.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })) as { role: "user" | "assistant"; content: string }[];
   const encoder = new TextEncoder();
   return new ReadableStream({
@@ -113,12 +114,12 @@ export async function POST(req: Request) {
   const agent = AGENTS[agentKey];
   if (!agent) return NextResponse.json({ error: "agente inválido" }, { status: 400 });
 
-  const hasOR = !!process.env.OPENROUTER_API_KEY;
-  const hasAnt = !!process.env.ANTHROPIC_API_KEY;
-  if (!hasOR && !hasAnt) {
+  // BYO-LLM: chave do próprio workspace → fallback agência → modo mínimo (sem LLM)
+  const llm = await resolveLlm(ws.id);
+  if (!llm) {
     return NextResponse.json({
       disabled: true,
-      message: `${agent.nome} está pronto, mas a chave de LLM ainda não foi configurada neste ambiente. Assim que a agência conectar a LLM, eu respondo com os dados reais do seu workspace.`,
+      message: `Sou o ${agent.nome}. Pra eu analisar de verdade os dados do seu workspace, conecte sua LLM em Personalização → Conexões (ex.: OpenRouter). Sem ela eu respondo só o básico — com ela, desbloqueio a análise completa de desempenho, mídia paga e conteúdo.`,
     });
   }
 
@@ -135,7 +136,9 @@ export async function POST(req: Request) {
   while (history.length && history[0].role !== "user") history.shift();
   if (!history.length) return NextResponse.json({ error: "sem mensagem" }, { status: 400 });
 
-  const stream = hasOR ? await streamOpenRouter(system, history) : await streamAnthropic(system, history);
+  const stream = llm.provider === "anthropic"
+    ? await streamAnthropic(system, history, llm.apiKey, llm.model)
+    : await streamOpenRouter(system, history, llm.apiKey, llm.model);
   return new Response(stream, {
     headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
   });

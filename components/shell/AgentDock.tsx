@@ -8,6 +8,7 @@ import { useStore } from "@/lib/store";
 import { viewForPath } from "@/lib/nav";
 import { Ic } from "../Ic";
 import { AgentMarkdown } from "./AgentMarkdown";
+import { AgentLlmConnect } from "./AgentLlmConnect";
 
 // markdown → HTML simples (só p/ exportar PDF via janela de impressão)
 function mdToHtml(md: string): string {
@@ -256,6 +257,7 @@ export function AgentDock() {
               <Ic name="upload" />
             </button>
           </div>
+          <AgentLlmConnect />
           <div className="ag-foot">Assistente com LLM · lê os dados do seu workspace no período selecionado</div>
         </div>
       )}
