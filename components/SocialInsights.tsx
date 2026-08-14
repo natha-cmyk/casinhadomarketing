@@ -15,7 +15,7 @@ import { PageHead, KpiCard, DeltaChip, BarRow, MiniStat } from "@/components/ui"
 import { Ic } from "@/components/Ic";
 import { Chart } from "@/components/Chart";
 import { Spinner } from "@/components/Spinner";
-import { lineChart, barChart, pieChart, type LineSeries } from "@/lib/charts";
+import { lineChart, barChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
 import { REDES } from "@/lib/seed-data";
@@ -108,6 +108,19 @@ interface RecentPost {
   isVideo: boolean;
   mediaType?: string;
   content?: string;
+  isCollab?: boolean;
+  // métricas de desempenho (só as que a API devolveu)
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  saves?: number;
+}
+// selo de formato para a grade "Últimas publicações"
+function recentFmtLabel(p: RecentPost): string {
+  const mt = (p.mediaType || "").toLowerCase();
+  if (mt.includes("carousel")) return "Carrossel";
+  if (p.isVideo || mt.includes("reel") || mt.includes("video")) return "Reels";
+  return "Post";
 }
 interface Combined {
   insights: AnalyticsResponse | null;          // metrics{key:{total,values?}}
@@ -225,8 +238,8 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [err, setErr] = useState<string | null>(null);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
-  // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras / pizza)
-  const [perfChart, setPerfChart] = useState<"line" | "bar" | "pie">("line");
+  // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras)
+  const [perfChart, setPerfChart] = useState<"line" | "bar">("line");
   // modo "organizar" (drag-and-drop dos cards reordenáveis) + card em arraste
   const [editing, setEditing] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -456,8 +469,8 @@ export function SocialInsights({ rede }: { rede: string }) {
     );
   const dget = (r: DailyMetricRow, k: string) => (r.metrics as Record<string, number>)[k] ?? 0;
   const showPerf = !!daily && daily.length > 0;
-  const CHART_TYPES: { v: "line" | "bar" | "pie"; l: string }[] = [
-    { v: "line", l: "Linha" }, { v: "bar", l: "Barras" }, { v: "pie", l: "Pizza" },
+  const CHART_TYPES: { v: "line" | "bar"; l: string }[] = [
+    { v: "line", l: "Linha" }, { v: "bar", l: "Barras" },
   ];
   // svg do card "Desempenho no tempo" conforme o tipo escolhido — MESMA informação, visual diferente
   function perfSvg(): string {
@@ -470,10 +483,6 @@ export function SocialInsights({ rede }: { rede: string }) {
         return barChart(daily.map((r) => r.date.slice(5)), daily.map((r) => dget(r, m)), perfColor(m), { h: 250, name: perfLbl(m) });
       }
       return barChart(perfMetrics.map(perfLbl), perfMetrics.map(metricTotal), perfMetrics.map(perfColor), { h: 250 });
-    }
-    if (perfChart === "pie") {
-      // composição: participação do total de cada métrica selecionada no período
-      return pieChart(perfMetrics.map((m) => ({ v: metricTotal(m), color: perfColor(m), label: perfLbl(m) })), 230, "no período");
     }
     // linha (default) — multi-série + comparação tracejada
     return lineChart(
@@ -730,31 +739,48 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div className="sub">grade recente do perfil · por data</div>
         </div>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(132px,1fr))", gap: 14, marginTop: 6 }}>
         {recent.map((p) => {
           const dt = p.publishedAt ? p.publishedAt.slice(0, 10).split("-").reverse().join("/") : "";
+          const badge = recentFmtLabel(p);
+          // linha de desempenho — só as métricas que a API devolveu
+          const met: { ic: string; v: number; t: string }[] = [];
+          if (p.likes != null) met.push({ ic: "❤", v: p.likes, t: "curtidas" });
+          if (p.comments != null) met.push({ ic: "💬", v: p.comments, t: "comentários" });
+          if (p.shares != null) met.push({ ic: "↗", v: p.shares, t: "compartilhamentos" });
+          if (p.saves != null) met.push({ ic: "🔖", v: p.saves, t: "salvos" });
           const inner = (
             <>
-              <div style={{ position: "relative", width: 96, height: 96, borderRadius: 12, overflow: "hidden", background: "var(--cream)", border: "1px solid var(--hairline, rgba(0,0,0,0.06))" }}>
+              <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", borderRadius: 12, overflow: "hidden", background: "var(--cream)", border: "1px solid var(--hairline, rgba(0,0,0,0.06))" }}>
                 {p.thumbnail ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={p.thumbnail} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 ) : (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", fontSize: 24, opacity: 0.4 }}>🖼️</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", fontSize: 26, opacity: 0.4 }}>🖼️</div>
                 )}
-                {p.isVideo && (
-                  <span aria-label="vídeo" style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 999, background: "rgba(0,0,0,0.6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, lineHeight: 1 }}>▶</span>
+                <span style={{ position: "absolute", top: 6, left: 6, padding: "2px 7px", borderRadius: 999, background: "rgba(0,0,0,0.66)", color: "#fff", fontSize: 10, fontWeight: 700, lineHeight: 1.4 }}>{badge}</span>
+                {p.isCollab && (
+                  <span aria-label="colaborativo" style={{ position: "absolute", top: 6, right: 6, padding: "2px 7px", borderRadius: 999, background: "var(--cyan)", color: "#fff", fontSize: 10, fontWeight: 700, lineHeight: 1.4 }}>Colab</span>
                 )}
               </div>
-              <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 6, textAlign: "center" }} className="tnum">{dt}</div>
+              <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 7 }} className="tnum">{dt}</div>
+              {met.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4, fontSize: 11.5, color: "var(--label-2)" }} className="tnum">
+                  {met.map((m, i) => (
+                    <span key={i} title={m.t} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      <span aria-hidden="true" style={{ fontSize: 11 }}>{m.ic}</span>{fmt(m.v)}
+                    </span>
+                  ))}
+                </div>
+              )}
             </>
           );
           return p.url ? (
-            <a key={p._id} href={p.url} target="_blank" rel="noopener" title="Abrir publicação ↗" style={{ width: 96, textDecoration: "none", color: "inherit" }}>
+            <a key={p._id} href={p.url} target="_blank" rel="noopener" title="Abrir publicação ↗" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
               {inner}
             </a>
           ) : (
-            <div key={p._id} style={{ width: 96 }}>{inner}</div>
+            <div key={p._id}>{inner}</div>
           );
         })}
       </div>
@@ -860,22 +886,6 @@ export function SocialInsights({ rede }: { rede: string }) {
         desc={desc}
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {multiAccount && (
-              <div className="seg small si-acct-seg" role="group" aria-label="Conta">
-                {accts.map((a) => (
-                  <button
-                    key={a._id}
-                    type="button"
-                    className={acct?._id === a._id ? "on" : ""}
-                    aria-pressed={acct?._id === a._id}
-                    title={a.displayName || a.username || "conta"}
-                    onClick={() => s.setSelectedAccount(rede, a._id)}
-                  >
-                    {acctLabel(a)}
-                  </button>
-                ))}
-              </div>
-            )}
             {cards.length > 0 && (
               <button
                 type="button"
@@ -893,6 +903,52 @@ export function SocialInsights({ rede }: { rede: string }) {
           </div>
         }
       />
+      {/* Seletor de conta (multi-conta): quando há 2+ contas da mesma rede, um seletor
+          claro e proeminente no topo do painel. Trocar recarrega os dados da conta escolhida. */}
+      {multiAccount && (
+        <div
+          role="group"
+          aria-label="Selecionar conta"
+          style={{
+            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+            margin: "0 0 16px", padding: "10px 12px", background: "var(--cream)",
+            borderRadius: 12, border: "1px solid var(--hairline, rgba(0,0,0,0.06))",
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--label-2)" }}>Conta:</span>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {accts.map((a) => {
+              const on = acct?._id === a._id;
+              const nm = a.username ? "@" + a.username : acctLabel(a);
+              return (
+                <button
+                  key={a._id}
+                  type="button"
+                  aria-pressed={on}
+                  title={a.displayName || a.username || "conta"}
+                  onClick={() => s.setSelectedAccount(rede, a._id)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                    border: on ? `1.5px solid ${cor}` : "1.5px solid transparent",
+                    background: on ? "#fff" : "rgba(0,0,0,0.04)",
+                    color: on ? "var(--label)" : "var(--label-2)",
+                    fontWeight: on ? 700 : 500, fontSize: 13,
+                    boxShadow: on ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
+                  }}
+                >
+                  {a.profilePicture ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={a.profilePicture} alt="" style={{ width: 22, height: 22, borderRadius: 999, objectFit: "cover", display: "block" }} />
+                  ) : null}
+                  <span>{nm}</span>
+                  {on && <span aria-hidden="true" style={{ fontSize: 10, color: cor }}>●</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {loading && <Spinner texto="Carregando métricas…" />}
       {err && <div className="auth-err">{err}</div>}
       {!loading && !err && (

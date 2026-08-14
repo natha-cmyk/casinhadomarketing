@@ -52,7 +52,15 @@ export interface RecentPost {
   isVideo: boolean;
   mediaType?: string;
   content?: string;
+  isCollab?: boolean;
+  // métricas de desempenho (só as que a API devolveu; sem invenção)
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  saves?: number;
 }
+// número só quando finito (não inventa 0 quando o campo veio ausente/inválido)
+const num = (v: unknown): number | undefined => (Number.isFinite(Number(v)) && v != null ? Number(v) : undefined);
 function pickThumb(p: PostAnalyticsItem): string | null {
   const x = p as unknown as Record<string, unknown>;
   const cand = x.thumbnailUrl ?? x.thumbnail ?? x.mediaUrl ?? x.mediaThumbnail ?? x.imageUrl ?? x.pictureUrl;
@@ -71,6 +79,10 @@ function toRecent(p: PostAnalyticsItem): RecentPost {
   const x = p as unknown as Record<string, unknown>;
   const mt = String((x.mediaType ?? x.mediaProductType ?? "")).toLowerCase();
   const url = p.platformPostUrl || (typeof x.permalink === "string" ? (x.permalink as string) : null);
+  const a = p.analytics || {};
+  // colaboração: flag booleana OU lista de colaboradores, se o item trouxer (senão, ignora)
+  const collab = x.collaborators;
+  const isCollab = x.isCollab === true || (Array.isArray(collab) && collab.length > 0) ? true : undefined;
   return {
     _id: p._id,
     url,
@@ -79,6 +91,11 @@ function toRecent(p: PostAnalyticsItem): RecentPost {
     isVideo: mt.includes("video") || mt.includes("reel"),
     mediaType: mt || undefined,
     content: p.content,
+    isCollab,
+    likes: num(a.likes),
+    comments: num(a.comments),
+    shares: num(a.shares),
+    saves: num(a.saves),
   };
 }
 function recentPosts(posts: PostAnalyticsItem[], limit = 8): RecentPost[] {
