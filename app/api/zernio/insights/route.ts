@@ -40,6 +40,55 @@ function toInsights(
   };
 }
 
+// ── Últimas publicações (grade recente do perfil, por DATA desc) ──
+// Reusa os posts já buscados (postAnalytics) e ordena por publishedAt desc.
+// O item da API traz campos de mídia além do tipado (thumbnail/mediaUrl/permalink) —
+// lidos de forma tolerante ao shape.
+export interface RecentPost {
+  _id: string;
+  url: string | null;
+  publishedAt: string;
+  thumbnail: string | null;
+  isVideo: boolean;
+  mediaType?: string;
+  content?: string;
+}
+function pickThumb(p: PostAnalyticsItem): string | null {
+  const x = p as unknown as Record<string, unknown>;
+  const cand = x.thumbnailUrl ?? x.thumbnail ?? x.mediaUrl ?? x.mediaThumbnail ?? x.imageUrl ?? x.pictureUrl;
+  // alguns retornos aninham a mídia em mediaItems[0]
+  if (typeof cand !== "string") {
+    const media = x.mediaItems ?? x.media;
+    if (Array.isArray(media) && media.length) {
+      const m = media[0] as Record<string, unknown>;
+      const mc = m?.thumbnailUrl ?? m?.thumbnail ?? m?.url ?? m?.mediaUrl;
+      return typeof mc === "string" ? mc : null;
+    }
+  }
+  return typeof cand === "string" ? cand : null;
+}
+function toRecent(p: PostAnalyticsItem): RecentPost {
+  const x = p as unknown as Record<string, unknown>;
+  const mt = String((x.mediaType ?? x.mediaProductType ?? "")).toLowerCase();
+  const url = p.platformPostUrl || (typeof x.permalink === "string" ? (x.permalink as string) : null);
+  return {
+    _id: p._id,
+    url,
+    publishedAt: p.publishedAt,
+    thumbnail: pickThumb(p),
+    isVideo: mt.includes("video") || mt.includes("reel"),
+    mediaType: mt || undefined,
+    content: p.content,
+  };
+}
+function recentPosts(posts: PostAnalyticsItem[], limit = 8): RecentPost[] {
+  return [...posts]
+    .filter((p) => p.publishedAt)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, limit)
+    .map(toRecent);
+}
+
 // resumo de conteúdo: orgânico vs impulsionado + mix por tipo de mídia
 function contentSummary(posts: PostAnalyticsItem[]) {
   const bucket = () => ({ count: 0, reach: 0, engagement: 0 });
@@ -106,8 +155,10 @@ export async function GET(req: Request) {
     const posts = postsResp?.posts || [];
     const top = postsResp ? { overview: postsResp.overview, posts: posts.slice(0, 8) } : null;
     const content = postsResp ? contentSummary(posts) : null;
+    // "Últimas publicações": os ~8 posts mais RECENTES por data (distinto de `top`, que é por engajamento)
+    const recent = postsResp ? recentPosts(posts, 8) : null;
 
-    return NextResponse.json({ insights, followers, keySeries, daily, top, content, linkTaps, stories, bestTime: bestSlots, demographics: demo });
+    return NextResponse.json({ insights, followers, keySeries, daily, top, content, recent, linkTaps, stories, bestTime: bestSlots, demographics: demo });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 502 });
   }

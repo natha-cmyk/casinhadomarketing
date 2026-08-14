@@ -99,6 +99,16 @@ interface ContentSummary {
   byType: Record<string, number>;
   organicShare: number | null;
 }
+// item da grade "Últimas publicações" (posts mais recentes por data)
+interface RecentPost {
+  _id: string;
+  url: string | null;
+  publishedAt: string;
+  thumbnail: string | null;
+  isVideo: boolean;
+  mediaType?: string;
+  content?: string;
+}
 interface Combined {
   insights: AnalyticsResponse | null;          // metrics{key:{total,values?}}
   followers: AnalyticsResponse | null;          // metrics.follower_count.values
@@ -106,6 +116,7 @@ interface Combined {
   daily: DailyMetricRow[] | null;               // daily-metrics
   top: PostAnalyticsResp | null;                // posting analytics (top conteúdos)
   content: ContentSummary | null;               // orgânico vs impulsionado + mix por tipo
+  recent: RecentPost[] | null;                  // últimas publicações (por data desc)
   linkTaps: Record<string, number> | null;      // toques em links do perfil por tipo (IG)
   stories: number | null;                       // stories ativos (IG)
   bestTime: BestTimeSlot[] | null;              // engajamento médio por dia da semana × hora
@@ -324,6 +335,7 @@ export function SocialInsights({ rede }: { rede: string }) {
   const cmpDaily = cmpData?.daily || null;
   const top = data?.top || null;
   const content = data?.content || null;
+  const recent = data?.recent || null;
   const linkTaps = data?.linkTaps || null;
   const demo = data?.demographics || null;
   const stories = data?.stories ?? null;
@@ -703,6 +715,46 @@ export function SocialInsights({ rede }: { rede: string }) {
                     : <>{fmt(a.views || 0)}<span>views</span></>}
               </div>
             </div>
+          );
+        })}
+      </div>
+    </div>
+  ) });
+
+  // ── Últimas publicações (grade recente do perfil, por DATA — distinto do "top" por engajamento) ──
+  if (recent && recent.length > 0) cards.push({ id: "recentes", full: true, node: (
+    <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--cyan)" } as CSSProperties}>
+      <div className="card-head">
+        <div>
+          <div className="t">Últimas publicações</div>
+          <div className="sub">grade recente do perfil · por data</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 4 }}>
+        {recent.map((p) => {
+          const dt = p.publishedAt ? p.publishedAt.slice(0, 10).split("-").reverse().join("/") : "";
+          const inner = (
+            <>
+              <div style={{ position: "relative", width: 96, height: 96, borderRadius: 12, overflow: "hidden", background: "var(--cream)", border: "1px solid var(--hairline, rgba(0,0,0,0.06))" }}>
+                {p.thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.thumbnail} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", fontSize: 24, opacity: 0.4 }}>🖼️</div>
+                )}
+                {p.isVideo && (
+                  <span aria-label="vídeo" style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 999, background: "rgba(0,0,0,0.6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, lineHeight: 1 }}>▶</span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 6, textAlign: "center" }} className="tnum">{dt}</div>
+            </>
+          );
+          return p.url ? (
+            <a key={p._id} href={p.url} target="_blank" rel="noopener" title="Abrir publicação ↗" style={{ width: 96, textDecoration: "none", color: "inherit" }}>
+              {inner}
+            </a>
+          ) : (
+            <div key={p._id} style={{ width: 96 }}>{inner}</div>
           );
         })}
       </div>
