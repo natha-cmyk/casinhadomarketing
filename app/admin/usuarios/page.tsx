@@ -6,6 +6,9 @@ import { adminUsers, adminUserActivity } from "@/lib/admin-data";
 
 export const dynamic = "force-dynamic";
 
+// ativo = visto nos últimos 7 dias (helper de módulo p/ não chamar Date.now() no render)
+const isRecent = (d: Date | null | undefined, dias = 7) => !!d && Date.now() - d.getTime() < dias * 864e5;
+
 const rel = (d: Date | null | undefined) => {
   if (!d) return "nunca";
   const diff = Date.now() - d.getTime();
@@ -30,7 +33,7 @@ export default async function AdminUsers() {
         {users.map((u) => {
           const owner = u.memberships.some((m) => m.role === "owner");
           const act = activity.get(u.email.toLowerCase());
-          const ativo = u.lastSeenAt && Date.now() - u.lastSeenAt.getTime() < 7 * 864e5;
+          const ativo = isRecent(u.lastSeenAt);
           return (
             <details key={u.id} className="card" style={{ padding: 0 }}>
               <summary

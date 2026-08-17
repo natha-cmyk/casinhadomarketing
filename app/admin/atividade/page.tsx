@@ -16,6 +16,9 @@ const LABEL: Record<string, string> = {
   "crm.connected": "Conectou CRM",
 };
 
+// ativo = visto nos últimos 7 dias (helper de módulo p/ não chamar Date.now() no render)
+const isRecent = (d: Date | null | undefined, dias = 7) => !!d && Date.now() - d.getTime() < dias * 864e5;
+
 const rel = (d: Date | null | undefined) => {
   if (!d) return "nunca";
   const min = Math.floor((Date.now() - d.getTime()) / 60000);
@@ -41,7 +44,7 @@ export default async function AdminAtividade() {
       acoes: activity.get(u.email.toLowerCase())?.count ?? 0,
     }))
     .sort((a, b) => (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0));
-  const ativos7 = freq.filter((f) => f.lastSeen && Date.now() - f.lastSeen.getTime() < 7 * 864e5).length;
+  const ativos7 = freq.filter((f) => isRecent(f.lastSeen)).length;
 
   return (
     <>
@@ -62,7 +65,7 @@ export default async function AdminAtividade() {
           </thead>
           <tbody>
             {freq.map((f) => {
-              const ativo = f.lastSeen && Date.now() - f.lastSeen.getTime() < 7 * 864e5;
+              const ativo = isRecent(f.lastSeen);
               return (
                 <tr key={f.email} style={{ borderBottom: "1px solid var(--hairline)" }}>
                   <td style={{ ...TD, fontWeight: 600 }}>
