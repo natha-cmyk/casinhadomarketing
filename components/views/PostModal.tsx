@@ -25,12 +25,24 @@ type ZAccount = {
   adsStatus?: string;
 };
 
-// Redes REALMENTE conectadas (social/conversas) derivadas das contas Zernio (twitter→x).
+// id da rede (Casinha) de uma conta Zernio (twitter→x).
+const redeIdOf = (a: ZAccount) => PLAT_REV[a.platform] || a.platform;
+
+// Contas SOCIAIS realmente conectadas = enabled === true e a rede não é "ads".
+function contasSociais(accounts: ZAccount[]): ZAccount[] {
+  return accounts.filter((a) => {
+    if (a.enabled !== true) return false;
+    const rede = REDES.find((r) => r.id === redeIdOf(a));
+    return !!rede && rede.grupo !== "ads";
+  });
+}
+
+// Redes REALMENTE conectadas (social/conversas) — só as com conta habilitada (twitter→x).
 function redesConectadas(accounts: ZAccount[]): (typeof REDES)[number][] {
-  const ids = Array.from(new Set(accounts.map((a) => PLAT_REV[a.platform] || a.platform)));
+  const ids = Array.from(new Set(contasSociais(accounts).map(redeIdOf)));
   return ids
     .map((id) => REDES.find((r) => r.id === id))
-    .filter((r): r is (typeof REDES)[number] => !!r && r.grupo !== "ads");
+    .filter((r): r is (typeof REDES)[number] => !!r);
 }
 
 // Canais conectados = redes conectadas + canais manuais de conteúdo. Cada um com sua cor.
@@ -40,14 +52,12 @@ function canaisConectados(accounts: ZAccount[]): { nome: string; cor: string }[]
   return [...redes, ...manuais];
 }
 
-// Perfis conectados = um por conta conectada (displayName/username). Preparado p/ multi-conta.
+// Perfis conectados = um por conta social habilitada (displayName/username). Multi-conta.
 function perfisConectados(accounts: ZAccount[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const a of accounts) {
-    const id = PLAT_REV[a.platform] || a.platform;
-    const rede = REDES.find((r) => r.id === id);
-    if (rede && rede.grupo === "ads") continue;
+  for (const a of contasSociais(accounts)) {
+    const rede = REDES.find((r) => r.id === redeIdOf(a));
     const nome = (a.displayName || a.username || rede?.label || a.platform || "").trim();
     if (!nome || seen.has(nome)) continue;
     seen.add(nome);
