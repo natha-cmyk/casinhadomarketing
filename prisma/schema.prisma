@@ -43,6 +43,24 @@ model Workspace {
   historico       HistoricalMetric[]
   llmConfig       LlmConfig?
   events          Event[]
+  profiles        WorkspaceProfile[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// Profiles da integração por workspace. A integração limita 1 conta por rede por
+// PROFILE — então multi-conta (2+ Instagrams) exige VÁRIOS profiles no mesmo workspace.
+// zernioProfileId do Workspace = profile primário; os extras ficam aqui. As leituras
+// (listar contas) agregam todos; conectar uma 2ª conta da mesma rede cria um novo profile.
+// ─────────────────────────────────────────────────────────────
+model WorkspaceProfile {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  zernioProfileId String    @unique
+  label           String    @default("")
+  createdAt       DateTime  @default(now())
+
+  @@index([workspaceId])
 }
 
 // ─────────────────────────────────────────────────────────────

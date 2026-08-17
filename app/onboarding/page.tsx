@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { getActiveWorkspace, getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { listAccounts } from "@/lib/zernio";
+import { listWorkspaceAccounts } from "@/lib/profiles";
 import { OnboardingForm } from "@/components/onboarding/OnboardingForm";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +24,8 @@ export default async function OnboardingPage() {
   // redes detectadas (@) — best-effort, não trava o onboarding
   let redes: string[] = [];
   if (ws.zernioProfileId) {
-    const r = await withTimeout(listAccounts(ws.zernioProfileId), 3500);
-    redes = (r?.accounts || [])
+    const r = await withTimeout(listWorkspaceAccounts(ws), 3500); // agrega profiles (multi-conta)
+    redes = (r || [])
       .filter((a) => a.enabled !== false)
       .map((a) => `${a.username ? "@" + a.username : a.displayName || a.platform} · ${a.platform}`);
   }

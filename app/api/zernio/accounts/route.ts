@@ -1,15 +1,15 @@
 // GET /api/zernio/accounts — contas conectadas do profile do workspace ativo.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
-import { listAccounts } from "@/lib/zernio";
+import { listWorkspaceAccounts } from "@/lib/profiles";
 
 export async function GET() {
   try {
     const ws = await getActiveWorkspace();
     if (!ws) return NextResponse.json({ ok: false, error: "unauth" }, { status: 401 });
-    if (!ws.zernioProfileId) return NextResponse.json({ ok: true, accounts: [] });
-    const data = await listAccounts(ws.zernioProfileId);
-    return NextResponse.json({ ok: true, accounts: data.accounts });
+    // agrega contas de TODOS os profiles do workspace (multi-conta)
+    const accounts = await listWorkspaceAccounts(ws);
+    return NextResponse.json({ ok: true, accounts });
   } catch (e) {
     return NextResponse.json({ ok: false, error: String(e), accounts: [] }, { status: 502 });
   }

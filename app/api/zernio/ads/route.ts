@@ -3,7 +3,8 @@
 // e puxa insights (total + por campanha). Consolidação/geral é feita no cliente.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
-import { listAccounts, listAdAccounts, adsInsights, type AdInsightRow } from "@/lib/zernio";
+import { listAdAccounts, adsInsights, type AdInsightRow } from "@/lib/zernio";
+import { listWorkspaceAccounts } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
     const since = q.get("since") ?? undefined;
     const until = q.get("until") ?? undefined;
 
-    const { accounts } = await listAccounts(ws.zernioProfileId);
+    const accounts = await listWorkspaceAccounts(ws); // agrega profiles (multi-conta)
     const adConnected = accounts.filter(
       (a) => ADS_PLATFORMS.has(a.platform) && (a.adsStatus === "connected" || a.adsStatus === "active")
     );

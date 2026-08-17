@@ -1,9 +1,9 @@
 // GET /api/zernio/connect?platform=instagram
 // Retorna a authUrl do OAuth hospedado da Zernio para o profile do workspace.
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getActiveWorkspace } from "@/lib/auth";
-import { connectUrl, connectAdsUrl, createProfile } from "@/lib/zernio";
+import { connectUrl, connectAdsUrl } from "@/lib/zernio";
+import { ensurePrimaryProfile, targetProfileForConnect } from "@/lib/profiles";
 
 export async function GET(req: Request) {
   try {
@@ -15,13 +15,9 @@ export async function GET(req: Request) {
     const ws = await getActiveWorkspace();
     if (!ws) return NextResponse.json({ error: "unauth" }, { status: 401 });
 
-    // garante um profile Zernio para o workspace (cria sob demanda)
-    let profileId = ws.zernioProfileId;
-    if (!profileId) {
-      const p = await createProfile(`${ws.nome} · ${ws.id.slice(0, 6)}`);
-      profileId = p.profile._id;
-      await prisma.workspace.update({ where: { id: ws.id }, data: { zernioProfileId: profileId } });
-    }
+    // MULTI-PROFILE: pra social, escolhe um profile livre pra essa rede (ou cria um novo
+    // → 2ª conta da mesma rede vira multi-conta em vez de substituir). Ads fica no primário.
+    const profileId = isAds ? await ensurePrimaryProfile(ws) : await targetProfileForConnect(ws, platform);
 
     // volta pro nosso app depois do OAuth (cliente nunca vê o dashboard da Zernio)
     const origin = req.headers.get("origin") || url.origin;

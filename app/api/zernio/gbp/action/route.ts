@@ -7,7 +7,8 @@
 // Se accountId não vier, resolve a conta googlebusiness pelo profile do workspace.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
-import { listAccounts, gbpSetLocation, gbpReplyReview } from "@/lib/zernio";
+import { gbpSetLocation, gbpReplyReview } from "@/lib/zernio";
+import { listWorkspaceAccounts } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
     let accountId = body.accountId;
     if (!accountId) {
       if (!ws.zernioProfileId) return NextResponse.json({ error: "sem profile" }, { status: 400 });
-      const { accounts } = await listAccounts(ws.zernioProfileId).catch(() => ({ accounts: [] }));
+      const accounts = await listWorkspaceAccounts(ws).catch(() => []); // agrega profiles (multi-conta)
       accountId = accounts.find((a) => a.platform === "googlebusiness")?._id;
       if (!accountId) return NextResponse.json({ error: "conta googlebusiness não encontrada" }, { status: 404 });
     }

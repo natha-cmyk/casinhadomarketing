@@ -10,8 +10,9 @@
 //   posts (produção)          → postAnalytics.overview.publishedPosts (só redes com posting)
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
+import { listWorkspaceAccounts } from "@/lib/profiles";
 import {
-  listAccounts, accountInsightsFull, youtubeChannelInsights, linkedinAggregate,
+  accountInsightsFull, youtubeChannelInsights, linkedinAggregate,
   gbpPerformance, postAnalytics,
   type ZernioAccount,
 } from "@/lib/zernio";
@@ -110,7 +111,7 @@ export async function GET(req: Request) {
     const since = q.get("since") || iso(new Date(now.getTime() - 30 * 864e5));
     const range = { since, until };
 
-    const { accounts } = await listAccounts(ws.zernioProfileId);
+    const accounts = await listWorkspaceAccounts(ws); // agrega todos os profiles (multi-conta)
     // conta conectada = social (posting habilitado) OU com analytics própria.
     // ads-only (mídia paga) fica fora do overview de canais — vive na visão de Ads.
     const connected = accounts.filter(

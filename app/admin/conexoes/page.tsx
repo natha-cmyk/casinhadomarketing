@@ -2,7 +2,8 @@
 // best-effort com timeout) e CRM. Só o Admin acessa; leitura.
 import { PageHead } from "@/components/ui";
 import { adminOverview } from "@/lib/admin-data";
-import { listAccounts, type ZernioAccount } from "@/lib/zernio";
+import { type ZernioAccount } from "@/lib/zernio";
+import { listWorkspaceAccounts } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +28,8 @@ export default async function AdminConexoes() {
       let accounts: ZernioAccount[] = [];
       let erro = false;
       if (w.zernioProfileId) {
-        const r = await withTimeout(listAccounts(w.zernioProfileId), 4500);
-        if (r) accounts = r.accounts || [];
+        const r = await withTimeout(listWorkspaceAccounts(w), 4500); // agrega profiles (multi-conta)
+        if (r) accounts = r;
         else erro = true;
       }
       const social = accounts.filter((a) => !ADS_ONLY.has(String(a.platform)));

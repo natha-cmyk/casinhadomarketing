@@ -6,7 +6,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { PostStatus } from "@prisma/client";
 import { getActiveWorkspace } from "@/lib/auth";
-import { listAccounts, publishPost, type MediaItemInput } from "@/lib/zernio";
+import { publishPost, type MediaItemInput } from "@/lib/zernio";
+import { listWorkspaceAccounts } from "@/lib/profiles";
 import { logEvent } from "@/lib/events";
 
 // id da rede (Casinha) → plataforma Zernio. Só "x" diverge (→ twitter); o resto é 1:1.
@@ -52,8 +53,8 @@ export async function POST(req: Request) {
         { status: 400 }
       );
 
-    // Contas conectadas do profile → mapa por plataforma (só as habilitadas p/ publicação).
-    const { accounts } = await listAccounts(ws.zernioProfileId);
+    // Contas conectadas de TODOS os profiles do workspace (multi-conta) → só as habilitadas.
+    const accounts = await listWorkspaceAccounts(ws);
     const platforms: { platform: string; accountId: string }[] = [];
     const canaisIgnorados: string[] = [];
     for (const redeId of post.contas || []) {
