@@ -157,12 +157,15 @@ export async function GET(req: Request) {
             ? Promise.resolve<AnalyticsResponse | null>(null)
             : accountInsightsFull(platform, accountId, range).catch(() => null);
 
-    const [insights, followers, keySeries, daily, postsResp, linkTaps, stories, bestSlots, demo] = await Promise.all([
+    const [insights, followers, keySeries, daily, postsResp, recentResp, linkTaps, stories, bestSlots, demo] = await Promise.all([
       insightsP,
       hasPosting ? followerHistory(platform, accountId, range).catch(() => null) : Promise.resolve(null),
       hasPosting ? keyMetricSeries(platform, accountId, range).catch(() => null) : Promise.resolve(null),
       hasPosting ? dailyMetrics(accountId, platform, { fromDate: since, toDate: until }).catch(() => null) : Promise.resolve(null),
       hasContent ? postAnalytics({ accountId, platform, fromDate: since, toDate: until, sortBy: "engagement", limit: 100 }).catch(() => null) : Promise.resolve(null),
+      // "Últimas publicações": SEM filtro de período — as mais recentes SEMPRE (independe do período
+      // selecionado no painel; senão TikTok/redes sem post no mês ficam vazias).
+      hasContent ? postAnalytics({ accountId, platform, sortBy: "publishedAt", order: "desc", limit: 24 }).catch(() => null) : Promise.resolve(null),
       isIG ? profileLinkTaps(accountId, range).catch(() => null) : Promise.resolve(null),
       isIG ? listStories(accountId).then((s) => s.length).catch(() => null) : Promise.resolve(null),
       hasPosting ? bestTime(accountId, platform, { fromDate: since, toDate: until }).catch(() => null) : Promise.resolve(null),
@@ -172,8 +175,10 @@ export async function GET(req: Request) {
     const posts = postsResp?.posts || [];
     const top = postsResp ? { overview: postsResp.overview, posts: posts.slice(0, 8) } : null;
     const content = postsResp ? contentSummary(posts) : null;
-    // "Últimas publicações": os ~8 posts mais RECENTES por data (distinto de `top`, que é por engajamento)
-    const recent = postsResp ? recentPosts(posts, 8) : null;
+    // "Últimas publicações": os 9 posts mais RECENTES por data (busca dedicada, sem período).
+    // Fallback pros posts do período se a busca dedicada falhar.
+    const recentSrc = recentResp?.posts?.length ? recentResp.posts : posts;
+    const recent = recentSrc.length ? recentPosts(recentSrc, 9) : null;
 
     return NextResponse.json({ insights, followers, keySeries, daily, top, content, recent, linkTaps, stories, bestTime: bestSlots, demographics: demo });
   } catch (e) {

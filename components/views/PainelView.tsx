@@ -9,7 +9,7 @@ import { useStore } from "@/lib/store";
 import { REDES } from "@/lib/seed-data";
 import { PageHead, KpiCard } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
-import { ChannelSummaryCard } from "@/components/ChannelSummaryCard";
+import { ChannelSummaryCard, ChannelBrandIcon } from "@/components/ChannelSummaryCard";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, scopeLabelText, MONTHS, MONTHS_FULL, type Period } from "@/lib/scope";
 
@@ -345,11 +345,8 @@ export function PainelView() {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ width: 12, height: 12, borderRadius: 3, background: redeCor(g.platform), flex: "0 0 auto" }} />
+                    <ChannelBrandIcon platform={g.platform} cor={redeCor(g.platform)} size={30} />
                     <b style={{ fontSize: 15 }}>{redeLabel(g.platform)}</b>
-                    <span style={{ fontSize: 12, color: "var(--label-3)", fontWeight: 600 }}>
-                      {g.accts.length} contas conectadas · {periodoLabel}
-                    </span>
                   </div>
                   <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12 }}>
                     {g.accts.map((a) => (
@@ -363,6 +360,7 @@ export function PainelView() {
                         posts={a.posts}
                         cor={redeCor(a.platform)}
                         periodLabel={periodoLabel}
+                        hideBrand
                       />
                     ))}
                   </div>

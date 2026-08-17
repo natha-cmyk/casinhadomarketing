@@ -31,6 +31,24 @@ function panelHref(platform: string) {
   return id === "instagram" ? "/instagram" : `/canal/${id}`;
 }
 
+// Ícone de marca do canal (caixinha colorida). Exportado p/ o cabeçalho do grupo
+// multi-conta reusar o MESMO ícone — sem repetir dentro de cada card.
+export function ChannelBrandIcon({ platform, cor, size = 34 }: { platform: string; cor: string; size?: number }) {
+  const icon = ICON_OF[redeId(platform)];
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size, height: size, flex: `0 0 ${size}px`, borderRadius: size >= 30 ? 10 : 8,
+        display: "grid", placeItems: "center",
+        background: `color-mix(in srgb, ${cor} 12%, #fff)`, color: cor,
+      }}
+    >
+      {icon ? <Ic name={icon} /> : <span style={{ width: 9, height: 9, borderRadius: "50%", background: cor }} />}
+    </span>
+  );
+}
+
 interface Ind { label: string; value: string; hint?: string }
 
 const pctFmt = (frac: number) =>
@@ -132,6 +150,7 @@ export function ChannelSummaryCard({
   posts,
   cor,
   periodLabel,
+  hideBrand = false,
 }: {
   platform: string;
   displayName?: string;
@@ -141,6 +160,7 @@ export function ChannelSummaryCard({
   posts?: number | null;
   cor: string;
   periodLabel?: string;
+  hideBrand?: boolean; // dentro do grupo multi-conta: cabeçalho do grupo já mostra rede+ícone
 }) {
   const id = redeId(platform);
   const label = redeLabel(id);
@@ -166,49 +186,54 @@ export function ChannelSummaryCard({
         padding: "18px 20px",
       }}
     >
-      {/* cabeçalho: ícone + selo da rede + identidade da conta + abrir painel */}
+      {/* cabeçalho: ícone + selo da rede + identidade da conta + abrir painel.
+          hideBrand (grupo multi-conta): esconde ícone + selo — o cabeçalho do grupo já os mostra. */}
       <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-        <span
-          aria-hidden
-          style={{
-            width: 34,
-            height: 34,
-            flex: "0 0 34px",
-            borderRadius: 10,
-            display: "grid",
-            placeItems: "center",
-            background: `color-mix(in srgb, ${cor} 12%, #fff)`,
-            color: cor,
-          }}
-        >
-          {icon ? <Ic name={icon} /> : <span style={{ width: 9, height: 9, borderRadius: "50%", background: cor }} />}
-        </span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          {/* SELO com o nome da rede — identificação inequívoca do canal */}
+        {!hideBrand && (
           <span
+            aria-hidden
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              height: 20,
-              padding: "0 8px",
-              borderRadius: 999,
-              background: `color-mix(in srgb, ${cor} 13%, #fff)`,
+              width: 34,
+              height: 34,
+              flex: "0 0 34px",
+              borderRadius: 10,
+              display: "grid",
+              placeItems: "center",
+              background: `color-mix(in srgb, ${cor} 12%, #fff)`,
               color: cor,
-              fontSize: 11.5,
-              fontWeight: 700,
-              letterSpacing: ".1px",
-              lineHeight: 1,
-              whiteSpace: "nowrap",
-              maxWidth: "100%",
             }}
           >
-            <span aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: cor, flex: "0 0 6px" }} />
-            {label}
+            {icon ? <Ic name={icon} /> : <span style={{ width: 9, height: 9, borderRadius: "50%", background: cor }} />}
           </span>
+        )}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {/* SELO com o nome da rede — identificação inequívoca do canal (oculto no grupo) */}
+          {!hideBrand && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                height: 20,
+                padding: "0 8px",
+                borderRadius: 999,
+                background: `color-mix(in srgb, ${cor} 13%, #fff)`,
+                color: cor,
+                fontSize: 11.5,
+                fontWeight: 700,
+                letterSpacing: ".1px",
+                lineHeight: 1,
+                whiteSpace: "nowrap",
+                maxWidth: "100%",
+              }}
+            >
+              <span aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: cor, flex: "0 0 6px" }} />
+              {label}
+            </span>
+          )}
           <div
             title={identity}
-            style={{ fontSize: 13.5, fontWeight: 600, letterSpacing: "-.1px", color: "var(--label-2)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+            style={{ fontSize: hideBrand ? 15 : 13.5, fontWeight: 700, letterSpacing: "-.1px", color: hideBrand ? "var(--label)" : "var(--label-2)", marginTop: hideBrand ? 0 : 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
           >
             {identity}
           </div>

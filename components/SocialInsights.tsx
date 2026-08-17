@@ -738,10 +738,12 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div className="sub">grade recente do perfil · por data</div>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(132px,1fr))", gap: 14, marginTop: 6 }}>
+      {/* grade 3-em-3 (2 no tablet, 1 no mobile) — cada card mostra mídia, legenda e desempenho */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 16, marginTop: 6 }} className="si-recent-grid">
         {recent.map((p) => {
           const dt = p.publishedAt ? p.publishedAt.slice(0, 10).split("-").reverse().join("/") : "";
           const badge = recentFmtLabel(p);
+          const legenda = (p.content || "").trim();
           // linha de desempenho — só as métricas que a API devolveu
           const met: { ic: string; v: number; t: string }[] = [];
           if (p.likes != null) met.push({ ic: "❤", v: p.likes, t: "curtidas" });
@@ -755,19 +757,27 @@ export function SocialInsights({ rede }: { rede: string }) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={p.thumbnail} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 ) : (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", fontSize: 26, opacity: 0.4 }}>🖼️</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "100%", fontSize: 34, opacity: 0.4 }}>🖼️</div>
                 )}
-                <span style={{ position: "absolute", top: 6, left: 6, padding: "2px 7px", borderRadius: 999, background: "rgba(0,0,0,0.66)", color: "#fff", fontSize: 10, fontWeight: 700, lineHeight: 1.4 }}>{badge}</span>
+                <span style={{ position: "absolute", top: 8, left: 8, padding: "3px 9px", borderRadius: 999, background: "rgba(0,0,0,0.66)", color: "#fff", fontSize: 11, fontWeight: 700, lineHeight: 1.4 }}>{badge}</span>
                 {p.isCollab && (
-                  <span aria-label="colaborativo" style={{ position: "absolute", top: 6, right: 6, padding: "2px 7px", borderRadius: 999, background: "var(--cyan)", color: "#fff", fontSize: 10, fontWeight: 700, lineHeight: 1.4 }}>Colab</span>
+                  <span aria-label="colaborativo" style={{ position: "absolute", top: 8, right: 8, padding: "3px 9px", borderRadius: 999, background: "var(--cyan)", color: "#fff", fontSize: 11, fontWeight: 700, lineHeight: 1.4 }}>Colab</span>
                 )}
               </div>
-              <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 7 }} className="tnum">{dt}</div>
+              {/* legenda — 2 linhas de contexto do conteúdo */}
+              {legenda ? (
+                <div style={{ fontSize: 12.5, color: "var(--label)", marginTop: 9, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as CSSProperties}>
+                  {legenda}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: "var(--label-3)", marginTop: 9, fontStyle: "italic" }}>sem legenda</div>
+              )}
+              <div style={{ fontSize: 11.5, color: "var(--label-3)", marginTop: 6 }} className="tnum">{dt}</div>
               {met.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4, fontSize: 11.5, color: "var(--label-2)" }} className="tnum">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 5, fontSize: 12.5, color: "var(--label-2)" }} className="tnum">
                   {met.map((m, i) => (
                     <span key={i} title={m.t} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                      <span aria-hidden="true" style={{ fontSize: 11 }}>{m.ic}</span>{fmt(m.v)}
+                      <span aria-hidden="true" style={{ fontSize: 12 }}>{m.ic}</span>{fmt(m.v)}
                     </span>
                   ))}
                 </div>
