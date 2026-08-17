@@ -36,6 +36,7 @@ interface LeadRow {
   category: string | null;
   product: string | null;
   qualification: string | null;
+  stage: string | null;
   status: string | null;
   value: number;
   lossReason: string | null;
@@ -51,10 +52,12 @@ interface LeadsData {
   won: number;
   lost: number;
   open: number;
+  convRate: number;
   byChannel: Row[];
   byCategory: Row[];
   byProduct: Row[];
   byQualification: Row[];
+  byStage: Row[];
   byStatus: Row[];
   lossReasons: Row[];
   leads: LeadRow[];
@@ -83,8 +86,9 @@ const FIELD_KEYS: { k: string; lbl: string; hint: string }[] = [
   { k: "channel", lbl: "Canal / origem", hint: "de onde veio o lead" },
   { k: "category", lbl: "Categoria de produto", hint: "família / linha" },
   { k: "product", lbl: "Tipo de produto", hint: "produto específico" },
-  { k: "qualification", lbl: "Qualificação / tipo", hint: "classificação do lead" },
-  { k: "status", lbl: "Status / etapa", hint: "andamento no funil" },
+  { k: "qualification", lbl: "Qualificação", hint: "estrelas / lead score" },
+  { k: "stage", lbl: "Funil / etapa", hint: "estágio no pipeline" },
+  { k: "status", lbl: "Status", hint: "situação do lead" },
   { k: "value", lbl: "Valor (R$)", hint: "ticket / receita" },
   { k: "lossReason", lbl: "Motivo de perda", hint: "quando perdido" },
 ];
@@ -519,8 +523,8 @@ function Dashboard({ data }: { data: LeadsData }) {
     );
   }
 
-  const stMax = Math.max(1, ...data.byStatus.map((r) => r.count));
   const cycle = (i: number) => CHANNEL_COLORS[i % CHANNEL_COLORS.length];
+  const conv = `${(data.convRate * 100).toFixed(1)}%`;
 
   return (
     <>
@@ -535,6 +539,24 @@ function Dashboard({ data }: { data: LeadsData }) {
         />
       </div>
 
+      {/* Saúde do CRM — indicadores consolidados do que a API devolveu (nada inventado) */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-head">
+          <div className="t">Saúde do CRM</div>
+          <span className="badge">no período</span>
+        </div>
+        <div className="mini">
+          <MiniStat l="Total de leads" n={fmt(data.total)} />
+          <MiniStat l="Taxa de conversão" n={conv} />
+          <MiniStat l="Em aberto" n={fmt(data.open)} />
+          <MiniStat l="Ganhos" n={fmt(data.won)} />
+          <MiniStat l="Perdidos" n={fmt(data.lost)} />
+          <MiniStat l="Valor total" n={money(data.totalValue)} />
+          <MiniStat l="Valor ganho" n={money(data.wonValue)} />
+          <MiniStat l="Em pipeline" n={money(data.pipelineValue)} />
+        </div>
+      </div>
+
       <div className="grid two-col" style={{ marginBottom: 16 }}>
         <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." />
         <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." />
@@ -545,24 +567,9 @@ function Dashboard({ data }: { data: LeadsData }) {
         <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." />
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-head"><div className="t">Funil por status / etapa</div></div>
-        {data.byStatus.map((r) => (
-          <BarRow
-            key={r.key}
-            k={r.key}
-            v={r.count}
-            max={stMax}
-            color="var(--cyan)"
-            formatted={r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}
-          />
-        ))}
-        <div className="mini" style={{ marginTop: 12 }}>
-          <MiniStat l="Valor total" n={money(data.totalValue)} />
-          <MiniStat l="Em pipeline" n={money(data.pipelineValue)} />
-          <MiniStat l="Ganhos" n={fmt(data.won)} />
-          <MiniStat l="Perdidos" n={fmt(data.lost)} />
-        </div>
+      <div className="grid two-col" style={{ marginBottom: 16 }}>
+        <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." />
+        <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." />
       </div>
 
       {data.lossReasons.length > 0 && (

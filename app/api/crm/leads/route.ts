@@ -6,10 +6,10 @@ import { getActiveWorkspaceId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// classifica o estágio do lead a partir do texto livre de status (ClickUp/webhook)
+// classifica o desfecho do lead a partir do texto livre de status/funil (ClickUp/webhook)
 type Outcome = "won" | "lost" | "open";
-function outcomeOf(status?: string | null, lossReason?: string | null): Outcome {
-  const s = (status || "").toLowerCase();
+function outcomeOf(status?: string | null, stage?: string | null, lossReason?: string | null): Outcome {
+  const s = `${status || ""} ${stage || ""}`.toLowerCase();
   if (/(ganho|ganhou|won|fechad|closed won|convertid|cliente)/.test(s)) return "won";
   if (/(perd|lost|lose|descartad|desqualific|cancelad)/.test(s) || (lossReason && lossReason.trim())) return "lost";
   return "open";
@@ -38,6 +38,7 @@ interface Parsed {
   category?: string | null;
   product?: string | null;
   qualification?: string | null;
+  stage?: string | null;
   status?: string | null;
   lossReason?: string | null;
 }
@@ -70,6 +71,7 @@ export async function GET(req: Request) {
     const byCategory = new Map<string, Bucket>();
     const byProduct = new Map<string, Bucket>();
     const byQualification = new Map<string, Bucket>();
+    const byStage = new Map<string, Bucket>();
     const byStatus = new Map<string, Bucket>();
     const lossReasons = new Map<string, Bucket>();
 
@@ -88,15 +90,18 @@ export async function GET(req: Request) {
       const category = p.category ?? null;
       const product = l.product ?? p.product ?? null;
       const qualification = p.qualification ?? null;
+      const stage = l.stage ?? p.stage ?? null;
+      const status = l.status ?? p.status ?? null;
 
       totalValue += v;
       tally(byChannel, channel, v);
       tally(byCategory, category, v);
       tally(byProduct, product, v);
       tally(byQualification, qualification, v);
-      tally(byStatus, l.status ?? l.stage, v);
+      tally(byStage, stage, v);
+      tally(byStatus, status, v);
 
-      const outcome = outcomeOf(l.status ?? l.stage, l.lossReason);
+      const outcome = outcomeOf(status, stage, l.lossReason);
       if (outcome === "won") {
         won += 1;
         wonValue += v;
@@ -115,7 +120,8 @@ export async function GET(req: Request) {
         category,
         product,
         qualification,
-        status: l.status ?? l.stage,
+        stage,
+        status: status ?? stage,
         value: v,
         lossReason: l.lossReason,
         outcome,
@@ -132,10 +138,12 @@ export async function GET(req: Request) {
       won,
       lost,
       open,
+      convRate: leads.length ? won / leads.length : 0, // ganhos / total (taxa de conversão)
       byChannel: toRows(byChannel),
       byCategory: toRows(byCategory),
       byProduct: toRows(byProduct),
       byQualification: toRows(byQualification),
+      byStage: toRows(byStage),
       byStatus: toRows(byStatus),
       lossReasons: toRows(lossReasons),
       leads: rows.slice(0, 200),

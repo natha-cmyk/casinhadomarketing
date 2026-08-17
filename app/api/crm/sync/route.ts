@@ -34,17 +34,19 @@ interface ClickUpTask {
 // dimensões do lead que sabemos interpretar (ordem = prioridade da heurística).
 // category vem antes de product pra "Categoria de Produto" não ser roubado por "produto";
 // product vem antes de qualification pra "Tipo de Produto" não cair no genérico "tipo".
-type Dim = "channel" | "category" | "product" | "qualification" | "status" | "value" | "lossReason";
-const DIMS: Dim[] = ["channel", "category", "product", "qualification", "status", "value", "lossReason"];
+// stage (funil/etapa) é separado de status: funil = estágio no pipeline; status = situação do lead.
+type Dim = "channel" | "category" | "product" | "qualification" | "stage" | "status" | "value" | "lossReason";
+const DIMS: Dim[] = ["channel", "category", "product", "qualification", "stage", "status", "value", "lossReason"];
 
 // sinônimos (já sem acento/minúsculos) — casados por substring contra o nome normalizado do campo.
 // dentro de cada dimensão, os mais específicos vêm primeiro (ordenados por comprimento no uso).
 const SYNONYMS: Record<Dim, string[]> = {
   channel: ["canal", "origem", "source", "fonte"],
-  category: ["categoria de produto", "categoria", "linha de produto", "segmento de produto", "segmento"],
-  product: ["tipo de produto", "produto", "servico", "serviço"],
-  qualification: ["qualificacao", "qualificação", "classificacao", "classificação", "lead score", "tipo de lead", "tipo"],
-  status: ["status", "etapa", "estagio", "estágio", "fase", "pipeline"],
+  category: ["categoria de produto", "categoria", "linha de produto", "linha", "servico", "serviço", "segmento de produto", "segmento"],
+  product: ["tipo de produto", "produto"],
+  qualification: ["qualificacao", "qualificação", "classificacao", "classificação", "lead score", "rating", "estrelas", "estrela"],
+  stage: ["funil", "etapa", "estagio", "estágio", "fase", "pipeline"],
+  status: ["status", "situacao", "situação"],
   value: ["valor", "value", "ticket medio", "ticket", "receita"],
   lossReason: ["motivo de perda", "motivo", "perda", "loss reason", "loss"],
 };
@@ -69,6 +71,12 @@ function readCustomField(cf: ClickUpCustomField): string | null {
     return (opt?.name ?? opt?.label ?? String(id)) as string;
   };
 
+  // rating por estrelas (ClickUp type "emoji"/"rating"): value é a quantidade selecionada (1–5)
+  if (type === "emoji" || type === "rating") {
+    const n = Number(v);
+    if (!isNaN(n) && n > 0) return `${n} ${n === 1 ? "estrela" : "estrelas"}`;
+    return null;
+  }
   if (type === "drop_down") return labelOf(v) || null;
   if (type === "labels") {
     const arr = Array.isArray(v) ? v : [v];
@@ -193,25 +201,38 @@ export async function POST() {
       return NextResponse.json({ ok: false, error: "Informe o token e o List ID do ClickUp." }, { status: 400 });
     }
 
-    const url = `https://api.clickup.com/api/v2/list/${encodeURIComponent(cfg.clickupListId)}/task?include_closed=true`;
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: { Authorization: cfg.clickupToken }, cache: "no-store" });
-    } catch {
-      return NextResponse.json({ ok: false, error: "Não foi possível falar com o ClickUp." }, { status: 502 });
+    // ClickUp devolve ~100 tasks por página; sem paginar só vinham as mais recentes
+    // (bug: leads de julho/anos anteriores sumiam). Iteramos page=0,1,2… até last_page
+    // (limite defensivo de 50 páginas) e incluímos tasks fechadas/arquivadas + subtasks —
+    // leads "ganho/perdido" costumam estar fechados. date_created define a data do lead.
+    const listId = encodeURIComponent(cfg.clickupListId);
+    const tasks: ClickUpTask[] = [];
+    const MAX_PAGES = 50;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const url =
+        `https://api.clickup.com/api/v2/list/${listId}/task` +
+        `?include_closed=true&subtasks=true&page=${page}`;
+      let res: Response;
+      try {
+        res = await fetch(url, { headers: { Authorization: cfg.clickupToken }, cache: "no-store" });
+      } catch {
+        return NextResponse.json({ ok: false, error: "Não foi possível falar com o ClickUp." }, { status: 502 });
+      }
+      if (res.status === 401) {
+        return NextResponse.json({ ok: false, error: "Token do ClickUp inválido ou sem acesso." }, { status: 400 });
+      }
+      if (!res.ok) {
+        return NextResponse.json(
+          { ok: false, error: `ClickUp respondeu ${res.status}. Verifique o List ID.` },
+          { status: 400 }
+        );
+      }
+      const body = (await res.json()) as { tasks?: ClickUpTask[]; last_page?: boolean };
+      const pageTasks = Array.isArray(body?.tasks) ? body.tasks : [];
+      tasks.push(...pageTasks);
+      // encerra quando o ClickUp sinaliza last_page ou devolve uma página vazia
+      if (body?.last_page === true || pageTasks.length === 0) break;
     }
-    if (res.status === 401) {
-      return NextResponse.json({ ok: false, error: "Token do ClickUp inválido ou sem acesso." }, { status: 400 });
-    }
-    if (!res.ok) {
-      return NextResponse.json(
-        { ok: false, error: `ClickUp respondeu ${res.status}. Verifique o List ID.` },
-        { status: 400 }
-      );
-    }
-
-    const body = (await res.json()) as { tasks?: ClickUpTask[] };
-    const tasks = Array.isArray(body?.tasks) ? body.tasks : [];
 
     const fm = (cfg.fieldMap ?? {}) as Record<string, string>;
 
@@ -224,14 +245,15 @@ export async function POST() {
       const category = dims.category;
       const product = dims.product ?? category; // coluna product nunca vazia se houver categoria
       const qualification = dims.qualification;
-      const status = dims.status ?? nativeStatus; // fallback: status nativo da task
+      const stage = dims.stage ?? nativeStatus; // funil/etapa: campo custom, senão status nativo da task
+      const status = dims.status ?? nativeStatus; // status: campo custom, senão status nativo da task
       const lossReason = dims.lossReason;
       const value = parseMoney(dims.value) ?? 0; // nunca inventa: sem valor → 0
 
       const createdAt = t.date_created ? new Date(Number(t.date_created)) : new Date();
 
       // guardamos as dimensões resolvidas em raw._parsed (schema não tem colunas p/ category/qualification)
-      const parsed = { channel, category, product, qualification, status, value: dims.value != null ? value : null, lossReason };
+      const parsed = { channel, category, product, qualification, stage, status, value: dims.value != null ? value : null, lossReason };
 
       const data = {
         source: "clickup",
@@ -239,7 +261,7 @@ export async function POST() {
         channel,
         product,
         status,
-        stage: nativeStatus,
+        stage,
         value,
         lossReason,
         createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
