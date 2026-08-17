@@ -13,7 +13,7 @@ import { getActiveWorkspace } from "@/lib/auth";
 import { listWorkspaceAccounts } from "@/lib/profiles";
 import {
   accountInsightsFull, youtubeChannelInsights, linkedinAggregate,
-  gbpPerformance, postAnalytics,
+  gbpPerformance, gbpLocations, postAnalytics,
   type ZernioAccount,
 } from "@/lib/zernio";
 
@@ -48,6 +48,7 @@ interface AccountSummary {
   followersCount: number | null;
   metrics: Record<string, number>;
   posts: number | null; // posts publicados no período (produção de conteúdo)
+  locations?: { id: string; name: string; address?: string }[]; // fichas do GBP (só googlebusiness)
 }
 
 async function summarize(a: ZernioAccount, range: { since: string; until: string }): Promise<AccountSummary> {
@@ -73,8 +74,14 @@ async function summarize(a: ZernioAccount, range: { since: string; until: string
           const r = await linkedinAggregate(a._id, range);
           base.metrics = flatten(r?.analytics);
         } else if (platform === "googlebusiness") {
-          const r = await gbpPerformance(a._id, { fromDate: range.since, toDate: range.until });
+          const [r, locs] = await Promise.all([
+            gbpPerformance(a._id, { fromDate: range.since, toDate: range.until }),
+            gbpLocations(a._id).catch(() => null), // fichas p/ mostrar as N localizações juntas
+          ]);
           base.metrics = flatten(r?.metrics);
+          if (locs?.locations?.length) {
+            base.locations = locs.locations.map((l) => ({ id: l.id, name: l.name, address: l.address }));
+          }
         } else if (IG_LIKE.has(platform)) {
           const r = await accountInsightsFull(platform, a._id, range);
           base.metrics = flatten(r?.metrics);

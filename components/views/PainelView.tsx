@@ -34,6 +34,7 @@ interface AccountSummary {
   followersCount: number | null;
   metrics: Record<string, number>;
   posts?: number | null; // posts publicados no período (produção de conteúdo)
+  locations?: { id: string; name: string; address?: string }[]; // fichas do GBP
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -329,6 +330,7 @@ export function PainelView() {
                   posts={g.accts[0].posts}
                   cor={redeCor(g.platform)}
                   periodLabel={periodoLabel}
+                  locations={g.accts[0].locations}
                 />
               ) : (
                 <div
