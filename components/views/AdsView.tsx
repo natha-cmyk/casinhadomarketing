@@ -66,10 +66,17 @@ function narrativaGeral(g: AdTotals, since: string, until: string): string | nul
   return `No período de ${ddmm(since)} a ${ddmm(until)}, a empresa ${body}.`;
 }
 
-function dateRange(scope: { period: Period; year: number; month: number; quarter: number }) {
-  const { period, year, month, quarter } = scope;
+function dateRange(scope: { period: Period; year: number; month: number; quarter: number; week: number }) {
+  const { period, year, month, quarter, week } = scope;
   let since: Date, until: Date;
-  if (period === "trimestre") {
+  if (period === "semana") {
+    // janela = os 7 dias da semana selecionada no mês (W1=1–7, W2=8–14, W3=15–21, W4=22–fim)
+    const last = daysInMonth(year, month);
+    const startDay = week * 7 + 1;
+    const endDay = Math.min(startDay + 6, last);
+    since = new Date(year, month, startDay);
+    until = new Date(year, month, endDay);
+  } else if (period === "trimestre") {
     since = new Date(year, quarter * 3, 1);
     until = new Date(year, quarter * 3 + 2, daysInMonth(year, quarter * 3 + 2));
   } else if (period === "ano") {
@@ -83,7 +90,7 @@ function dateRange(scope: { period: Period; year: number; month: number; quarter
 }
 
 // meses (y,m) dentro do escopo — pra filtrar os canais manuais
-function monthsInScope(scope: { period: Period; year: number; month: number; quarter: number }): [number, number][] {
+function monthsInScope(scope: { period: Period; year: number; month: number; quarter: number; week: number }): [number, number][] {
   const { period, year, month, quarter } = scope;
   if (period === "ano") return Array.from({ length: 12 }, (_, m) => [year, m] as [number, number]);
   if (period === "trimestre") return [0, 1, 2].map((i) => [year, quarter * 3 + i] as [number, number]);
@@ -102,8 +109,8 @@ export function AdsView() {
   const manualAds = useStore((st) => st.manualAds);
 
   const hasAdsConn = zernioAccounts.some((a) => a.adsStatus === "connected" || a.adsStatus === "active");
-  const range = useMemo(() => dateRange(s), [s.period, s.year, s.month, s.quarter]); // eslint-disable-line react-hooks/exhaustive-deps
-  const scopeMonths = useMemo(() => monthsInScope(s), [s.period, s.year, s.month, s.quarter]); // eslint-disable-line react-hooks/exhaustive-deps
+  const range = useMemo(() => dateRange(s), [s.period, s.year, s.month, s.quarter, s.week]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scopeMonths = useMemo(() => monthsInScope(s), [s.period, s.year, s.month, s.quarter, s.week]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [data, setData] = useState<AdAccountData[] | null>(null);
   const [loading, setLoading] = useState(false);
