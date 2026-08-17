@@ -4,10 +4,50 @@ import { PageHead } from "@/components/ui";
 import { adminOverview } from "@/lib/admin-data";
 import { type ZernioAccount } from "@/lib/zernio";
 import { listWorkspaceAccounts } from "@/lib/profiles";
+import { ICONS } from "@/lib/nav";
 
 export const dynamic = "force-dynamic";
 
 const ADS_ONLY = new Set(["metaads", "googleads", "linkedinads", "tiktokads", "pinterestads", "snapchatads"]);
+
+// plataforma da integração → ícone (lib/nav ICONS) + cor de marca + rótulo.
+const PLAT: Record<string, { ic: string; cor: string; label: string }> = {
+  instagram: { ic: "ig", cor: "#E1306C", label: "Instagram" },
+  facebook: { ic: "facebook", cor: "#1877F2", label: "Facebook" },
+  tiktok: { ic: "tiktok", cor: "#111111", label: "TikTok" },
+  youtube: { ic: "youtube", cor: "#FF0000", label: "YouTube" },
+  linkedin: { ic: "linkedin", cor: "#0A66C2", label: "LinkedIn" },
+  twitter: { ic: "x", cor: "#111111", label: "X" },
+  threads: { ic: "threads", cor: "#111111", label: "Threads" },
+  googlebusiness: { ic: "googlebusiness", cor: "#4285F4", label: "Google Business" },
+  pinterest: { ic: "pinterest", cor: "#E60023", label: "Pinterest" },
+  snapchat: { ic: "snapchat", cor: "#FFCC00", label: "Snapchat" },
+  reddit: { ic: "reddit", cor: "#FF4500", label: "Reddit" },
+  bluesky: { ic: "bluesky", cor: "#0085FF", label: "Bluesky" },
+};
+const platMeta = (p: string) => PLAT[p] || { ic: "", cor: "var(--label-2)", label: p };
+
+// glifo da rede (ícone de marca colorido) — cai num ponto colorido quando não há ícone.
+function PlatIcon({ plat, size = 15 }: { plat: string; size?: number }) {
+  const m = platMeta(plat);
+  const glyph = m.ic ? ICONS[m.ic] : "";
+  if (!glyph) return <span aria-hidden style={{ width: size, height: size, borderRadius: 999, background: m.cor, display: "inline-block", flex: `0 0 ${size}px` }} />;
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke={m.cor}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flex: `0 0 ${size}px` }}
+      dangerouslySetInnerHTML={{ __html: glyph }}
+    />
+  );
+}
 const TH: React.CSSProperties = { padding: "10px 14px", fontWeight: 600, whiteSpace: "nowrap", color: "var(--label-3)" };
 const TD: React.CSSProperties = { padding: "10px 14px", verticalAlign: "top" };
 
@@ -67,9 +107,11 @@ export default async function AdminConexoes() {
           <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Canais mais conectados <span style={{ color: "var(--label-3)", fontWeight: 600 }}>· nº de workspaces</span></div>
           {platRank.length ? platRank.map(([p, n]) => (
             <div key={p} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
-              <span style={{ width: 90, fontSize: 12.5, color: "var(--label)" }}>{p}</span>
+              <span style={{ width: 130, fontSize: 12.5, color: "var(--label)", display: "flex", alignItems: "center", gap: 7 }}>
+                <PlatIcon plat={p} />{platMeta(p).label}
+              </span>
               <span style={{ flex: 1, height: 8, borderRadius: 999, background: "var(--surface)", overflow: "hidden" }}>
-                <span style={{ display: "block", height: "100%", width: `${(n / platMax) * 100}%`, background: "var(--cyan)" }} />
+                <span style={{ display: "block", height: "100%", width: `${(n / platMax) * 100}%`, background: platMeta(p).cor }} />
               </span>
               <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700, width: 22, textAlign: "right" }}>{n}</span>
             </div>
@@ -114,8 +156,8 @@ export default async function AdminConexoes() {
                   {r.byPlatform.size
                     ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {[...r.byPlatform.entries()].map(([p, n]) => (
-                          <span key={p} style={{ fontSize: 11.5, padding: "2px 8px", borderRadius: 999, background: "var(--surface)", border: "1px solid var(--hairline)" }}>
-                            {p}{n > 1 ? ` ×${n}` : ""}
+                          <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, padding: "2px 8px 2px 6px", borderRadius: 999, background: "var(--surface)", border: "1px solid var(--hairline)" }}>
+                            <PlatIcon plat={p} size={13} />{platMeta(p).label}{n > 1 ? ` ×${n}` : ""}
                           </span>
                         ))}
                       </div>

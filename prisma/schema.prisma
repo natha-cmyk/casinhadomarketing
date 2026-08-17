@@ -20,6 +20,7 @@ model User {
   email       String       @unique
   nome        String       @default("")
   createdAt   DateTime     @default(now())
+  lastSeenAt  DateTime? // último acesso (atualizado com throttle de 10min p/ o Admin)
   memberships Membership[]
 }
 
