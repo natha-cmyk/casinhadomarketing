@@ -7,13 +7,30 @@ import { useState } from "react";
 import { useStore, newId, type PersonaItem, type PersonaDetalhes } from "@/lib/store";
 import { Card, PageHead } from "@/components/ui";
 
-// redes que expõem demografia de audiência (mesmo conjunto da rota /api/persona/gerar)
-const REDE_LABEL: Record<string, string> = { instagram: "Instagram", youtube: "YouTube" };
-const REDE_EMOJI: Record<string, string> = { instagram: "📸", youtube: "▶️" };
+// redes sociais reconhecidas (rótulo/emoji/capa). SÓ instagram/youtube expõem demografia
+// de audiência (mesmo conjunto da rota /api/persona/gerar); as demais aparecem no seletor
+// mas sem geração — a integração não entrega idade/gênero/cidade nelas.
+const REDE_LABEL: Record<string, string> = {
+  instagram: "Instagram", youtube: "YouTube", facebook: "Facebook", tiktok: "TikTok",
+  linkedin: "LinkedIn", twitter: "X", threads: "Threads", pinterest: "Pinterest",
+};
+const REDE_EMOJI: Record<string, string> = {
+  instagram: "📸", youtube: "▶️", facebook: "👍", tiktok: "🎵",
+  linkedin: "💼", twitter: "✖️", threads: "🧵", pinterest: "📌",
+};
 const REDE_COVER: Record<string, string> = {
   instagram: "linear-gradient(120deg,#FF001E,#121111)",
   youtube: "linear-gradient(120deg,#FF0000,#121111)",
+  facebook: "linear-gradient(120deg,#1877F2,#121111)",
+  tiktok: "linear-gradient(120deg,#00BBC5,#121111)",
+  linkedin: "linear-gradient(120deg,#0A66C2,#121111)",
+  twitter: "linear-gradient(120deg,#333,#121111)",
+  threads: "linear-gradient(120deg,#555,#121111)",
+  pinterest: "linear-gradient(120deg,#E60023,#121111)",
 };
+// plataformas com demografia (geração de persona) vs. demais sociais (só listadas)
+const DEMO_PLATS = new Set(["instagram", "youtube"]);
+const SOCIAL_PLATS = new Set(Object.keys(REDE_LABEL));
 
 // rascunho devolvido por /api/persona/gerar (agora com detalhes)
 interface GenDraft {
@@ -159,23 +176,39 @@ function PersonaBuilder({
   const updatePersona = useStore((s) => s.updatePersona);
   const personas = useStore((s) => s.personas);
   const zernioAccounts = useStore((s) => s.zernioAccounts);
+  const setZernioAccounts = useStore((s) => s.setZernioAccounts);
 
   const [f, setF] = useState<BForm>(() => (mode === "edit" && persona ? formFromPersona(persona) : blankForm()));
   const [caminho, setCaminho] = useState<"zero" | "audiencia">("zero");
   const [genBusy, setGenBusy] = useState<string | null>(null);
   const [genErr, setGenErr] = useState<string | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
   const [fotoBusy, setFotoBusy] = useState(false);
   const [fotoAviso, setFotoAviso] = useState<string | null>(null);
 
   const upd = (patch: Partial<BForm>) => setF((prev) => ({ ...prev, ...patch }));
 
-  // contas SOCIAIS conectadas que expõem demografia (Instagram / YouTube).
-  const demoAccounts = zernioAccounts.filter(
-    (a) => (a.platform === "instagram" || a.platform === "youtube") && a.enabled !== false
-  );
+  // TODAS as contas sociais conectadas (todos os perfis/multi-conta). As com demografia
+  // (Instagram/YouTube) geram persona; as demais aparecem desabilitadas com o motivo.
+  const socialAccounts = zernioAccounts.filter((a) => SOCIAL_PLATS.has(a.platform) && a.enabled !== false);
+
+  // Sincroniza contas conectadas (re-busca da integração) — reflete multi-conta na hora.
+  const sincronizar = async () => {
+    if (syncBusy) return;
+    setSyncBusy(true); setGenErr(null);
+    try {
+      const r = await fetch("/api/zernio/accounts");
+      const d = await r.json().catch(() => null);
+      if (d?.accounts) setZernioAccounts(d.accounts);
+    } catch {
+      setGenErr("Não foi possível sincronizar as contas agora.");
+    } finally {
+      setSyncBusy(false);
+    }
+  };
 
   // Gera da audiência → PRÉ-PREENCHE o formulário (não cria direto).
-  const gerar = async (acc: (typeof demoAccounts)[number]) => {
+  const gerar = async (acc: (typeof socialAccounts)[number]) => {
     setGenBusy(acc._id); setGenErr(null);
     try {
       const r = await fetch("/api/persona/gerar", {
@@ -299,34 +332,42 @@ function PersonaBuilder({
               </div>
               {caminho === "audiencia" && (
                 <div style={{ background: "var(--surface)", borderRadius: 10, padding: 12, marginBottom: 6 }}>
-                  <p style={{ color: "var(--label-2)", margin: "0 0 10px", fontSize: 12.5 }}>
-                    Escolha uma rede conectada com demografia. Montamos uma persona a partir de quem{" "}
-                    <b>realmente consome o canal</b> (idade, gênero, cidade) e pré-preenchemos os campos abaixo.
-                    Tudo editável antes de salvar.
-                  </p>
-                  {demoAccounts.length === 0 ? (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+                    <p style={{ color: "var(--label-2)", margin: 0, fontSize: 12.5, flex: 1 }}>
+                      Escolha uma conta conectada. Instagram e YouTube têm <b>demografia</b> (idade, gênero, cidade)
+                      e geram a persona a partir de quem realmente consome o canal. As demais redes aparecem para
+                      referência — a integração não expõe demografia nelas.
+                    </p>
+                    <button type="button" className="btn-link" onClick={sincronizar} disabled={syncBusy} style={{ flexShrink: 0 }}>
+                      {syncBusy ? "Sincronizando…" : "↻ Sincronizar contas"}
+                    </button>
+                  </div>
+                  {socialAccounts.length === 0 ? (
                     <p style={{ color: "var(--label-3)", fontSize: 12.5, margin: 0 }}>
-                      Nenhuma rede com demografia conectada. Conecte um Instagram ou YouTube em Conexões.
+                      Nenhuma rede social conectada. Conecte contas em Conexões e clique em Sincronizar.
                     </p>
                   ) : (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {demoAccounts.map((a) => {
+                      {socialAccounts.map((a) => {
                         const rede = REDE_LABEL[a.platform] || a.platform;
                         const nome = a.displayName || a.username || rede;
                         const busy = genBusy === a._id;
+                        const canDemo = DEMO_PLATS.has(a.platform);
                         return (
                           <button
                             key={a._id}
                             type="button"
                             className="btn-link"
-                            onClick={() => gerar(a)}
-                            disabled={!!genBusy}
-                            style={{ opacity: genBusy && !busy ? 0.5 : 1 }}
+                            onClick={() => canDemo && gerar(a)}
+                            disabled={!!genBusy || !canDemo}
+                            title={canDemo ? `Gerar persona da audiência de ${nome}` : "Sem demografia disponível nesta rede"}
+                            style={{ opacity: (!canDemo || (genBusy && !busy)) ? 0.5 : 1, cursor: canDemo ? "pointer" : "not-allowed" }}
                           >
                             <span style={{ fontSize: 15 }}>{REDE_EMOJI[a.platform] || "✨"}</span>
                             <span style={{ fontWeight: 600 }}>{rede}</span>
                             <span style={{ color: "var(--label-3)", fontSize: 12 }}>· {nome}</span>
-                            {busy && <span style={{ color: "var(--cyan)", fontSize: 12 }}>gerando…</span>}
+                            {busy ? <span style={{ color: "var(--cyan)", fontSize: 12 }}>gerando…</span>
+                              : !canDemo ? <span style={{ color: "var(--label-3)", fontSize: 11 }}>sem demografia</span> : null}
                           </button>
                         );
                       })}
