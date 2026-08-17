@@ -321,6 +321,7 @@ model CrmConfig {
   clickupListId String?
   fieldMap      Json      @default("{}") // { channel|product|status|value|lossReason : "<nome do campo no ClickUp>" }
   webhookSecret String?
+  lastSyncAt    DateTime? // último sync bem-sucedido — sync incremental puxa só o que mudou desde então
   updatedAt     DateTime  @updatedAt
 }
 

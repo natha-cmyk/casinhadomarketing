@@ -173,18 +173,24 @@ export function GeracaoView() {
     return d.config as CrmConfig;
   }
 
-  async function sync() {
+  // full=true força re-sync completo; padrão é incremental (só o que mudou desde o último sync).
+  async function sync(full = false) {
     setSyncing(true);
     setErr(null);
     setMsg(null);
     try {
-      const r = await fetch("/api/crm/sync", { method: "POST" });
+      const r = await fetch(`/api/crm/sync${full ? "?full=1" : ""}`, { method: "POST" });
       const d = await r.json();
       if (!d?.ok) {
         setErr(d?.error || "Falha na sincronização.");
         return;
       }
-      setMsg(`${d.imported} ${d.imported === 1 ? "lead importado" : "leads importados"} do ClickUp.`);
+      const tipo = d.incremental ? "atualizados" : "importados";
+      setMsg(
+        d.imported === 0
+          ? "Tudo em dia — nenhuma mudança desde o último sync."
+          : `${d.imported} ${d.imported === 1 ? "lead" : "leads"} ${tipo} do ClickUp.`
+      );
       // recarrega leads
       const lr = await fetch(`/api/crm/leads?since=${range.since}&until=${range.until}`, { cache: "no-store" });
       const ld = await lr.json();
@@ -206,9 +212,14 @@ export function GeracaoView() {
           connected ? (
             <div style={{ display: "flex", gap: 8 }}>
               {config?.provider === "clickup" && (
-                <button className="btn-link ig" onClick={sync} disabled={syncing} type="button">
-                  <Ic name="leads" /> {syncing ? "Sincronizando…" : "Sincronizar"}
-                </button>
+                <>
+                  <button className="btn-link ig" onClick={() => sync(false)} disabled={syncing} type="button" title="Puxa só o que mudou desde o último sync">
+                    <Ic name="leads" /> {syncing ? "Sincronizando…" : "Sincronizar"}
+                  </button>
+                  <button className="btn-link" onClick={() => sync(true)} disabled={syncing} type="button" title="Reprocessa todos os leads do zero">
+                    Ressincronizar tudo
+                  </button>
+                </>
               )}
               <button className="btn-link" onClick={() => setEditing(true)} type="button">
                 Reconfigurar

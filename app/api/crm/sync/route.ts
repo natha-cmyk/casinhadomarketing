@@ -188,7 +188,10 @@ export async function GET() {
 }
 
 // ── POST: importa as tasks como leads ──
-export async function POST() {
+// Sync INCREMENTAL por padrão: puxa só as tasks alteradas desde o último sync
+// (date_updated_gt = lastSyncAt). 1º sync (ou ?full=1) = completo. Assim o botão
+// "sincronizar" fica rápido no dia-a-dia em vez de reprocessar tudo toda vez.
+export async function POST(req: Request) {
   try {
     const ws = await getActiveWorkspaceId();
     if (!ws) return NextResponse.json({ ok: false, error: "unauth" }, { status: 401 });
@@ -201,17 +204,24 @@ export async function POST() {
       return NextResponse.json({ ok: false, error: "Informe o token e o List ID do ClickUp." }, { status: 400 });
     }
 
-    // ClickUp devolve ~100 tasks por página; sem paginar só vinham as mais recentes
-    // (bug: leads de julho/anos anteriores sumiam). Iteramos page=0,1,2… até last_page
-    // (limite defensivo de 50 páginas) e incluímos tasks fechadas/arquivadas + subtasks —
-    // leads "ganho/perdido" costumam estar fechados. date_created define a data do lead.
+    // full=1 força re-sync completo (ignora lastSyncAt). Sem isso, é incremental.
+    const forceFull = new URL(req.url).searchParams.get("full") === "1";
+    // margem de 5 min pra trás cobre relógio/tasks em voo entre syncs.
+    const sinceMs = !forceFull && cfg.lastSyncAt ? cfg.lastSyncAt.getTime() - 5 * 60 * 1000 : null;
+    const incremental = sinceMs != null;
+    const startedAt = new Date(); // carimba ANTES do fetch → próximo sync não perde nada
+
+    // ClickUp devolve ~100 tasks por página; iteramos page=0,1,2… até last_page.
+    // include_closed + subtasks: leads "ganho/perdido" costumam estar fechados.
+    // date_updated_gt (incremental): só o que mudou desde o último sync.
     const listId = encodeURIComponent(cfg.clickupListId);
     const tasks: ClickUpTask[] = [];
     const MAX_PAGES = 50;
     for (let page = 0; page < MAX_PAGES; page++) {
-      const url =
+      let url =
         `https://api.clickup.com/api/v2/list/${listId}/task` +
         `?include_closed=true&subtasks=true&page=${page}`;
+      if (sinceMs != null) url += `&date_updated_gt=${sinceMs}`;
       let res: Response;
       try {
         res = await fetch(url, { headers: { Authorization: cfg.clickupToken }, cache: "no-store" });
@@ -236,8 +246,8 @@ export async function POST() {
 
     const fm = (cfg.fieldMap ?? {}) as Record<string, string>;
 
-    let imported = 0;
-    for (const t of tasks) {
+    // monta os upserts e roda em LOTES paralelos (antes era 1-a-1 sequencial = lento).
+    const ops = tasks.map((t) => {
       const dims = resolveDims(t, fm);
       const nativeStatus = t.status?.status ?? null;
 
@@ -268,15 +278,23 @@ export async function POST() {
         raw: { ...(t as unknown as Record<string, unknown>), _parsed: parsed } as object,
       };
 
-      await prisma.lead.upsert({
+      return prisma.lead.upsert({
         where: { workspaceId_extId: { workspaceId: ws, extId: t.id } },
         create: { workspaceId: ws, extId: t.id, ...data },
         update: data,
       });
-      imported++;
+    });
+
+    // executa em lotes de 20 (paraleliza sem estourar o pool de conexões)
+    const BATCH = 20;
+    for (let i = 0; i < ops.length; i += BATCH) {
+      await Promise.all(ops.slice(i, i + BATCH));
     }
 
-    return NextResponse.json({ ok: true, imported });
+    // carimba o sync (só depois de gravar tudo) → próximo é incremental
+    await prisma.crmConfig.update({ where: { workspaceId: ws }, data: { lastSyncAt: startedAt } });
+
+    return NextResponse.json({ ok: true, imported: ops.length, incremental });
   } catch (e) {
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
   }
