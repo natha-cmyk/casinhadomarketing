@@ -49,6 +49,7 @@ export interface FonteMap {
 // ── Perfil / Ambiente ──
 export interface Perfil {
   empresa: string; segmento: string; cidade: string; site: string;
+  ramo: string; telefone: string; emailContato: string; estado: string;
   canais: string[]; produtos: string[]; relacao: Record<string, boolean>;
 }
 
@@ -193,7 +194,7 @@ export const useStore = create<UIState>((set) => ({
   posts: [],
   personas: [], concorrentes: [],
   fontes: [], fonteMap: null,
-  perfil: { empresa: "", segmento: "", cidade: "", site: "", canais: [], produtos: [], relacao: {} },
+  perfil: { empresa: "", segmento: "", cidade: "", site: "", ramo: "", telefone: "", emailContato: "", estado: "", canais: [], produtos: [], relacao: {} },
   hydrated: false,
   zernioAccounts: [],
   selectedAccount: {},

@@ -6,9 +6,8 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
+import { UFS, RAMOS, maskPhone } from "@/lib/perfil-fields";
 
-const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
-const RAMOS = ["Saúde", "Consultoria", "Imobiliária", "Engenharia", "Direito", "Educação", "Tecnologia", "Comércio / Varejo", "Alimentação", "Beleza & Estética", "Contabilidade", "Marketing & Publicidade", "Coworking / Espaços", "Serviços financeiros", "Turismo & Hotelaria", "Construção civil", "Indústria"];
 const PROVIDERS = [
   { v: "openrouter", label: "OpenRouter (recomendado)", url: "https://openrouter.ai/keys" },
   { v: "anthropic", label: "Claude (Anthropic)", url: "https://console.anthropic.com/settings/keys" },
@@ -21,13 +20,6 @@ interface Initial { empresa: string; telefone: string; emailContato: string; ram
 
 const inp: React.CSSProperties = { width: "100%", border: "1px solid var(--hairline)", borderRadius: 10, padding: "10px 12px", font: "inherit", fontSize: 14, outline: "none", background: "#fff" };
 const lbl: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, color: "var(--label-2)", textTransform: "uppercase", letterSpacing: ".4px", display: "block", marginBottom: 5 };
-
-function maskPhone(v: string): string {
-  const d = v.replace(/\D/g, "").slice(0, 11);
-  if (d.length <= 2) return d.length ? `(${d}` : "";
-  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-}
 
 export function OnboardingForm({ initial, redes }: { initial: Initial; redes: string[] }) {
   const [step, setStep] = useState(0);

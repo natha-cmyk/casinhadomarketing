@@ -22,7 +22,11 @@ export async function PUT(req: Request) {
     const data = {
       empresa: b.empresa ?? "",
       segmento: b.segmento ?? "",
+      ramo: b.ramo ?? "",
+      telefone: b.telefone ?? "",
+      emailContato: b.emailContato ?? "",
       cidade: b.cidade ?? "",
+      estado: b.estado ?? "",
       site: b.site ?? "",
       canais: Array.isArray(b.canais) ? b.canais : [],
       produtos: Array.isArray(b.produtos) ? b.produtos : [],

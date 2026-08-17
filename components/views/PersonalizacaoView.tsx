@@ -9,6 +9,7 @@ import { parseBR, fmt } from "@/lib/format";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { Ic } from "@/components/Ic";
 import { REDES, PANEL_INDICATORS, type IndGroup } from "@/lib/seed-data";
+import { UFS, RAMOS, maskPhone } from "@/lib/perfil-fields";
 import { SOCIAL_IDS, META } from "@/lib/nav";
 import { socialIndGroups, indShown, isSocialPanel, socialCatalog } from "@/lib/indicators";
 import { useStore, newId, type FonteItem, type CustomInd } from "@/lib/store";
@@ -397,19 +398,43 @@ export default function PersonalizacaoView() {
       </PSection>
 
       {/* ===== Ambiente ===== */}
-      <PSection title="Ambiente" accent="var(--ink)">
+      {/* Mesmos campos coletados no onboarding — consultáveis e editáveis aqui (persistem no Perfil). */}
+      <PSection
+        title="Ambiente"
+        sub="Dados da empresa coletados no primeiro acesso — edite quando mudar."
+        accent="var(--ink)"
+      >
         <div className="pm-row">
           <div>
             <label className="field-lbl">Empresa / marca</label>
             <input className="field-edit" value={p.empresa} onChange={(e) => setPerfil({ empresa: e.target.value })} aria-label="Empresa" />
           </div>
           <div>
-            <label className="field-lbl">Segmento</label>
+            <label className="field-lbl">Ramo</label>
+            <RamoSelect value={p.ramo || ""} onChange={(v) => setPerfil({ ramo: v })} />
+          </div>
+        </div>
+        <div className="pm-row" style={{ marginTop: 9 }}>
+          <div>
+            <label className="field-lbl">Telefone</label>
             <input
               className="field-edit"
-              value={p.segmento || ""}
-              onChange={(e) => setPerfil({ segmento: e.target.value })}
-              placeholder="Ex.: Coworking / imobiliário"
+              value={p.telefone || ""}
+              onChange={(e) => setPerfil({ telefone: maskPhone(e.target.value) })}
+              placeholder="(84) 90000-0000"
+              inputMode="numeric"
+              aria-label="Telefone"
+            />
+          </div>
+          <div>
+            <label className="field-lbl">E-mail de contato</label>
+            <input
+              className="field-edit"
+              type="email"
+              value={p.emailContato || ""}
+              onChange={(e) => setPerfil({ emailContato: e.target.value })}
+              placeholder="contato@empresa.com.br"
+              aria-label="E-mail de contato"
             />
           </div>
         </div>
@@ -420,9 +445,20 @@ export default function PersonalizacaoView() {
               className="field-edit"
               value={p.cidade || ""}
               onChange={(e) => setPerfil({ cidade: e.target.value })}
-              placeholder="Natal/RN"
+              placeholder="Natal"
             />
           </div>
+          <div>
+            <label className="field-lbl">Estado (UF)</label>
+            <select className="field-edit" value={p.estado || ""} onChange={(e) => setPerfil({ estado: e.target.value })} aria-label="Estado">
+              <option value="">UF</option>
+              {UFS.map((uf) => (
+                <option key={uf} value={uf}>{uf}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="pm-row" style={{ marginTop: 9 }}>
           <div>
             <label className="field-lbl">Site</label>
             <input
@@ -430,6 +466,15 @@ export default function PersonalizacaoView() {
               value={p.site || ""}
               onChange={(e) => setPerfil({ site: e.target.value })}
               placeholder="seahubcoworking.com.br"
+            />
+          </div>
+          <div>
+            <label className="field-lbl">Segmento <span style={{ fontWeight: 400, color: "var(--label-3)" }}>(detalhe livre)</span></label>
+            <input
+              className="field-edit"
+              value={p.segmento || ""}
+              onChange={(e) => setPerfil({ segmento: e.target.value })}
+              placeholder="Ex.: Coworking / imobiliário"
             />
           </div>
         </div>
@@ -575,6 +620,48 @@ export default function PersonalizacaoView() {
           onRemoveCustom={removeCustomInd}
         />
       </PSection>
+    </>
+  );
+}
+
+/* ===== RamoSelect — dropdown de ramos + "Outro" (texto livre) ===== */
+function RamoSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const isCustom = !!value && !RAMOS.includes(value);
+  const [outro, setOutro] = useState(isCustom);
+  const sel = outro ? "__outro__" : value;
+  return (
+    <>
+      <select
+        className="field-edit"
+        value={sel}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__outro__") {
+            setOutro(true);
+            onChange("");
+          } else {
+            setOutro(false);
+            onChange(v);
+          }
+        }}
+        aria-label="Ramo"
+      >
+        <option value="">Selecione…</option>
+        {RAMOS.map((r) => (
+          <option key={r} value={r}>{r}</option>
+        ))}
+        <option value="__outro__">Outro…</option>
+      </select>
+      {outro && (
+        <input
+          className="field-edit"
+          style={{ marginTop: 6 }}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Qual o ramo?"
+          aria-label="Outro ramo"
+        />
+      )}
     </>
   );
 }
