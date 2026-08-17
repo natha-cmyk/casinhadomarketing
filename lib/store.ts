@@ -111,11 +111,13 @@ export interface UIState {
   customInd: Record<string, CustomInd[]>;
   // ordem dos cards reordenáveis dos painéis sociais, por painel (= rede). Persistido no config.
   cardOrder: Record<string, string[]>;
+  // canais MANUAIS do calendário (só registro de conteúdo, sem publicação síncrona). Persistido no config.
+  calManuais: string[];
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]> } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[] } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -140,6 +142,8 @@ export interface UIState {
   addCustomInd: (panel: string, c: CustomInd) => void; removeCustomInd: (panel: string, id: string) => void;
   // ordem dos cards reordenáveis (drag) por painel social
   setCardOrder: (panel: string, ids: string[]) => void;
+  addCalManual: (nome: string) => void;
+  removeCalManual: (nome: string) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
@@ -202,6 +206,7 @@ export const useStore = create<UIState>((set) => ({
   manualCampaigns: [],
   customInd: {},
   cardOrder: {},
+  calManuais: [],
 
   set: (patch) => set(patch),
   addManualAd: (a) => set((s) => ({ manualAds: [...s.manualAds, a] })),
@@ -218,6 +223,13 @@ export const useStore = create<UIState>((set) => ({
     set((s) => ({ customInd: { ...s.customInd, [panel]: (s.customInd[panel] || []).filter((c) => c.id !== id) } })),
   setCardOrder: (panel, ids) =>
     set((s) => ({ cardOrder: { ...s.cardOrder, [panel]: ids } })),
+  addCalManual: (nome) =>
+    set((s) => {
+      const v = nome.trim();
+      if (!v || s.calManuais.some((c) => c.toLowerCase() === v.toLowerCase())) return {};
+      return { calManuais: [...s.calManuais, v] };
+    }),
+  removeCalManual: (nome) => set((s) => ({ calManuais: s.calManuais.filter((c) => c !== nome) })),
   setZernioAccounts: (accounts) =>
     set((s) => {
       // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).
@@ -253,6 +265,7 @@ export const useStore = create<UIState>((set) => ({
         if (Array.isArray(d.config.adConfig?.manualCampaigns)) patch.manualCampaigns = d.config.adConfig!.manualCampaigns!;
         if (d.config.adConfig?.cardOrder) patch.cardOrder = d.config.adConfig.cardOrder;
         if (d.config.customInd) patch.customInd = d.config.customInd;
+        if (Array.isArray(d.config.calManuais)) patch.calManuais = d.config.calManuais;
       }
       if (d.perfil) patch.perfil = d.perfil;
       if (d.okr && d.okr.areas) patch.okr = d.okr;

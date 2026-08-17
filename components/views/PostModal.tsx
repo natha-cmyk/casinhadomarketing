@@ -14,8 +14,7 @@ import {
 
 // plataforma Zernio → id da rede (Casinha): twitter → x
 const PLAT_REV: Record<string, string> = { twitter: "x" };
-// Canais manuais de conteúdo (não são contas conectadas de rede, mas seguem como opções).
-const MANUAIS_POST = ["WhatsApp (grupos)", "Lista de transmissão", "Blog"];
+// Canais manuais de conteúdo agora vêm do store (store.calManuais). Só registro, sem publicação síncrona.
 
 type ZAccount = {
   platform: string;
@@ -45,11 +44,11 @@ function redesConectadas(accounts: ZAccount[]): (typeof REDES)[number][] {
     .filter((r): r is (typeof REDES)[number] => !!r);
 }
 
-// Canais conectados = redes conectadas + canais manuais de conteúdo. Cada um com sua cor.
-function canaisConectados(accounts: ZAccount[]): { nome: string; cor: string }[] {
+// Canais = redes conectadas + canais MANUAIS do usuário (store). Cada um com sua cor.
+function canaisConectados(accounts: ZAccount[], manuais: string[]): { nome: string; cor: string }[] {
   const redes = redesConectadas(accounts).map((r) => ({ nome: r.label, cor: r.cor }));
-  const manuais = MANUAIS_POST.map((nome) => ({ nome, cor: CANAL_POST_COLORS[nome] || "#8E8E93" }));
-  return [...redes, ...manuais];
+  const man = manuais.map((nome) => ({ nome, cor: CANAL_POST_COLORS[nome] || "#8E8E93" }));
+  return [...redes, ...man];
 }
 
 // Perfis conectados = um por conta social habilitada (displayName/username). Multi-conta.
@@ -104,6 +103,7 @@ export function PostModal() {
   const pm = useStore((st) => st.postModal);
   const posts = useStore((st) => st.posts);
   const zernioAccounts = useStore((st) => st.zernioAccounts);
+  const calManuais = useStore((st) => st.calManuais);
   const calMonth = useStore((st) => st.calMonth);
   const calYear = useStore((st) => st.calYear);
   const set = useStore((st) => st.set);
@@ -111,8 +111,8 @@ export function PostModal() {
   const updatePost = useStore((st) => st.updatePost);
   const deletePost = useStore((st) => st.deletePost);
 
-  // Fonte única (auto-sincroniza quando novas contas conectam):
-  const canais = canaisConectados(zernioAccounts);
+  // Fonte única (auto-sincroniza quando novas contas conectam) + manuais do usuário:
+  const canais = canaisConectados(zernioAccounts, calManuais);
   const perfis = perfisConectados(zernioAccounts);
 
   const existing = pm && pm.mode === "edit" ? posts.find((x) => x.id === pm.id) : undefined;
@@ -367,6 +367,11 @@ export function PostModal() {
             <div>
               <label className="field-lbl">Canal</label>
               {sel("pmCanal", canalOptions, f.canal, (v) => upd({ canal: v }))}
+              {calManuais.includes(f.canal) && (
+                <div className="pm-hint" style={{ marginTop: 6 }}>
+                  Canal manual — só registro de conteúdo. Não há publicação automática por aqui.
+                </div>
+              )}
             </div>
             <div>
               <label className="field-lbl">Formato</label>

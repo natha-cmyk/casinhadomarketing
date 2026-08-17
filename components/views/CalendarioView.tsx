@@ -20,8 +20,8 @@ import { PostModal } from "./PostModal";
 // plataforma Zernio → id da rede (Casinha): twitter → x
 const PLAT_REV: Record<string, string> = { twitter: "x" };
 
-// Canais manuais de conteúdo (não são contas conectadas de rede, mas seguem como opções).
-const MANUAIS_POST = ["WhatsApp (grupos)", "Lista de transmissão", "Blog"];
+// Canais manuais de conteúdo agora são gerenciados pelo usuário (store.calManuais).
+// NÃO são contas conectadas: só registro de conteúdo, sem publicação síncrona.
 
 type ZAccount = {
   platform: string;
@@ -58,11 +58,11 @@ function redesConectadas(accounts: ZAccount[]): (typeof REDES)[number][] {
     .filter((r): r is (typeof REDES)[number] => !!r);
 }
 
-// Canais conectados = redes conectadas + canais manuais de conteúdo. Cada um com sua cor.
-function canaisConectados(accounts: ZAccount[]): { nome: string; cor: string }[] {
+// Canais = redes REALMENTE conectadas + canais MANUAIS do usuário. Cada um com sua cor.
+function canaisConectados(accounts: ZAccount[], manuais: string[]): { nome: string; cor: string; manual?: boolean }[] {
   const redes = redesConectadas(accounts).map((r) => ({ nome: r.label, cor: r.cor }));
-  const manuais = MANUAIS_POST.map((nome) => ({ nome, cor: CANAL_POST_COLORS[nome] || "#8E8E93" }));
-  return [...redes, ...manuais];
+  const man = manuais.map((nome) => ({ nome, cor: CANAL_POST_COLORS[nome] || "#8E8E93", manual: true }));
+  return [...redes, ...man];
 }
 
 // Perfis conectados = um por conta social habilitada (displayName/username). Multi-conta.
@@ -164,8 +164,8 @@ export function CalendarioView() {
     updatePost,
   } = s;
 
-  // Fonte única (auto-sincroniza quando novas contas conectam):
-  const canais = canaisConectados(zernioAccounts);
+  // Fonte única (auto-sincroniza quando novas contas conectam) + manuais do usuário:
+  const canais = canaisConectados(zernioAccounts, s.calManuais);
   const canalCor = (nome: string) =>
     canais.find((c) => c.nome === nome)?.cor ?? CANAL_POST_COLORS[nome] ?? "#8E8E93";
 
@@ -311,7 +311,7 @@ export function CalendarioView() {
       <PageHead
         eyebrow="Operação · Conteúdo"
         title="Calendário de conteúdo"
-        desc="Planeje, agende e publique — Instagram, TikTok, LinkedIn e YouTube (canais conectados) + WhatsApp, lista de transmissão e blog. Clique num dia para criar; num post para editar."
+        desc="Planeje, agende e publique nos canais conectados (Instagram, TikTok, LinkedIn, YouTube…). Adicione canais manuais (WhatsApp, blog…) para registrar conteúdo — sem publicação automática. Clique num dia para criar; num post para editar."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="btn-link" id="apresentarBtn" onClick={abrirApresentacao}>
@@ -355,7 +355,12 @@ export function CalendarioView() {
             <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
-        {contasOpen && <ConexoesGrid grupos={["social", "conversas"]} />}
+        {contasOpen && (
+          <>
+            <ConexoesGrid grupos={["social", "conversas"]} />
+            <ManualChannels />
+          </>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -699,5 +704,43 @@ export function CalendarioView() {
         />
       )}
     </>
+  );
+}
+
+// Canais MANUAIS — gerenciados pelo usuário. Só registro de conteúdo (sem publicação
+// síncrona). Aparecem no seletor de canal e no PostModal como opção de canal.
+function ManualChannels() {
+  const calManuais = useStore((s) => s.calManuais);
+  const addCalManual = useStore((s) => s.addCalManual);
+  const removeCalManual = useStore((s) => s.removeCalManual);
+  const [val, setVal] = useState("");
+  const add = () => { const v = val.trim(); if (v) addCalManual(v); setVal(""); };
+  return (
+    <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--hairline)" }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>Canais manuais</div>
+      <div style={{ fontSize: 12, color: "var(--label-3)", marginBottom: 10 }}>
+        Só registro de conteúdo — <b>sem publicação automática</b>. Use para WhatsApp, blog, newsletter e afins.
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+        {calManuais.length === 0 && <span style={{ fontSize: 12.5, color: "var(--label-3)" }}>Nenhum canal manual ainda.</span>}
+        {calManuais.map((c) => (
+          <span key={c} className="chip-rm">
+            {c}
+            <button onClick={() => removeCalManual(c)} aria-label={`Remover ${c}`} type="button">✕</button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 8, maxWidth: 360 }}>
+        <input
+          className="field-edit"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+          placeholder="+ novo canal manual (ex.: WhatsApp)"
+          aria-label="Novo canal manual"
+        />
+        <button className="btn-link ig" onClick={add} type="button">Adicionar</button>
+      </div>
+    </div>
   );
 }

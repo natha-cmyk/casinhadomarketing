@@ -53,6 +53,28 @@ const AGENT_BY_VIEW: Record<string, keyof typeof AGENTS> = {
   persona: "dionisio", geracao: "dionisio",
 };
 
+// CTA da bolha por tela — chama pra AÇÃO específica do ambiente (some no mobile).
+const CTA_BY_VIEW: Record<string, string> = {
+  overview: "Vamos analisar seu desempenho?",
+  instagram: "Bora turbinar seu Instagram?",
+  tiktok: "Bora crescer no TikTok?",
+  youtube: "Vamos analisar seu canal?",
+  linkedin: "Fortalecer seu LinkedIn?",
+  facebook: "Melhorar seu Facebook?",
+  x: "Analisar seu X?",
+  threads: "Crescer no Threads?",
+  googlebusiness: "Melhorar sua ficha no Google?",
+  canais: "Vamos comparar seus canais?",
+  ads: "Quer otimizar sua mídia paga?",
+  concorrencia: "De olho na concorrência?",
+  metas: "Vamos revisar suas metas?",
+  persona: "Vamos afinar suas personas?",
+  geracao: "Bora construir conteúdo juntos?",
+  calendario: "Organizamos seu calendário?",
+  config: "Precisa de ajuda por aqui?",
+};
+const ctaFor = (view: string) => CTA_BY_VIEW[view] || "Fale comigo pra melhorar sua análise";
+
 export function AgentDock() {
   const pathname = usePathname();
   const view = viewForPath(pathname);
@@ -297,7 +319,7 @@ export function AgentDock() {
       <div className="ag-fab-row">
         {!open && (
           <button className="ag-cta" onClick={toggle} type="button">
-            Fale comigo pra melhorar sua análise
+            {ctaFor(view)}
           </button>
         )}
         <button

@@ -20,7 +20,7 @@ async function putJSON(url: string, body: unknown): Promise<void> {
 }
 
 export interface HydrationData {
-  config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean } | null;
+  config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; calManuais?: string[] } | null;
   perfil: UIState["perfil"] | null;
   okr: { objetivo: string; areas: { id: string; nome: string; krs: { id: string; kr: string; alvo: string; un: string; tag: string; resp: string }[] }[] } | null;
   posts: { posts: UIState["posts"] } | null;
@@ -44,6 +44,7 @@ export function saveConfig(s: UIState) {
   return putJSON("/api/config", {
     redes: s.redes, paineis: s.paineis, contas: s.contas, cfgOpen: s.cfgOpen, impOpen: s.impOpen,
     adConfig: { manualChannels: s.manualAds, manualCampaigns: s.manualCampaigns, cardOrder: s.cardOrder }, customInd: s.customInd,
+    calManuais: s.calManuais,
   });
 }
 export function savePerfil(s: UIState) {
