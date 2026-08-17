@@ -64,6 +64,25 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
   const [model, setModel] = useState("");
   useEffect(() => { fetch("/api/agents/llm").then((r) => r.json()).then((s) => { if (s?.connected) setLlmConnected(true); }).catch(() => {}); }, []);
 
+  // CRM (opcional) — ClickUp nativo (token + listId)
+  const [crmToken, setCrmToken] = useState("");
+  const [crmList, setCrmList] = useState("");
+  const [crmConnected, setCrmConnected] = useState(false);
+  const saveCrm = async () => {
+    if (!crmToken.trim() || !crmList.trim() || busy) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/api/crm/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "clickup", clickupToken: crmToken, clickupListId: crmList }) });
+      const j = await r.json().catch(() => null); setBusy(false);
+      if (r.ok && j?.config) setCrmConnected(true); else setErr("Falha ao conectar o CRM.");
+    } catch { setBusy(false); setErr("Erro de rede."); }
+  };
+
+  // Produtos (opcional) — chips
+  const [produtos, setProdutos] = useState<string[]>([]);
+  const [prodInput, setProdInput] = useState("");
+  const addProd = () => { const v = prodInput.trim(); if (v && !produtos.includes(v)) { setProdutos((p) => [...p, v]); setProdInput(""); } };
+
   const empresaOk = !!f.empresa.trim() && f.telefone.replace(/\D/g, "").length >= 10 && !!f.emailContato.trim() && !!f.ramo.trim();
 
   const saveLlm = async () => {
@@ -80,7 +99,7 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
     if (busy) return;
     setBusy(true); setErr(null);
     try {
-      const r = await fetch("/api/onboarding", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(f) });
+      const r = await fetch("/api/onboarding", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...f, produtos }) });
       const j = await r.json().catch(() => null);
       if (r.ok && j?.ok) { window.location.href = "/"; return; }
       setErr(j?.error || "Não foi possível concluir."); setBusy(false);
@@ -187,10 +206,24 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
           </Card>
         )}
 
-        {/* 4 — CRM (pular) */}
+        {/* 4 — CRM (ClickUp / pular) */}
         {step === 4 && (
-          <Card title="Conectar CRM" sub="Traga seus leads e oportunidades (ClickUp/webhook) pra aba Geração. Dá pra fazer depois, dentro da plataforma, em Geração por canais.">
-            <Nav onBack={back} onNext={next} nextLabel="Deixar pra configurar dentro da plataforma →" />
+          <Card title="Conectar CRM (ClickUp)" sub="Traga seus leads e oportunidades. Cole o token e o ID da lista do ClickUp — ou deixe pra configurar depois, em Geração por canais.">
+            {crmConnected ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10, background: "color-mix(in srgb, var(--excelente,#2FB457) 10%, #fff)", border: "1px solid color-mix(in srgb, var(--excelente,#2FB457) 30%, transparent)", fontSize: 13, fontWeight: 600 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--excelente,#2FB457)" }} /> CRM conectado.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <Field label="Token do ClickUp"><input type="password" style={inp} value={crmToken} onChange={(e) => setCrmToken(e.target.value)} placeholder="pk_..." autoComplete="off" /></Field>
+                <Field label="ID da lista (List ID)"><input style={inp} value={crmList} onChange={(e) => setCrmList(e.target.value)} placeholder="Ex.: 901234567" /></Field>
+                <div>
+                  <button onClick={saveCrm} disabled={busy || !crmToken.trim() || !crmList.trim()} style={btn(!!crmToken.trim() && !!crmList.trim())}>{busy ? "Conectando…" : "Conectar CRM"}</button>
+                </div>
+              </div>
+            )}
+            {err && <div style={{ color: "var(--red)", fontSize: 12.5, marginTop: 12 }}>{err}</div>}
+            <Nav onBack={back} onNext={next} nextLabel={crmConnected ? "Continuar →" : "Deixar pra configurar dentro da plataforma →"} />
           </Card>
         )}
 
@@ -198,9 +231,24 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
         {step === 5 && (
           <div style={{ textAlign: "center" }}>
             <div className="card" style={{ padding: "22px 24px", textAlign: "left" }}>
-              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Produtos & canais</div>
-              <div style={{ fontSize: 13, color: "var(--label-2)", marginBottom: 16, lineHeight: 1.5 }}>Cadastre seus produtos/serviços e canais de conteúdo com os campos personalizados — dá pra fazer depois, na Personalização.</div>
-              <button onClick={back} style={{ border: 0, background: "transparent", color: "var(--label-3)", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>← voltar</button>
+              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Produtos & serviços</div>
+              <div style={{ fontSize: 13, color: "var(--label-2)", marginBottom: 16, lineHeight: 1.5 }}>Adicione seus produtos/serviços (você refina os detalhes depois, na Personalização). Opcional.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={inp} value={prodInput} onChange={(e) => setProdInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addProd())} placeholder="Ex.: Escritório virtual" />
+                <button onClick={addProd} disabled={!prodInput.trim()} style={btn(!!prodInput.trim())}>Adicionar</button>
+              </div>
+              {produtos.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                  {produtos.map((p) => (
+                    <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, padding: "5px 10px", borderRadius: 999, background: "var(--surface)", border: "1px solid var(--hairline)" }}>
+                      {p}<button onClick={() => setProdutos((arr) => arr.filter((x) => x !== p))} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 12 }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 16 }}>
+                <button onClick={back} style={{ border: 0, background: "transparent", color: "var(--label-3)", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>← voltar</button>
+              </div>
             </div>
             <button onClick={finish} disabled={busy} style={{ ...btn(!busy), marginTop: 22, padding: "13px 26px", fontSize: 15, borderRadius: 999, animation: "obPop .5s ease-out" }}>
               {busy ? "Entrando…" : "Entrar na plataforma 🚀"}

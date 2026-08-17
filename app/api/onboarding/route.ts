@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 interface Body {
   empresa?: string; telefone?: string; emailContato?: string; ramo?: string;
-  cidade?: string; estado?: string; site?: string;
+  cidade?: string; estado?: string; site?: string; produtos?: string[];
 }
 
 export async function POST(req: Request) {
@@ -25,12 +25,14 @@ export async function POST(req: Request) {
   if (!empresa || !telefone || !emailContato || !ramo)
     return NextResponse.json({ error: "Preencha nome da empresa, telefone, e-mail e ramo de atividade." }, { status: 400 });
 
+  const produtos = Array.isArray(b.produtos) ? b.produtos.map((p) => String(p).trim()).filter(Boolean).slice(0, 30) : undefined;
   const data = {
     empresa, telefone, emailContato, ramo,
     segmento: ramo, // mantém segmento = ramo (usado na Personalização)
     cidade: (b.cidade || "").trim(),
     estado: (b.estado || "").trim(),
     site: (b.site || "").trim(),
+    ...(produtos ? { produtos } : {}),
   };
 
   try {
