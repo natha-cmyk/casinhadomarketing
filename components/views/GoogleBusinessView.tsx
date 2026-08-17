@@ -197,8 +197,8 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
   const mediaItems = data?.media?.mediaItems || [];
   const keywords = (data?.keywords?.keywords || []).filter((k) => k.impressions > 0).sort((a, b) => b.impressions - a.impressions);
 
-  const desc =
-    `${acct.displayName || "ficha conectada"} · dados reais do Google · ${range.since} → ${range.until}`;
+  // legenda enxuta: o período já está na toolbar e a ficha no seletor — evita redundância
+  const desc = "";
 
   const mapsUri = details?.location?.mapsUri || null;
 

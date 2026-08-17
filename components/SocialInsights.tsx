@@ -228,7 +228,6 @@ export function SocialInsights({ rede }: { rede: string }) {
   // SeaHub + Seabox). A conta exibida é a selecionada no store; default = primeira.
   const accts = s.zernioAccounts.filter((a) => a.platform === platform);
   const acct = accts.find((a) => a._id === s.selectedAccount[rede]) || accts[0] || null;
-  const multiAccount = accts.length > 1;
   const acctLabel = (a: (typeof accts)[number]) => a.username || a.displayName || "conta";
 
   const [data, setData] = useState<Combined | null>(null);
@@ -903,9 +902,9 @@ export function SocialInsights({ rede }: { rede: string }) {
           </div>
         }
       />
-      {/* Seletor de conta (multi-conta): quando há 2+ contas da mesma rede, um seletor
-          claro e proeminente no topo do painel. Trocar recarrega os dados da conta escolhida. */}
-      {multiAccount && (
+      {/* Seletor de conta: mostra sempre que há conta conectada. Com 2+ contas da mesma
+          rede, alterna entre elas. Com 1 só, exibe a conta detectada (transparência). */}
+      {accts.length >= 1 && (
         <div
           role="group"
           aria-label="Selecionar conta"
@@ -947,6 +946,11 @@ export function SocialInsights({ rede }: { rede: string }) {
               );
             })}
           </div>
+          {accts.length === 1 && (
+            <span style={{ fontSize: 11.5, color: "var(--label-3)" }}>
+              só 1 conta detectada nesta rede — se você conectou outra, verifique a conexão em Personalização
+            </span>
+          )}
         </div>
       )}
       {loading && <Spinner texto="Carregando métricas…" />}

@@ -16,7 +16,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 export default async function OnboardingPage() {
   const [ws, user] = await Promise.all([getActiveWorkspace(), getSessionUser()]);
   if (!ws) redirect("/");
-  if (ws.onboarded) redirect("/");
+  // NÃO redireciona se já onboarded: permite REVISAR o fluxo em /onboarding (pré-preenchido).
+  // O gate de 1º acesso continua no layout autenticado (manda pra cá quem ainda não passou).
 
   const perfil = await prisma.perfil.findUnique({ where: { workspaceId: ws.id } }).catch(() => null);
 
