@@ -81,7 +81,10 @@ export const NAV: NavGroup[] = [
       { id: "concorrencia", label: "Concorrência", icon: "vs", title: "Concorrência" },
     ],
   },
-  { group: "Conta", items: [{ id: "assinatura", label: "Assinatura & Indicações", icon: "invoice", live: true, title: "Assinatura & Indicações" }] },
+  { group: "Conta", items: [
+    { id: "assinatura", label: "Assinatura", icon: "invoice", live: true, title: "Assinatura" },
+    { id: "indicacoes", label: "Indicações", icon: "gift", live: true, title: "Programa de indicações" },
+  ] },
   { group: "Configuração", items: [{ id: "config", label: "Personalização", icon: "cfg", live: true, title: "Personalização" }] },
 ];
 
@@ -117,6 +120,7 @@ const VIEW_PATH: Record<string, string> = {
   concorrencia: "/concorrencia",
   config: "/personalizacao",
   assinatura: "/assinatura",
+  indicacoes: "/indicacoes",
 };
 
 export function pathForView(id: string): string {
