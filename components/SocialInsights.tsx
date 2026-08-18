@@ -912,9 +912,9 @@ export function SocialInsights({ rede }: { rede: string }) {
           </div>
         }
       />
-      {/* Seletor de conta: mostra sempre que há conta conectada. Com 2+ contas da mesma
-          rede, alterna entre elas. Com 1 só, exibe a conta detectada (transparência). */}
-      {accts.length >= 1 && (
+      {/* Seletor de conta: SÓ aparece em multi-conta (2+ contas da mesma rede). Com 1 conta,
+          fica oculto — o título do painel já identifica a conta (menos ruído visual). */}
+      {accts.length >= 2 && (
         <div
           role="group"
           aria-label="Selecionar conta"
@@ -956,11 +956,6 @@ export function SocialInsights({ rede }: { rede: string }) {
               );
             })}
           </div>
-          {accts.length === 1 && (
-            <span style={{ fontSize: 11.5, color: "var(--label-3)" }}>
-              só 1 conta detectada nesta rede — se você conectou outra, verifique a conexão em Personalização
-            </span>
-          )}
         </div>
       )}
       {loading && <Spinner texto="Carregando métricas…" />}

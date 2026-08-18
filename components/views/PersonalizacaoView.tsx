@@ -410,8 +410,9 @@ export default function PersonalizacaoView() {
             <input className="field-edit" value={p.empresa} onChange={(e) => setPerfil({ empresa: e.target.value })} aria-label="Empresa" />
           </div>
           <div>
-            <label className="field-lbl">Ramo</label>
+            <label className="field-lbl">Ramo de atividade</label>
             <RamoSelect value={p.ramo || ""} onChange={(v) => setPerfil({ ramo: v })} />
+            <div className="pm-hint" style={{ marginTop: 4 }}>Setor principal da empresa (lista fechada).</div>
           </div>
         </div>
         <div className="pm-row" style={{ marginTop: 9 }}>
@@ -469,13 +470,14 @@ export default function PersonalizacaoView() {
             />
           </div>
           <div>
-            <label className="field-lbl">Segmento <span style={{ fontWeight: 400, color: "var(--label-3)" }}>(detalhe livre)</span></label>
+            <label className="field-lbl">Segmento / nicho</label>
             <input
               className="field-edit"
               value={p.segmento || ""}
               onChange={(e) => setPerfil({ segmento: e.target.value })}
-              placeholder="Ex.: Coworking / imobiliário"
+              placeholder="Ex.: coworking premium, imobiliária de alto padrão"
             />
+            <div className="pm-hint" style={{ marginTop: 4 }}>Especialidade/nicho dentro do ramo (texto livre) — afina personas e conteúdo.</div>
           </div>
         </div>
       </PSection>
