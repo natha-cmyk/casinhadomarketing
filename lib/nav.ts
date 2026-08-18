@@ -89,6 +89,7 @@ export const META: Record<string, NavItem> = Object.fromEntries(
 // painéis que respeitam o filtro temporal (janela de data do analytics social).
 // Só as redes sociais usam período; nas demais os controles ficam OCULTOS.
 export const TEMPORAL = [
+  "overview", // Painel (visão geral) — período controlado pela barra de cima, igual aos demais
   "instagram", "tiktok", "x", "facebook", "linkedin", "youtube",
   "threads", "reddit", "pinterest", "bluesky", "snapchat", "googlebusiness",
   "ads", "canais", // Canais Pagos e Geração também usam período

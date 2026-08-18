@@ -11,16 +11,7 @@ import { PageHead, KpiCard } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { ChannelSummaryCard, ChannelBrandIcon } from "@/components/ChannelSummaryCard";
 import { fmt, kfmt, sum } from "@/lib/format";
-import { daysInMonth, scopeLabelText, MONTHS, MONTHS_FULL, type Period } from "@/lib/scope";
-
-// mesmo conjunto de períodos da Toolbar global (semana/mês/trimestre/ano)
-const PERIODS: { value: Period; label: string }[] = [
-  { value: "semana", label: "Semana" },
-  { value: "mes", label: "Mês" },
-  { value: "trimestre", label: "Trimestre" },
-  { value: "ano", label: "Ano" },
-];
-const YEARS = [2024, 2025, 2026];
+import { daysInMonth, type Period } from "@/lib/scope";
 
 const redeCor = (p: string) =>
   REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.cor || "#121111";
@@ -71,15 +62,6 @@ export function PainelView() {
   const s = useStore();
   const storeAccounts = useStore((st) => st.zernioAccounts);
   const range = dateRange(s);
-  // rótulo legível do escopo selecionado na toolbar (ex.: "Agosto de 2026"),
-  // para deixar EXPLÍCITO de que período são os números do overview.
-  const periodoLabel = scopeLabelText({
-    period: s.period,
-    year: s.year,
-    month: s.month,
-    week: s.week,
-    quarter: s.quarter,
-  });
   const cacheKey = `${range.since}|${range.until}`;
 
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(SUMMARY_CACHE.get(cacheKey) ?? null);
@@ -153,11 +135,7 @@ export function PainelView() {
 
   return (
     <>
-      <PageHead
-        eyebrow="VISÃO GERAL"
-        title="Painel"
-        desc="Resumo do ambiente — o indicador primário de cada canal conectado, de cara. Conecte suas redes em Personalização para popular os indicadores."
-      />
+      <PageHead eyebrow="VISÃO GERAL" title="Painel" />
 
       {isEmpty ? (
         <div className="empty">
@@ -175,91 +153,7 @@ export function PainelView() {
         <Spinner texto="Carregando visão geral…" />
       ) : (
         <div className="grid" style={{ gap: 16 }}>
-          {/* Filtro de período — mesmo controle dos outros painéis (Canais, Geração, ADS).
-              Troque a janela aqui mesmo; todos os números abaixo reagem via dateRange(s). */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-              padding: "11px 16px",
-              borderRadius: 12,
-              background: "color-mix(in srgb, var(--cyan) 8%, #fff)",
-              border: "1px solid color-mix(in srgb, var(--cyan) 22%, transparent)",
-            }}
-          >
-            <span
-              aria-hidden
-              style={{ display: "grid", placeItems: "center", color: "var(--cyan)", flex: "0 0 auto" }}
-            >
-              📅
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--label-3)", textTransform: "uppercase" }}>
-              Período
-            </span>
-
-            {/* segmented semana/mês/trimestre/ano */}
-            <div className="seg small">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.value}
-                  className={s.period === p.value ? "on" : ""}
-                  onClick={() => s.setPeriod(p.value)}
-                  type="button"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            {/* sub-seletores finos (mês/W1–W4/trimestre) — iguais aos dos outros painéis */}
-            {s.period === "mes" && (
-              <select className="tb-select" value={s.month} onChange={(e) => s.setMonth(Number(e.target.value))} aria-label="Mês">
-                {MONTHS_FULL.map((m, i) => (
-                  <option key={i} value={i}>{m}</option>
-                ))}
-              </select>
-            )}
-            {s.period === "semana" && (
-              <>
-                <select className="tb-select" value={s.month} onChange={(e) => s.setMonth(Number(e.target.value))} aria-label="Mês">
-                  {MONTHS.map((m, i) => (
-                    <option key={i} value={i}>{m}</option>
-                  ))}
-                </select>
-                <select className="tb-select" value={s.week} onChange={(e) => s.setWeek(Number(e.target.value))} aria-label="Semana">
-                  {[0, 1, 2, 3].map((w) => (
-                    <option key={w} value={w}>{"W" + (w + 1)}</option>
-                  ))}
-                </select>
-              </>
-            )}
-            {s.period === "trimestre" && (
-              <select className="tb-select" value={s.quarter} onChange={(e) => s.setQuarter(Number(e.target.value))} aria-label="Trimestre">
-                {[0, 1, 2, 3].map((q) => (
-                  <option key={q} value={q}>{"Q" + (q + 1)}</option>
-                ))}
-              </select>
-            )}
-
-            {/* seletor de ano */}
-            <div className="seg small">
-              {YEARS.map((y) => (
-                <button key={y} className={s.year === y ? "on" : ""} onClick={() => s.setYear(y)} type="button">
-                  {y}
-                </button>
-              ))}
-            </div>
-
-            {/* rótulo do escopo atual — deixa EXPLÍCITO qual janela está em análise */}
-            <span className="tnum" style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "-.2px", color: "var(--label)" }}>
-              {periodoLabel}
-            </span>
-            <span style={{ fontSize: 12, color: "var(--label-2)", fontWeight: 500 }}>
-              — dados fechados deste período (não “hoje”)
-            </span>
-          </div>
+          {/* Período controlado pela barra de cima (Toolbar), igual aos demais painéis. */}
 
           {/* KPIs-herói agregados da empresa (no período selecionado) */}
           <div className="grid kpis">
@@ -275,7 +169,7 @@ export function PainelView() {
               <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".6px", color: "var(--label-3)", textTransform: "uppercase" }}>
-                    Produção de conteúdo <span style={{ color: "var(--label-2)", fontWeight: 600 }}>· {periodoLabel}</span>
+                    Produção de conteúdo
                   </div>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
                     <span className="tnum" style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-1px", lineHeight: 1, color: "var(--label)" }}>
@@ -329,7 +223,6 @@ export function PainelView() {
                   metrics={g.accts[0].metrics || {}}
                   posts={g.accts[0].posts}
                   cor={redeCor(g.platform)}
-                  periodLabel={periodoLabel}
                   locations={g.accts[0].locations}
                 />
               ) : (
@@ -361,8 +254,7 @@ export function PainelView() {
                         metrics={a.metrics || {}}
                         posts={a.posts}
                         cor={redeCor(a.platform)}
-                        periodLabel={periodoLabel}
-                        hideBrand
+                              hideBrand
                       />
                     ))}
                   </div>

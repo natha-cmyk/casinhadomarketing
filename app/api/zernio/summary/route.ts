@@ -80,7 +80,14 @@ async function summarize(a: ZernioAccount, range: { since: string; until: string
           ]);
           base.metrics = flatten(r?.metrics);
           if (locs?.locations?.length) {
-            base.locations = locs.locations.map((l) => ({ id: l.id, name: l.name, address: l.address }));
+            base.locations = locs.locations.map((l) => {
+              const x = l as unknown as Record<string, unknown>;
+              const nome =
+                (l.name && String(l.name).trim()) ||
+                (x.locationName as string) || (x.title as string) || (x.storeCode as string) ||
+                (x.address as string) || "Ficha";
+              return { id: String(l.id ?? x.locationId ?? nome), name: String(nome), address: l.address };
+            });
           }
         } else if (IG_LIKE.has(platform)) {
           const r = await accountInsightsFull(platform, a._id, range);

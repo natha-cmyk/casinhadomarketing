@@ -149,7 +149,6 @@ export function ChannelSummaryCard({
   metrics,
   posts,
   cor,
-  periodLabel,
   hideBrand = false,
   locations,
 }: {
@@ -160,7 +159,6 @@ export function ChannelSummaryCard({
   metrics: Record<string, number>;
   posts?: number | null;
   cor: string;
-  periodLabel?: string;
   hideBrand?: boolean; // dentro do grupo multi-conta: cabeçalho do grupo já mostra rede+ícone
   locations?: { id: string; name: string; address?: string }[]; // fichas do GBP (mostra as N juntas)
 }) {
@@ -269,40 +267,36 @@ export function ChannelSummaryCard({
         ))}
       </div>
 
-      {/* período dos indicadores — reforço explícito de que os números são da janela selecionada */}
-      {periodLabel && (
-        <div style={{ fontSize: 11, color: "var(--label-3)", fontWeight: 500, marginTop: -4 }}>
-          Indicadores no período: <span style={{ color: "var(--label-2)", fontWeight: 600 }}>{periodLabel}</span>
-        </div>
-      )}
-
-      {/* fichas do GBP — mostra as N localizações juntas (métricas refletem a ficha ativa na integração) */}
+      {/* fichas do GBP — lista as N localizações com nome + endereço (métricas = ficha ativa) */}
       {locations && locations.length > 0 && (
         <div style={{ paddingTop: 12, borderTop: "1px solid var(--hairline)" }}>
-          <div style={{ fontSize: 11.5, color: "var(--label-3)", fontWeight: 600, marginBottom: 7 }}>
+          <div style={{ fontSize: 11.5, color: "var(--label-3)", fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: ".4px" }}>
             {locations.length === 1 ? "Ficha conectada" : `${locations.length} fichas conectadas`}
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {locations.map((l) => (
-              <span
+              <div
                 key={l.id}
-                title={l.address || l.name}
                 style={{
-                  display: "inline-flex", alignItems: "center", gap: 5, maxWidth: "100%",
-                  padding: "3px 9px", borderRadius: 999, fontSize: 11.5, fontWeight: 600,
-                  background: `color-mix(in srgb, ${cor} 9%, #fff)`,
-                  border: `1px solid color-mix(in srgb, ${cor} 22%, transparent)`,
-                  color: "var(--label-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  display: "flex", alignItems: "flex-start", gap: 8,
+                  padding: "8px 11px", borderRadius: 10,
+                  background: `color-mix(in srgb, ${cor} 6%, #fff)`,
+                  border: `1px solid color-mix(in srgb, ${cor} 20%, transparent)`,
                 }}
               >
-                <span aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: cor, flex: "0 0 6px" }} />
-                {l.name}
-              </span>
+                <span aria-hidden style={{ width: 7, height: 7, borderRadius: "50%", background: cor, flex: "0 0 7px", marginTop: 5 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--label)", overflow: "hidden", textOverflow: "ellipsis" }}>{l.name}</div>
+                  {l.address && (
+                    <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{l.address}</div>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
           {locations.length > 1 && (
-            <div style={{ fontSize: 10.5, color: "var(--label-3)", marginTop: 7 }}>
-              Indicadores refletem a ficha ativa. Troque a ficha no painel do Google.
+            <div style={{ fontSize: 10.5, color: "var(--label-3)", marginTop: 8 }}>
+              Os indicadores acima refletem a ficha ativa na integração. Troque a ficha no painel do Google.
             </div>
           )}
         </div>
