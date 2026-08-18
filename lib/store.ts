@@ -115,11 +115,13 @@ export interface UIState {
   calManuais: string[];
   // personalização dos agentes por workspace: { agentKey: {enabled, panels, promptExtra} }. Persistido no config.
   agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
+  // layout dos widgets por painel (ordem + tamanho sm/lg + ocultos). Persistido no config.
+  widgetLayout: Record<string, { order: string[]; size: Record<string, "sm" | "lg">; hidden: string[] }>;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string }> } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, unknown> } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -147,6 +149,7 @@ export interface UIState {
   addCalManual: (nome: string) => void;
   removeCalManual: (nome: string) => void;
   setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
+  setWidgetLayout: (panel: string, layout: { order: string[]; size: Record<string, "sm" | "lg">; hidden: string[] }) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
@@ -211,6 +214,7 @@ export const useStore = create<UIState>((set) => ({
   cardOrder: {},
   calManuais: [],
   agentsConfig: {},
+  widgetLayout: {},
 
   set: (patch) => set(patch),
   addManualAd: (a) => set((s) => ({ manualAds: [...s.manualAds, a] })),
@@ -239,6 +243,8 @@ export const useStore = create<UIState>((set) => ({
       const cur = s.agentsConfig[key] ?? { enabled: true, panels: null, promptExtra: "" };
       return { agentsConfig: { ...s.agentsConfig, [key]: { ...cur, ...patch } } };
     }),
+  setWidgetLayout: (panel, layout) =>
+    set((s) => ({ widgetLayout: { ...s.widgetLayout, [panel]: layout } })),
   setZernioAccounts: (accounts) =>
     set((s) => {
       // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).
@@ -276,6 +282,7 @@ export const useStore = create<UIState>((set) => ({
         if (d.config.customInd) patch.customInd = d.config.customInd;
         if (Array.isArray(d.config.calManuais)) patch.calManuais = d.config.calManuais;
         if (d.config.agentsConfig && typeof d.config.agentsConfig === "object") patch.agentsConfig = d.config.agentsConfig;
+        if (d.config.widgetLayout && typeof d.config.widgetLayout === "object") patch.widgetLayout = d.config.widgetLayout as UIState["widgetLayout"];
       }
       if (d.perfil) patch.perfil = d.perfil;
       if (d.okr && d.okr.areas) patch.okr = d.okr;

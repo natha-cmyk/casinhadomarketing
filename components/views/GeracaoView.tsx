@@ -10,6 +10,7 @@ import { Spinner } from "@/components/Spinner";
 import { Ic } from "@/components/Ic";
 import { fmt, money } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
+import { WidgetBoard } from "@/components/WidgetBoard";
 
 // ── tipos ──
 interface CrmConfig {
@@ -827,32 +828,20 @@ function Dashboard({ data }: { data: LeadsData }) {
         </div>
       </div>
 
-      {/* pizza/lista em XADREZ + align-items:start (card curto não estica e não cria vazio) */}
-      <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
-        <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" />
-        <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} />
-      </div>
-
-      <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
-        <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} />
-        <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars />
-      </div>
-
-      <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
-        <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} />
-        <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} />
-      </div>
-
-      {data.lossReasons.length > 0 && (
-        <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
-          <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} />
-        </div>
-      )}
-
-      {/* Saúde por canal — movida pra baixo (conversão por canal) */}
-      {data.channelHealth && data.channelHealth.length > 0 && (
-        <ChannelHealthCard rows={data.channelHealth} />
-      )}
+      {/* Widgets organizáveis (arrasta, redimensiona, oculta) — persiste por painel */}
+      <WidgetBoard
+        panel="crm"
+        widgets={[
+          { id: "canal", label: "Por canal", defaultSize: "sm", node: <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" /> },
+          { id: "categoria", label: "Por categoria de produto", defaultSize: "sm", node: <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} /> },
+          { id: "produto", label: "Por tipo de produto", defaultSize: "sm", node: <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} /> },
+          { id: "qualificacao", label: "Por qualificação", defaultSize: "sm", node: <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
+          { id: "funil", label: "Por funil / etapa", defaultSize: "sm", node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
+          { id: "status", label: "Por status", defaultSize: "sm", node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
+          ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSize: "sm" as const, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
+          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Saúde por canal", defaultSize: "lg" as const, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
+        ]}
+      />
 
       <LeadsTable leads={data.leads} />
     </>
