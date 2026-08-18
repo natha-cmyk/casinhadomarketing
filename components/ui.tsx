@@ -128,16 +128,19 @@ export function KpiCard({
   val,
   foot,
   children,
+  tone,
 }: {
   lbl: string;
   val: ReactNode;
   foot?: ReactNode;
   children?: ReactNode; // bloco de comparação (cmp)
+  tone?: "pos" | "neg"; // realça o valor (ganho = verde, perda = vermelho)
 }) {
+  const color = tone === "pos" ? "var(--excelente)" : tone === "neg" ? "var(--red)" : undefined;
   return (
     <div className="card kpi">
       <div className="lbl">{lbl}</div>
-      <div className="val tnum">{val}</div>
+      <div className="val tnum" style={color ? { color } : undefined}>{val}</div>
       {children && <div className="cmp">{children}</div>}
       {foot && <div className="foot">{foot}</div>}
     </div>

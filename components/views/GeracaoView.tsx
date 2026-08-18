@@ -18,6 +18,7 @@ interface CrmConfig {
   clickupListId: string | null;
   fieldMap: Record<string, string>;
   webhookSecret: string | null;
+  lastSyncAt?: string | null;
 }
 interface CrmField {
   name: string;
@@ -92,6 +93,14 @@ const FIELD_KEYS: { k: string; lbl: string; hint: string }[] = [
   { k: "value", lbl: "Valor (R$)", hint: "ticket / receita" },
   { k: "lossReason", lbl: "Motivo de perda", hint: "quando perdido" },
 ];
+
+// rótulo "última sincronização" a partir do carimbo ISO da config.
+function lastSyncLabel(iso?: string | null): string {
+  if (!iso) return "nunca sincronizado";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return "sincronizado " + d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
 
 const CHANNEL_COLORS = ["var(--cyan)", "var(--red)", "var(--excelente)", "var(--atencao)", "var(--ink)"];
 const OUTCOME = {
@@ -173,34 +182,49 @@ export function GeracaoView() {
     return d.config as CrmConfig;
   }
 
-  // full=true força re-sync completo; padrão é incremental (só o que mudou desde o último sync).
-  async function sync(full = false) {
+  // full=true força re-sync completo; padrão é incremental. silent=true não mostra mensagem
+  // (usado no auto-sync ao abrir a tela).
+  async function sync(full = false, silent = false) {
     setSyncing(true);
     setErr(null);
-    setMsg(null);
+    if (!silent) setMsg(null);
     try {
       const r = await fetch(`/api/crm/sync${full ? "?full=1" : ""}`, { method: "POST" });
       const d = await r.json();
       if (!d?.ok) {
-        setErr(d?.error || "Falha na sincronização.");
+        if (!silent) setErr(d?.error || "Falha na sincronização.");
         return;
       }
-      const tipo = d.incremental ? "atualizados" : "importados";
-      setMsg(
-        d.imported === 0
-          ? "Tudo em dia — nenhuma mudança desde o último sync."
-          : `${d.imported} ${d.imported === 1 ? "lead" : "leads"} ${tipo} do ClickUp.`
-      );
+      if (!silent) {
+        const tipo = d.incremental ? "atualizados" : "importados";
+        setMsg(
+          d.imported === 0
+            ? "Tudo em dia — nenhuma mudança desde o último sync."
+            : `${d.imported} ${d.imported === 1 ? "lead" : "leads"} ${tipo} do ClickUp.`
+        );
+      }
+      // atualiza carimbo de última sync na config local
+      setConfig((c) => (c ? { ...c, lastSyncAt: new Date().toISOString() } : c));
       // recarrega leads
       const lr = await fetch(`/api/crm/leads?since=${range.since}&until=${range.until}`, { cache: "no-store" });
       const ld = await lr.json();
       if (ld?.ok) setData(ld);
     } catch (e) {
-      setErr(String(e));
+      if (!silent) setErr(String(e));
     } finally {
       setSyncing(false);
     }
   }
+
+  // Auto-sync ao abrir a tela conectada (incremental, silencioso) — 1x por montagem.
+  const [autoSynced, setAutoSynced] = useState(false);
+  useEffect(() => {
+    if (connected && config?.provider === "clickup" && !autoSynced) {
+      setAutoSynced(true);
+      sync(false, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, config?.provider, autoSynced]);
 
   return (
     <>
@@ -210,9 +234,10 @@ export function GeracaoView() {
         desc="De onde vêm os leads — por canal, produto, qualificação, etapa e motivo de perda."
         right={
           connected ? (
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               {config?.provider === "clickup" && (
                 <>
+                  <span style={{ fontSize: 11.5, color: "var(--label-3)" }}>{lastSyncLabel(config?.lastSyncAt)}</span>
                   <button className="btn-link ig" onClick={() => sync(false)} disabled={syncing} type="button" title="Puxa só o que mudou desde o último sync">
                     <Ic name="leads" /> {syncing ? "Sincronizando…" : "Sincronizar"}
                   </button>
@@ -483,6 +508,39 @@ function ConnectCard({
   );
 }
 
+// rótulo de valor vazio → "Não preenchido" (o traçado do CRM = campo não preenchido).
+const NAO_PREENCHIDO = "Não preenchido";
+const fill = (v: string | null | undefined) => (v && String(v).trim() ? String(v) : NAO_PREENCHIDO);
+
+// ── barra de desfecho: ganho / em aberto / perdido, proporcional ──
+function OutcomeBar({ won, lost, open }: { won: number; lost: number; open: number }) {
+  const total = won + lost + open;
+  if (total === 0) return null;
+  const seg = [
+    { n: won, c: "var(--excelente)", l: "Ganhos" },
+    { n: open, c: "var(--cyan)", l: "Em aberto" },
+    { n: lost, c: "var(--red)", l: "Perdidos" },
+  ].filter((x) => x.n > 0);
+  return (
+    <div>
+      <div style={{ display: "flex", height: 14, borderRadius: 999, overflow: "hidden", background: "var(--cream)" }}>
+        {seg.map((x) => (
+          <div key={x.l} title={`${x.l}: ${fmt(x.n)}`} style={{ width: `${(x.n / total) * 100}%`, background: x.c }} />
+        ))}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
+        {seg.map((x) => (
+          <span key={x.l} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--label-2)" }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: x.c }} />
+            {x.l} <b className="tnum">{fmt(x.n)}</b>
+            <span style={{ color: "var(--label-3)" }}>({Math.round((x.n / total) * 100)}%)</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── card de agrupamento (canal / categoria / produto / qualificação) ──
 function GroupCard({
   title,
@@ -506,7 +564,7 @@ function GroupCard({
         rows.map((r, i) => (
           <BarRow
             key={r.key}
-            k={r.key}
+            k={fill(r.key)}
             v={r.count}
             max={max}
             color={typeof color === "function" ? color(i) : color}
@@ -541,22 +599,19 @@ function Dashboard({ data }: { data: LeadsData }) {
     <>
       <div className="grid kpis" style={{ marginBottom: 16 }}>
         <KpiCard lbl="Total de leads" val={fmt(data.total)} foot="no período" />
-        <KpiCard lbl="Oportunidades em aberto" val={fmt(data.open)} foot="em negociação" />
-        <KpiCard lbl="Valor em pipeline" val={money(data.pipelineValue)} foot="oportunidades abertas" />
-        <KpiCard
-          lbl="Ganhos / perdidos"
-          val={`${fmt(data.won)} / ${fmt(data.lost)}`}
-          foot={`R$ ganho ${money(data.wonValue)}`}
-        />
+        <KpiCard lbl="Em aberto" val={fmt(data.open)} foot={`${money(data.pipelineValue)} em pipeline`} />
+        <KpiCard lbl="Ganhos" val={fmt(data.won)} foot={`${money(data.wonValue)} fechado`} tone="pos" />
+        <KpiCard lbl="Perdidos" val={fmt(data.lost)} foot={`conversão ${conv}`} tone="neg" />
       </div>
 
-      {/* Saúde do CRM — indicadores consolidados do que a API devolveu (nada inventado) */}
+      {/* Saúde do CRM — indicadores consolidados + barra de desfecho (ganho/aberto/perdido) */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-head">
           <div className="t">Saúde do CRM</div>
           <span className="badge">no período</span>
         </div>
-        <div className="mini">
+        <OutcomeBar won={data.won} lost={data.lost} open={data.open} />
+        <div className="mini" style={{ marginTop: 14 }}>
           <MiniStat l="Total de leads" n={fmt(data.total)} />
           <MiniStat l="Taxa de conversão" n={conv} />
           <MiniStat l="Em aberto" n={fmt(data.open)} />
@@ -608,33 +663,95 @@ function Dashboard({ data }: { data: LeadsData }) {
   );
 }
 
-// ── tabela de leads (amostra) ──
+// célula vazia → "não preenchido" (muted). O traçado do CRM = campo não preenchido.
+function Cell({ v }: { v: string | null }) {
+  if (v && v.trim()) return <>{v}</>;
+  return <span style={{ color: "var(--label-3)", fontStyle: "italic", fontSize: 12 }}>não preenchido</span>;
+}
+
+// ── tabela de leads: filtros por dimensão + colapso (mostra N, expande o resto) ──
+const PAGE = 20;
 function LeadsTable({ leads }: { leads: LeadRow[] }) {
+  const [fCanal, setFCanal] = useState("");
+  const [fCategoria, setFCategoria] = useState("");
+  const [fProduto, setFProduto] = useState("");
+  const [fQualif, setFQualif] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const [expanded, setExpanded] = useState(false);
+
+  // valores únicos por dimensão (pra os selects) — inclui "não preenchido" quando houver vazios
+  const uniq = (get: (l: LeadRow) => string | null) => {
+    const set = new Set<string>();
+    let temVazio = false;
+    for (const l of leads) {
+      const v = get(l);
+      if (v && v.trim()) set.add(v.trim());
+      else temVazio = true;
+    }
+    const arr = [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    if (temVazio) arr.push(NAO_PREENCHIDO);
+    return arr;
+  };
+  const opts = useMemo(
+    () => ({
+      canal: uniq((l) => l.channel),
+      categoria: uniq((l) => l.category),
+      produto: uniq((l) => l.product),
+      qualif: uniq((l) => l.qualification),
+      status: uniq((l) => l.status),
+    }),
+    [leads]
+  );
+
+  // aplica filtros (matcha "Não preenchido" contra valores vazios)
+  const match = (v: string | null, f: string) => {
+    if (!f) return true;
+    const val = v && v.trim() ? v.trim() : NAO_PREENCHIDO;
+    return val === f;
+  };
+  const filtered = leads.filter(
+    (l) =>
+      match(l.channel, fCanal) &&
+      match(l.category, fCategoria) &&
+      match(l.product, fProduto) &&
+      match(l.qualification, fQualif) &&
+      match(l.status, fStatus)
+  );
+  const shown = expanded ? filtered : filtered.slice(0, PAGE);
+  const hasFilter = !!(fCanal || fCategoria || fProduto || fQualif || fStatus);
+  const clear = () => { setFCanal(""); setFCategoria(""); setFProduto(""); setFQualif(""); setFStatus(""); };
+
   if (!leads.length) return null;
-  const th: React.CSSProperties = {
-    textAlign: "left",
-    padding: "8px 10px",
-    fontSize: 11,
-    letterSpacing: ".02em",
-    textTransform: "uppercase",
-    color: "var(--label-3)",
-    fontWeight: 600,
-    whiteSpace: "nowrap",
-  };
-  const td: React.CSSProperties = {
-    padding: "9px 10px",
-    fontSize: 13,
-    borderTop: "1px solid var(--hairline, rgba(0,0,0,.06))",
-    verticalAlign: "top",
-  };
-  const dim = (v: string | null) => (v && v.trim() ? v : "—");
+
+  const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: 11, letterSpacing: ".02em", textTransform: "uppercase", color: "var(--label-3)", fontWeight: 600, whiteSpace: "nowrap" };
+  const td: React.CSSProperties = { padding: "9px 10px", fontSize: 13, borderTop: "1px solid var(--hairline, rgba(0,0,0,.06))", verticalAlign: "top" };
+  const selStyle: React.CSSProperties = { fontSize: 12.5 };
+
+  const FilterSelect = ({ v, set, list, ph }: { v: string; set: (s: string) => void; list: string[]; ph: string }) =>
+    list.length > 1 ? (
+      <select className="field-edit" style={selStyle} value={v} onChange={(e) => set(e.target.value)} aria-label={ph}>
+        <option value="">{ph}</option>
+        {list.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    ) : null;
 
   return (
     <div className="card">
       <div className="card-head">
         <div className="t">Leads</div>
-        <span className="badge">{leads.length}</span>
+        <span className="badge">{hasFilter ? `${filtered.length}/${leads.length}` : leads.length}</span>
       </div>
+
+      {/* filtros por dimensão */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <FilterSelect v={fCanal} set={setFCanal} list={opts.canal} ph="Todos os canais" />
+        <FilterSelect v={fCategoria} set={setFCategoria} list={opts.categoria} ph="Todas as categorias" />
+        <FilterSelect v={fProduto} set={setFProduto} list={opts.produto} ph="Todos os produtos" />
+        <FilterSelect v={fQualif} set={setFQualif} list={opts.qualif} ph="Todas as qualificações" />
+        <FilterSelect v={fStatus} set={setFStatus} list={opts.status} ph="Todos os status" />
+        {hasFilter && <button className="btn-link" type="button" onClick={clear}>Limpar filtros</button>}
+      </div>
+
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -649,44 +766,46 @@ function LeadsTable({ leads }: { leads: LeadRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {leads.map((l) => {
+            {shown.map((l) => {
               const oc = OUTCOME[l.outcome];
               return (
                 <tr key={l.id}>
                   <td style={td}>
-                    <div style={{ fontWeight: 600 }}>{dim(l.title)}</div>
+                    <div style={{ fontWeight: 600 }}><Cell v={l.title} /></div>
                     {l.lossReason && l.lossReason.trim() && (
                       <div style={{ fontSize: 11.5, color: "var(--red)" }}>Perda: {l.lossReason}</div>
                     )}
                   </td>
-                  <td style={td}>{dim(l.channel)}</td>
-                  <td style={td}>{dim(l.category)}</td>
-                  <td style={td}>{dim(l.product)}</td>
-                  <td style={td}>{dim(l.qualification)}</td>
+                  <td style={td}><Cell v={l.channel} /></td>
+                  <td style={td}><Cell v={l.category} /></td>
+                  <td style={td}><Cell v={l.product} /></td>
+                  <td style={td}><Cell v={l.qualification} /></td>
                   <td style={td}>
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: oc.color,
-                      }}
-                    >
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: oc.color }}>
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: oc.color, display: "inline-block" }} />
-                      {dim(l.status)}
+                      <Cell v={l.status} />
                     </span>
                   </td>
                   <td style={{ ...td, textAlign: "right" }} className="tnum">
-                    {l.value > 0 ? money(l.value) : "—"}
+                    {l.value > 0 ? money(l.value) : <span style={{ color: "var(--label-3)" }}>—</span>}
                   </td>
                 </tr>
               );
             })}
+            {shown.length === 0 && (
+              <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: "var(--label-3)" }}>Nenhum lead com esses filtros.</td></tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {filtered.length > PAGE && (
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <button className="btn-link" type="button" onClick={() => setExpanded((e) => !e)}>
+            {expanded ? "Recolher" : `Ver todos os ${filtered.length}`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
