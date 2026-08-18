@@ -7,6 +7,8 @@ export const ICONS: Record<string, string> = {
   ads: '<path d="M3 11v2a1 1 0 0 0 1 1h3l4 4V6L7 10H4a1 1 0 0 0-1 1Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8 8 0 0 1 0 12"/>',
   goal: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
   cal: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9h17M8 3v4M16 3v4"/>',
+  invoice: '<path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+  gift: '<rect x="3.5" y="8.5" width="17" height="4" rx="1"/><path d="M5 12.5V20h14v-7.5M12 8.5V20"/><path d="M12 8.5C12 6 10.5 4.5 9 4.5S6.5 6 8 8.5M12 8.5C12 6 13.5 4.5 15 4.5S17.5 6 16 8.5"/>',
   persona: '<circle cx="12" cy="8.5" r="4"/><path d="M5 20c0-3.3 3.1-5 7-5s7 1.7 7 5"/>',
   vs: '<path d="M4 6h7M4 12h7M4 18h7"/><path d="M20 6l-3 6 3 6M17 12h-4"/>',
   cfg: '<path d="M9 6a2 2 0 1 0 0 .01M5 6h2M11 6h8M15 12a2 2 0 1 0 0 .01M5 12h8M17 12h2M8 18a2 2 0 1 0 0 .01M5 18h1M10 18h9"/>',
@@ -79,6 +81,7 @@ export const NAV: NavGroup[] = [
       { id: "concorrencia", label: "Concorrência", icon: "vs", title: "Concorrência" },
     ],
   },
+  { group: "Conta", items: [{ id: "assinatura", label: "Assinatura & Indicações", icon: "invoice", live: true, title: "Assinatura & Indicações" }] },
   { group: "Configuração", items: [{ id: "config", label: "Personalização", icon: "cfg", live: true, title: "Personalização" }] },
 ];
 
@@ -113,6 +116,7 @@ const VIEW_PATH: Record<string, string> = {
   persona: "/persona",
   concorrencia: "/concorrencia",
   config: "/personalizacao",
+  assinatura: "/assinatura",
 };
 
 export function pathForView(id: string): string {
