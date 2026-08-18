@@ -18,14 +18,26 @@ export async function getProfileIds(ws: Workspace): Promise<string[]> {
   return [...ids];
 }
 
-// contas conectadas de TODOS os profiles do workspace (dedupe por _id)
+// micro-cache TTL da lista de contas por workspace. Muitos painéis chamam
+// listWorkspaceAccounts quase ao mesmo tempo (overview, ads, gbp, calendário…);
+// cachear ~30s corta round-trips repetidos à integração e acelera o carregamento.
+// Escopo do processo (por instância serverless) — some sozinho no cold start.
+const ACCT_TTL = 15_000;
+const acctCache = new Map<string, { at: number; data: ZernioAccount[] }>();
+
+// contas conectadas de TODOS os profiles do workspace (dedupe por _id) — com cache curto.
 export async function listWorkspaceAccounts(ws: Workspace): Promise<ZernioAccount[]> {
   const ids = await getProfileIds(ws);
   if (!ids.length) return [];
+  const key = ids.slice().sort().join(",");
+  const hit = acctCache.get(key);
+  if (hit && Date.now() - hit.at < ACCT_TTL) return hit.data;
+
   const lists = await Promise.all(ids.map((pid) => listAccounts(pid).then((r) => r.accounts).catch(() => [] as ZernioAccount[])));
   const seen = new Set<string>();
   const out: ZernioAccount[] = [];
   for (const arr of lists) for (const a of arr) if (a?._id && !seen.has(a._id)) { seen.add(a._id); out.push(a); }
+  acctCache.set(key, { at: Date.now(), data: out });
   return out;
 }
 
