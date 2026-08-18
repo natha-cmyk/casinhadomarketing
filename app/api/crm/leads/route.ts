@@ -82,6 +82,14 @@ export async function GET(req: Request) {
     const lossReasons = new Map<string, Bucket>();
     const sourceTally: Record<string, Map<string, number>> = {}; // dim → {campo: contagem} p/ transparência
     const fieldSeen = new Map<string, { type: string; sample: string | null; filled: number }>(); // campos ClickUp vistos
+    // saúde por canal: desfecho por canal (conversão, ganho/perdido/aberto)
+    const chan = new Map<string, { total: number; won: number; lost: number; open: number; value: number }>();
+    const chanBump = (key: string, oc: Outcome, v: number) => {
+      const k = (key && key.trim()) || "";
+      const c = chan.get(k) ?? { total: 0, won: 0, lost: 0, open: 0, value: 0 };
+      c.total += 1; c[oc] += 1; if (oc === "won") c.value += v;
+      chan.set(k, c);
+    };
 
     let totalValue = 0, pipelineValue = 0, wonValue = 0, won = 0, lost = 0, open = 0;
 
@@ -141,6 +149,7 @@ export async function GET(req: Request) {
       if (outcome === "won") { won += 1; wonValue += v; }
       else if (outcome === "lost") { lost += 1; if (it.lossReason && it.lossReason.trim()) tally(lossReasons, it.lossReason, v); }
       else { open += 1; pipelineValue += v; }
+      chanBump(it.channel ?? "", outcome, v);
 
       return {
         id: l.id, title: l.title,
@@ -174,6 +183,9 @@ export async function GET(req: Request) {
       byStage: toRows(byStage),
       byStatus: toRows(byStatus),
       lossReasons: toRows(lossReasons),
+      channelHealth: [...chan.entries()]
+        .map(([key, c]) => ({ key, ...c, conv: c.total ? c.won / c.total : 0 }))
+        .sort((a, b) => b.total - a.total),
       mapping, // { dimensão: nome do campo ClickUp que alimentou }
       availableFields, // todos os campos personalizados vistos (p/ diagnóstico)
       leads: rows.slice(0, 500),

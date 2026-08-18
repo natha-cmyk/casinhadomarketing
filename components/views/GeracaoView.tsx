@@ -64,6 +64,7 @@ interface LeadsData {
   leads: LeadRow[];
   mapping?: Record<string, string | null>; // dimensão → campo do ClickUp que alimentou (transparência)
   availableFields?: { name: string; type: string; filled: number; sample: string | null }[];
+  channelHealth?: { key: string; total: number; won: number; lost: number; open: number; value: number; conv: number }[];
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -218,6 +219,13 @@ export function GeracaoView() {
     }
   }
 
+  // O aviso de sync some sozinho depois de 5s (não fica fixo na tela).
+  useEffect(() => {
+    if (!msg) return;
+    const t = setTimeout(() => setMsg(null), 5000);
+    return () => clearTimeout(t);
+  }, [msg]);
+
   // Auto-sync ao abrir a tela conectada (incremental, silencioso) — 1x por montagem.
   const [autoSynced, setAutoSynced] = useState(false);
   useEffect(() => {
@@ -240,10 +248,10 @@ export function GeracaoView() {
               {config?.provider === "clickup" && (
                 <>
                   <span style={{ fontSize: 11.5, color: "var(--label-3)" }}>{lastSyncLabel(config?.lastSyncAt)}</span>
-                  <button className="btn-link ig" onClick={() => sync(false)} disabled={syncing} type="button" title="Puxa só o que mudou desde o último sync">
-                    <Ic name="leads" /> {syncing ? "Sincronizando…" : "Sincronizar"}
+                  <button className="btn-link ig" onClick={() => sync(false)} disabled={syncing} type="button" title="Rápido: puxa só os leads que mudaram desde o último sync.">
+                    <Ic name="leads" /> {syncing ? "Sincronizando…" : "Sincronizar (rápido)"}
                   </button>
-                  <button className="btn-link" onClick={() => sync(true)} disabled={syncing} type="button" title="Reprocessa todos os leads do zero">
+                  <button className="btn-link" onClick={() => sync(true)} disabled={syncing} type="button" title="Completo: reprocessa TODOS os leads do zero e remove os arquivados. Use quando arquivar/mudar campos no ClickUp.">
                     Ressincronizar tudo
                   </button>
                 </>
@@ -267,6 +275,8 @@ export function GeracaoView() {
           workspaceId={workspaceId}
           onSave={saveConfig}
           onDone={() => setEditing(false)}
+          mapping={data?.mapping}
+          fields={data?.availableFields}
         />
       )}
 
@@ -286,11 +296,15 @@ function ConnectCard({
   workspaceId,
   onSave,
   onDone,
+  mapping,
+  fields: liveFields,
 }: {
   config: CrmConfig | null;
   workspaceId: string;
   onSave: (p: Partial<CrmConfig>) => Promise<CrmConfig | null>;
   onDone: () => void;
+  mapping?: Record<string, string | null>;
+  fields?: LeadsData["availableFields"];
 }) {
   const [mode, setMode] = useState<string>(config?.provider === "webhook" ? "webhook" : "clickup");
   const [token, setToken] = useState(config?.clickupToken ?? "");
@@ -425,8 +439,12 @@ function ConnectCard({
             </div>
           )}
 
-          <div className="field-lbl" style={{ marginBottom: 8 }}>
+          <div className="field-lbl" style={{ marginBottom: 4 }}>
             Mapeamento de campos {fields ? "" : "(opcional — ou detecte acima)"}
+          </div>
+          <div className="pm-hint" style={{ marginBottom: 10 }}>
+            Deixe em <b>automático</b> pra eu detectar pelo nome do campo, ou <b>escolha o campo exato</b> do seu ClickUp
+            pra cada dimensão (o manual tem prioridade). O que você escolher aqui vale na leitura na hora.
           </div>
           <div
             className="grid"
@@ -443,7 +461,7 @@ function ConnectCard({
                     value={fieldMap[f.k] ?? ""}
                     onChange={(e) => setFieldMap((p) => ({ ...p, [f.k]: e.target.value }))}
                   >
-                    <option value="">— automático / não mapear —</option>
+                    <option value="">{mapping?.[f.k] ? `— automático (lendo: ${mapping[f.k]}) —` : "— automático / não mapear —"}</option>
                     {fieldNames.map((n) => (
                       <option key={n} value={n}>
                         {n}
@@ -470,6 +488,11 @@ function ConnectCard({
           >
             {saving ? "Salvando…" : "Conectar ClickUp"}
           </button>
+
+          {/* transparência: como a leitura funciona + campos vistos (movido do dashboard pra cá) */}
+          <div style={{ marginTop: 16 }}>
+            <ConnectionPanel mapping={mapping} fields={liveFields} />
+          </div>
         </div>
       )}
 
@@ -628,6 +651,7 @@ function GroupCard({
   empty,
   defaultViz = "list",
   stars = false,
+  showValue = true,
 }: {
   title: string;
   rows: Row[];
@@ -635,6 +659,7 @@ function GroupCard({
   empty: string;
   defaultViz?: "list" | "pizza";
   stars?: boolean; // qualificação: mostra ★ em vez de texto
+  showValue?: boolean; // false = só contagem (sem R$)
 }) {
   const [viz, setViz] = useState<"list" | "pizza">(defaultViz);
   const max = Math.max(1, ...rows.map((r) => r.count));
@@ -666,7 +691,7 @@ function GroupCard({
             v={r.count}
             max={max}
             color={typeof color === "function" ? color(i) : color}
-            formatted={r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}
+            formatted={showValue && r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}
           />
         ))
       )}
@@ -764,6 +789,11 @@ function Dashboard({ data }: { data: LeadsData }) {
 
   const cycle = (i: number) => CHANNEL_COLORS[i % CHANNEL_COLORS.length];
   const conv = `${(data.convRate * 100).toFixed(1)}%`;
+  // indicadores derivados (inteligência de marketing) — só do que já temos, sem inventar
+  const ticket = data.won ? data.wonValue / data.won : 0; // ticket médio do ganho
+  const lossRate = data.total ? data.lost / data.total : 0; // taxa de perda
+  const openRate = data.total ? data.open / data.total : 0; // % em aberto
+  const avgLead = data.total ? data.totalValue / data.total : 0; // valor médio por lead
 
   return (
     <>
@@ -774,7 +804,7 @@ function Dashboard({ data }: { data: LeadsData }) {
         <KpiCard lbl="Perdidos" val={fmt(data.lost)} foot={`conversão ${conv}`} tone="neg" />
       </div>
 
-      {/* Saúde do CRM — indicadores consolidados + barra de desfecho (ganho/aberto/perdido) */}
+      {/* Saúde do CRM — desfecho + KPIs originais + inteligência de marketing */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-head">
           <div className="t">Saúde do CRM</div>
@@ -790,49 +820,76 @@ function Dashboard({ data }: { data: LeadsData }) {
           <MiniStat l="Valor total" n={money(data.totalValue)} />
           <MiniStat l="Valor ganho" n={money(data.wonValue)} />
           <MiniStat l="Em pipeline" n={money(data.pipelineValue)} />
+          {/* inteligência de marketing */}
+          <MiniStat l="Ticket médio (ganho)" n={money(ticket)} />
+          <MiniStat l="Valor médio / lead" n={money(avgLead)} />
+          <MiniStat l="Taxa de perda" n={`${(lossRate * 100).toFixed(1)}%`} />
+          <MiniStat l="Em negociação" n={`${(openRate * 100).toFixed(1)}%`} />
         </div>
       </div>
 
-      <ConnectionPanel mapping={data.mapping} fields={data.availableFields} />
+      {/* Saúde por canal — conversão de cada canal (de onde vem lead que fecha) */}
+      {data.channelHealth && data.channelHealth.length > 0 && (
+        <ChannelHealthCard rows={data.channelHealth} />
+      )}
 
-      {/* pizza/lista em XADREZ: nenhuma coluna repete o mesmo tipo em sequência */}
-      <div className="grid two-col" style={{ marginBottom: 16 }}>
+      {/* pizza/lista em XADREZ + align-items:start (card curto não estica e não cria vazio) */}
+      <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
         <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" />
-        <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" />
+        <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} />
       </div>
 
-      <div className="grid two-col" style={{ marginBottom: 16 }}>
-        <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" />
+      <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
+        <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} />
         <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars />
       </div>
 
-      <div className="grid two-col" style={{ marginBottom: 16 }}>
-        <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" />
-        <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" />
+      <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
+        <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} />
+        <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} />
       </div>
 
       {data.lossReasons.length > 0 && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-head"><div className="t">Motivos de perda</div><span className="badge">{data.lost}</span></div>
-          <div className="top-list">
-            {data.lossReasons.map((r) => (
-              <div className="bar-row" key={r.key}>
-                <div className="k">{r.key}</div>
-                <div className="bar-track">
-                  <div
-                    className="bar-fill"
-                    style={{ width: `${(r.count / Math.max(1, data.lost)) * 100}%`, background: "var(--red)" }}
-                  />
-                </div>
-                <div className="v tnum">{r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}</div>
-              </div>
-            ))}
-          </div>
+        <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
+          <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} />
         </div>
       )}
 
       <LeadsTable leads={data.leads} />
     </>
+  );
+}
+
+// ── Saúde por canal: conversão (ganho/total) por canal, ordenado ──
+function ChannelHealthCard({ rows }: { rows: NonNullable<LeadsData["channelHealth"]> }) {
+  const top = rows.slice(0, 8);
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card-head">
+        <div className="t">Saúde por canal</div>
+        <span className="badge">conversão</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {top.map((c, i) => (
+          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ width: 130, fontSize: 12.5, fontWeight: 600, color: "var(--label)", flex: "0 0 130px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fill(c.key)}</span>
+            {/* barra empilhada ganho/aberto/perdido */}
+            <span style={{ flex: 1, minWidth: 120, display: "flex", height: 12, borderRadius: 999, overflow: "hidden", background: "var(--cream)" }}>
+              {c.won > 0 && <span style={{ width: `${(c.won / c.total) * 100}%`, background: "var(--excelente)" }} title={`Ganhos: ${c.won}`} />}
+              {c.open > 0 && <span style={{ width: `${(c.open / c.total) * 100}%`, background: "var(--cyan)" }} title={`Em aberto: ${c.open}`} />}
+              {c.lost > 0 && <span style={{ width: `${(c.lost / c.total) * 100}%`, background: "var(--red)" }} title={`Perdidos: ${c.lost}`} />}
+            </span>
+            <span className="tnum" style={{ fontSize: 12.5, color: "var(--label-2)", width: 54, textAlign: "right" }}>{fmt(c.total)} leads</span>
+            <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)", width: 62, textAlign: "right" }}>
+              {(c.conv * 100).toFixed(0)}% conv.
+            </span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 10 }}>
+        Verde = ganho · azul = em aberto · vermelho = perdido. Conversão = ganhos ÷ total do canal.
+      </div>
+    </div>
   );
 }
 
