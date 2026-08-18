@@ -692,35 +692,62 @@ export function SocialInsights({ rede }: { rede: string }) {
       <div className="card-head">
         <div>
           <div className="t">{platform === "tiktok" || platform === "youtube" ? "Top vídeos do período" : "Top conteúdos do período"}</div>
-          <div className="sub">por engajamento · via integração</div>
+          <div className="sub">por engajamento · com o porquê de cada destaque</div>
         </div>
       </div>
-      <div className="top-list">
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {top.posts.slice(0, 6).map((p, i) => {
           const a = p.analytics || {};
           const txt = (p.content || "").replace(/\s+/g, " ").trim();
-          const short = txt.length > 60 ? txt.slice(0, 60) + "…" : txt || "(sem legenda)";
+          const short = txt.length > 80 ? txt.slice(0, 80) + "…" : txt || "(sem legenda)";
           const mt = (p as { mediaType?: string }).mediaType;
-          const fmtTag = [
-            mt ? (TYPE_PT[String(mt).toLowerCase()] || mt) : null,
-            p.publishedAt ? p.publishedAt.slice(0, 10).split("-").reverse().join("/") : null,
+          const fmtLabel = mt ? (TYPE_PT[String(mt).toLowerCase()] || String(mt)) : null;
+          const data = p.publishedAt ? p.publishedAt.slice(0, 10).split("-").reverse().join("/") : null;
+          const hora = p.publishedAt && p.publishedAt.length >= 16 ? p.publishedAt.slice(11, 16) : null;
+
+          // métricas que a API devolveu (sem invenção)
+          const met: { v: number; t: string }[] = [];
+          if (a.likes != null) met.push({ v: a.likes, t: "❤" });
+          if (a.comments != null) met.push({ v: a.comments, t: "💬" });
+          if (a.shares != null) met.push({ v: a.shares, t: "↗" });
+          if (a.saves != null) met.push({ v: a.saves, t: "🔖" });
+          if (a.reach != null) met.push({ v: a.reach, t: "alcance" });
+          if (a.views != null) met.push({ v: a.views, t: "views" });
+
+          // "por que se destacou": qual métrica puxou + formato/horário (interpretação factual)
+          const driver = a.engagementRate != null ? `engajamento de ${erFmt(a.engagementRate)}`
+            : a.reach != null ? `alcance de ${kfmt(a.reach)}`
+            : a.views != null ? `${kfmt(a.views)} visualizações`
+            : a.likes != null ? `${fmt(a.likes)} curtidas` : null;
+          const why = [
+            driver ? `Puxado por ${driver}` : null,
+            fmtLabel ? `formato ${fmtLabel}` : null,
+            hora ? `publicado ${data} às ${hora}` : data ? `publicado ${data}` : null,
           ].filter(Boolean).join(" · ");
+
           return (
-            <div className="top-item" key={p._id}>
-              <span className="rank">{i + 1}</span>
-              <div>
-                <div className="tt">{short}</div>
-                <div className="fmt">
-                  {fmtTag}
-                  {p.platformPostUrl ? <> · <a href={p.platformPostUrl} target="_blank" rel="noopener" style={{ color: "var(--cyan)" }}>abrir ↗</a></> : null}
+            <div key={p._id} style={{ display: "flex", gap: 12, alignItems: "flex-start", paddingBottom: 12, borderBottom: i < Math.min(6, top.posts!.length) - 1 ? "1px solid var(--hairline)" : "none" }}>
+              <span className="rank" style={{ flex: "0 0 auto" }}>{i + 1}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="tt" style={{ fontWeight: 600 }}>{short}</div>
+                {/* linha de formato/data/hora + link */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4, fontSize: 11.5, color: "var(--label-3)" }}>
+                  {fmtLabel && <span style={{ padding: "1px 7px", borderRadius: 999, background: "var(--cream)", fontWeight: 600 }}>{fmtLabel}</span>}
+                  {data && <span className="tnum">{data}{hora ? ` · ${hora}` : ""}</span>}
+                  {p.platformPostUrl && <a href={p.platformPostUrl} target="_blank" rel="noopener" style={{ color: "var(--cyan)" }}>abrir ↗</a>}
                 </div>
-              </div>
-              <div className="mv">
-                {a.engagementRate != null
-                  ? <>{erFmt(a.engagementRate)}<span>engaj.</span></>
-                  : a.reach != null
-                    ? <>{kfmt(a.reach)}<span>alcance</span></>
-                    : <>{fmt(a.views || 0)}<span>views</span></>}
+                {/* métricas de desempenho */}
+                {met.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6, fontSize: 12, color: "var(--label-2)" }} className="tnum">
+                    {met.map((m, k) => (
+                      <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                        <span aria-hidden="true" style={{ fontSize: 11 }}>{m.t}</span>{fmt(m.v)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {/* por que se destacou */}
+                {why && <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--label-2)", fontStyle: "italic" }}>{why}</div>}
               </div>
             </div>
           );
