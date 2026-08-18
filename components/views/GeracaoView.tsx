@@ -5,7 +5,7 @@
 // o período da toolbar. O usuário mapeia os campos personalizados do ClickUp por dimensão.
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
-import { PageHead, KpiCard, BarRow, MiniStat } from "@/components/ui";
+import { PageHead, BarRow } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { Ic } from "@/components/Ic";
 import { fmt, money } from "@/lib/format";
@@ -797,41 +797,35 @@ function Dashboard({ data }: { data: LeadsData }) {
 
   return (
     <>
-      <div className="grid kpis" style={{ marginBottom: 16 }}>
-        <KpiCard lbl="Total de leads" val={fmt(data.total)} foot="no período" />
-        <KpiCard lbl="Em aberto" val={fmt(data.open)} foot={`${money(data.pipelineValue)} em pipeline`} />
-        <KpiCard lbl="Ganhos" val={fmt(data.won)} foot={`${money(data.wonValue)} fechado`} tone="pos" />
-        <KpiCard lbl="Perdidos" val={fmt(data.lost)} foot={`conversão ${conv}`} tone="neg" />
-      </div>
-
-      {/* Saúde do CRM — desfecho + KPIs originais + inteligência de marketing */}
+      {/* Saúde do CRM — bloco ÚNICO no topo (substitui os KPIs soltos). Desfecho + indicadores
+          agrupados (Volume / Valores / Taxas), sem repetir o mesmo número várias vezes. */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-head">
           <div className="t">Saúde do CRM</div>
           <span className="badge">no período</span>
         </div>
         <OutcomeBar won={data.won} lost={data.lost} open={data.open} />
-        <div className="mini" style={{ marginTop: 14 }}>
-          <MiniStat l="Total de leads" n={fmt(data.total)} />
-          <MiniStat l="Taxa de conversão" n={conv} />
-          <MiniStat l="Em aberto" n={fmt(data.open)} />
-          <MiniStat l="Ganhos" n={fmt(data.won)} />
-          <MiniStat l="Perdidos" n={fmt(data.lost)} />
-          <MiniStat l="Valor total" n={money(data.totalValue)} />
-          <MiniStat l="Valor ganho" n={money(data.wonValue)} />
-          <MiniStat l="Em pipeline" n={money(data.pipelineValue)} />
-          {/* inteligência de marketing */}
-          <MiniStat l="Ticket médio (ganho)" n={money(ticket)} />
-          <MiniStat l="Valor médio / lead" n={money(avgLead)} />
-          <MiniStat l="Taxa de perda" n={`${(lossRate * 100).toFixed(1)}%`} />
-          <MiniStat l="Em negociação" n={`${(openRate * 100).toFixed(1)}%`} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 14, marginTop: 16 }}>
+          <StatGroup title="Volume" items={[
+            { l: "Total de leads", n: fmt(data.total) },
+            { l: "Em aberto", n: fmt(data.open) },
+            { l: "Ganhos", n: fmt(data.won), c: "var(--excelente)" },
+            { l: "Perdidos", n: fmt(data.lost), c: "var(--red)" },
+          ]} />
+          <StatGroup title="Valores" items={[
+            { l: "Valor total", n: money(data.totalValue) },
+            { l: "Valor ganho", n: money(data.wonValue), c: "var(--excelente)" },
+            { l: "Em pipeline", n: money(data.pipelineValue) },
+            { l: "Ticket médio (ganho)", n: money(ticket) },
+          ]} />
+          <StatGroup title="Taxas" items={[
+            { l: "Conversão", n: conv, c: "var(--excelente)" },
+            { l: "Taxa de perda", n: `${(lossRate * 100).toFixed(1)}%`, c: "var(--red)" },
+            { l: "Em negociação", n: `${(openRate * 100).toFixed(1)}%` },
+            { l: "Valor médio / lead", n: money(avgLead) },
+          ]} />
         </div>
       </div>
-
-      {/* Saúde por canal — conversão de cada canal (de onde vem lead que fecha) */}
-      {data.channelHealth && data.channelHealth.length > 0 && (
-        <ChannelHealthCard rows={data.channelHealth} />
-      )}
 
       {/* pizza/lista em XADREZ + align-items:start (card curto não estica e não cria vazio) */}
       <div className="grid two-col" style={{ marginBottom: 16, alignItems: "start" }}>
@@ -855,8 +849,30 @@ function Dashboard({ data }: { data: LeadsData }) {
         </div>
       )}
 
+      {/* Saúde por canal — movida pra baixo (conversão por canal) */}
+      {data.channelHealth && data.channelHealth.length > 0 && (
+        <ChannelHealthCard rows={data.channelHealth} />
+      )}
+
       <LeadsTable leads={data.leads} />
     </>
+  );
+}
+
+// grupo de indicadores (rótulo + coluna de valores) — organiza a Saúde sem virar sopa de quadradinhos
+function StatGroup({ title, items }: { title: string; items: { l: string; n: string; c?: string }[] }) {
+  return (
+    <div style={{ border: "1px solid var(--hairline)", borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".5px", textTransform: "uppercase", color: "var(--label-3)", marginBottom: 8 }}>{title}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        {items.map((it) => (
+          <div key={it.l} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+            <span style={{ fontSize: 12.5, color: "var(--label-2)" }}>{it.l}</span>
+            <span className="tnum" style={{ fontSize: 15, fontWeight: 700, color: it.c || "var(--label)" }}>{it.n}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
