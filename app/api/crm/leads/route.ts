@@ -42,6 +42,7 @@ interface Parsed {
   stage?: string | null;
   status?: string | null;
   lossReason?: string | null;
+  outcome?: Outcome | null; // desfecho fiel resolvido no sync (status CRM + datas ganho/perdido)
 }
 function parsedOf(raw: unknown): Parsed {
   if (raw && typeof raw === "object") {
@@ -102,7 +103,8 @@ export async function GET(req: Request) {
       tally(byStage, stage, v);
       tally(byStatus, status, v);
 
-      const outcome = outcomeOf(status, stage, l.lossReason);
+      // desfecho: prioriza o resolvido no sync (status CRM + datas); senão adivinha por texto
+      const outcome: Outcome = p.outcome ?? outcomeOf(status, stage, l.lossReason);
       if (outcome === "won") {
         won += 1;
         wonValue += v;

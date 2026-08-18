@@ -67,6 +67,25 @@ function parseMoney(raw: string | null): number | null {
   return isNaN(n) ? null : n;
 }
 
+// Desfecho FIEL do lead: usa o campo "status CRM" (ganho/perdido) e/ou os campos de data
+// "data ganho"/"data perdido" preenchidos. Sem inventar: só o que o CRM afirma.
+// (Mais confiável que adivinhar por texto de status nativo.)
+function resolveOutcome(task: ClickUpTask, statusVal: string | null): "won" | "lost" | "open" | null {
+  const fields = task.custom_fields ?? [];
+  const filled = (pred: (n: string) => boolean) =>
+    fields.some((cf) => pred(norm(cf.name || "")) && cf.value != null && cf.value !== "");
+  const wonDate = filled((n) => n.includes("data") && n.includes("ganho"));
+  const lostDate = filled((n) => n.includes("data") && n.includes("perd"));
+  const sv = norm(statusVal || "");
+  const svWon = /ganho|ganhou|won|convertid/.test(sv);
+  const svLost = /perd|lost|perdido/.test(sv);
+  if (svWon || wonDate) return "won";
+  if (svLost || lostDate) return "lost";
+  // status CRM explícito mas em aberto (ex.: "em negociação") → open; senão deixa null (leads route decide)
+  if (sv) return "open";
+  return null;
+}
+
 function resolveDims(task: ClickUpTask, fm: Record<string, string>): Record<Dim, string | null> {
   const fields = task.custom_fields ?? [];
   const used = new Set<string>();
@@ -140,7 +159,9 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
     const lossReason = dims.lossReason;
     const value = parseMoney(dims.value) ?? 0;
     const createdAt = t.date_created ? new Date(Number(t.date_created)) : new Date();
-    const parsed = { channel, category, product, qualification, stage, status, value: dims.value != null ? value : null, lossReason };
+    // desfecho fiel (status CRM + datas ganho/perdido) — persistido pra leads route não precisar adivinhar
+    const outcome = resolveOutcome(t, status);
+    const parsed = { channel, category, product, qualification, stage, status, value: dims.value != null ? value : null, lossReason, outcome };
     const data = {
       source: "clickup", title: t.name ?? null, channel, product, status, stage, value, lossReason,
       createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
