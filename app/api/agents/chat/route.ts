@@ -125,7 +125,7 @@ export async function POST(req: Request) {
   // personalização do agente (EnvConfig.agentsConfig): desligado → não responde; promptExtra → append.
   const env = await prisma.envConfig.findUnique({ where: { workspaceId: ws.id } }).catch(() => null);
   const agentsConfig = (env?.agentsConfig ?? {}) as Record<string, { enabled?: boolean; promptExtra?: string }>;
-  const aCfg = agentsConfig[agentKey];
+  const aCfg = agentsConfig[agentKey] as { enabled?: boolean; promptExtra?: string; name?: string } | undefined;
   if (aCfg?.enabled === false) {
     return NextResponse.json({
       disabled: true,
@@ -148,10 +148,12 @@ export async function POST(req: Request) {
     accounts: Array.isArray(body.accounts) ? body.accounts.slice(0, 40) : [],
     panel: body.panel,
   }).catch(() => "Contexto indisponível no momento.");
+  const customName = (aCfg?.name || "").trim();
+  const nameBlock = customName ? `\n\nSeu nome de exibição neste ambiente é "${customName}". Apresente-se e assine como ${customName} (mantendo seu papel e capacidades).` : "";
   const extraBlock = promptExtra
     ? `\n\n=== INSTRUÇÕES DO CLIENTE (personalização — respeite, sem quebrar as regras acima) ===\n${promptExtra}\n=== FIM DAS INSTRUÇÕES ===`
     : "";
-  const system = `${agent.system}${extraBlock}\n\n=== CONTEXTO DO WORKSPACE (dados reais) ===\n${context}\n=== FIM DO CONTEXTO ===`;
+  const system = `${agent.system}${nameBlock}${extraBlock}\n\n=== CONTEXTO DO WORKSPACE (dados reais) ===\n${context}\n=== FIM DO CONTEXTO ===`;
 
   const history: Msg[] = (body.messages || [])
     .filter((m) => (m.text || "").trim())

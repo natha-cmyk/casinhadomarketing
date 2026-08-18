@@ -598,10 +598,18 @@ export default function PersonalizacaoView() {
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <b style={{ fontSize: 14.5 }}>{ag.nome}</b>
+                      <input
+                        className="field-edit"
+                        style={{ fontSize: 14.5, fontWeight: 700, maxWidth: 200, padding: "4px 8px" }}
+                        value={cfg.name ?? ""}
+                        onChange={(e) => setAgentConfig(ag.key, { name: e.target.value })}
+                        placeholder={ag.nome}
+                        aria-label={`Nome do ${ag.nome}`}
+                      />
                       <span style={{ fontSize: 12, color: "var(--label-3)" }}>{ag.papel}</span>
                     </div>
                     <div style={{ fontSize: 12.5, color: "var(--label-2)", marginTop: 4, lineHeight: 1.5 }}>{ag.desc}</div>
+                    <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 2 }}>Nome de fábrica: {ag.nome}. Deixe vazio pra manter.</div>
                   </div>
                   <button
                     className={`switch ${on ? "on" : ""}`}

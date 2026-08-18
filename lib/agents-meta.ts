@@ -42,6 +42,11 @@ export interface AgentConfig {
   enabled: boolean;
   panels: string[] | null; // null = todos os painéis; [] = nenhum; lista = só esses
   promptExtra: string; // instruções extras APPENDadas ao prompt-base do agente
+  name?: string; // nome personalizado (vazio = nome de fábrica)
+}
+// nome de exibição de um agente: custom (se houver) ou o de fábrica
+export function agentDisplayName(factory: string, cfg?: { name?: string }): string {
+  return (cfg?.name || "").trim() || factory;
 }
 export type AgentsConfig = Partial<Record<AgentKey, AgentConfig>>;
 

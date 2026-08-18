@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { viewForPath } from "@/lib/nav";
-import { agentVisibleOn, panelOfView } from "@/lib/agents-meta";
+import { agentVisibleOn, panelOfView, agentDisplayName } from "@/lib/agents-meta";
 import { Ic } from "../Ic";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { AgentLlmConnect } from "./AgentLlmConnect";
@@ -89,6 +89,7 @@ export function AgentDock() {
   const effectiveDefault = visibleKeys.includes(defaultKey) ? defaultKey : visibleKeys[0];
   const key = picked && visibleKeys.includes(picked) ? picked : effectiveDefault;
   const a = AGENTS[key];
+  const nome = a ? agentDisplayName(a.nome, agentsConfig[key]) : "";
   const open = useStore((s) => s.agentOpen);
   const toggle = useStore((s) => s.toggleAgent);
   const msgs = useStore((s) => s.agentMsgs[key]) || [];
@@ -118,7 +119,7 @@ export function AgentDock() {
       .join("");
     const win = window.open("", "_blank", "width=820,height=1000");
     if (!win) return;
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${a.nome} — Casinha do Marketing</title>
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${nome} — Casinha do Marketing</title>
 <style>
   *{box-sizing:border-box} body{font-family:Montserrat,-apple-system,system-ui,sans-serif;color:#121111;max-width:720px;margin:36px auto;padding:0 24px;line-height:1.5}
   h1{font-size:20px;margin:0 0 2px} .sub{color:#8a8a8a;font-size:12px;margin:0 0 20px}
@@ -128,7 +129,7 @@ export function AgentDock() {
   code{background:#ececeb;padding:1px 5px;border-radius:5px;font-size:.9em}
   .ft{margin-top:28px;color:#b5b5b5;font-size:10.5px;text-align:center}
 </style></head><body>
-  <h1>${a.nome} · ${a.papel}</h1>
+  <h1>${nome} · ${a.papel}</h1>
   <div class="sub">Casinha do Marketing — Seahub · assistente com LLM</div>
   ${rows}
   <div class="ft">Gerado pela Casinha do Marketing</div>
@@ -239,7 +240,7 @@ export function AgentDock() {
             <div className="ag-head-l">
               {av}
               <div>
-                <b>{a.nome}</b>
+                <b>{nome}</b>
                 <span>{a.papel}</span>
               </div>
             </div>
@@ -271,7 +272,7 @@ export function AgentDock() {
                   className={`ag-sw${k === key ? " on" : ""}`}
                   style={{ "--swc": ag.cor } as React.CSSProperties}
                   onClick={() => setPicked(k)}
-                  title={`${ag.nome} · ${ag.papel}`}
+                  title={`${agentDisplayName(ag.nome, agentsConfig[k])} · ${ag.papel}`}
                   type="button"
                 >
                   <Ic name={ag.icon} />
@@ -313,7 +314,7 @@ export function AgentDock() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && send(text)}
-              placeholder={busy ? `${a.nome} está pensando…` : `Pergunte ao ${a.nome}…`}
+              placeholder={busy ? `${nome} está pensando…` : `Pergunte ao ${nome}…`}
               autoComplete="off"
               disabled={busy}
             />
@@ -335,7 +336,7 @@ export function AgentDock() {
           className={`ag-fab${open ? " open" : ""}`}
           style={{ "--agc": a.cor } as React.CSSProperties}
           onClick={toggle}
-          aria-label={`Assistente ${a.nome}`}
+          aria-label={`Assistente ${nome}`}
           type="button"
         >
           {open ? "✕" : <Ic name="ag_chat" />}

@@ -114,7 +114,7 @@ export interface UIState {
   // canais MANUAIS do calendário (só registro de conteúdo, sem publicação síncrona). Persistido no config.
   calManuais: string[];
   // personalização dos agentes por workspace: { agentKey: {enabled, panels, promptExtra} }. Persistido no config.
-  agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string }>;
+  agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
@@ -146,7 +146,7 @@ export interface UIState {
   setCardOrder: (panel: string, ids: string[]) => void;
   addCalManual: (nome: string) => void;
   removeCalManual: (nome: string) => void;
-  setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string }>) => void;
+  setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
