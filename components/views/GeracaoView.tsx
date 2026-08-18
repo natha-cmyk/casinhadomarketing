@@ -62,6 +62,7 @@ interface LeadsData {
   byStatus: Row[];
   lossReasons: Row[];
   leads: LeadRow[];
+  mapping?: Record<string, string | null>; // dimensão → campo do ClickUp que alimentou (transparência)
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -541,26 +542,122 @@ function OutcomeBar({ won, lost, open }: { won: number; lost: number; open: numb
   );
 }
 
-// ── card de agrupamento (canal / categoria / produto / qualificação) ──
+// paleta cíclica p/ pizza (cores da Seahub, boa separação)
+const PIE_COLORS = ["var(--cyan)", "var(--red)", "var(--excelente)", "var(--atencao)", "#8E5BE0", "var(--ink)", "#1877F2", "#E1306C", "#00A884", "#FF6B35"];
+const pieColor = (i: number) => PIE_COLORS[i % PIE_COLORS.length];
+
+// ── Pizza (donut) SVG + legenda ──
+function PieChart({ rows }: { rows: Row[] }) {
+  const total = rows.reduce((a, r) => a + r.count, 0);
+  if (total === 0) return null;
+  const top = rows.slice(0, 9);
+  const rest = rows.slice(9);
+  const segs = rest.length ? [...top, { key: "outros", count: rest.reduce((a, r) => a + r.count, 0), value: 0 }] : top;
+  const R = 52, r0 = 30, C = 70; // raio externo/interno, centro
+  let acc = 0;
+  const arcs = segs.map((s, i) => {
+    const frac = s.count / total;
+    const a0 = acc * 2 * Math.PI - Math.PI / 2;
+    acc += frac;
+    const a1 = acc * 2 * Math.PI - Math.PI / 2;
+    const large = frac > 0.5 ? 1 : 0;
+    const x0 = C + R * Math.cos(a0), y0 = C + R * Math.sin(a0);
+    const x1 = C + R * Math.cos(a1), y1 = C + R * Math.sin(a1);
+    const xi1 = C + r0 * Math.cos(a1), yi1 = C + r0 * Math.sin(a1);
+    const xi0 = C + r0 * Math.cos(a0), yi0 = C + r0 * Math.sin(a0);
+    const d = `M ${x0} ${y0} A ${R} ${R} 0 ${large} 1 ${x1} ${y1} L ${xi1} ${yi1} A ${r0} ${r0} 0 ${large} 0 ${xi0} ${yi0} Z`;
+    return { d, color: pieColor(i), key: s.key, count: s.count, frac };
+  });
+  return (
+    <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+      <svg viewBox="0 0 140 140" style={{ width: 140, height: 140, flex: "0 0 140px" }}>
+        {arcs.map((a) => <path key={a.key} d={a.d} fill={a.color} />)}
+        <text x={C} y={C - 4} textAnchor="middle" fontSize={20} fontWeight={800} fill="var(--label)" className="tnum">{fmt(total)}</text>
+        <text x={C} y={C + 12} textAnchor="middle" fontSize={9} fill="var(--label-3)">leads</text>
+      </svg>
+      <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 5 }}>
+        {arcs.map((a) => (
+          <div key={a.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: a.color, flex: "0 0 9px" }} />
+            <span style={{ flex: 1, color: "var(--label)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.key === "outros" ? "Outros" : fill(a.key)}</span>
+            <span className="tnum" style={{ color: "var(--label-2)", fontWeight: 600 }}>{fmt(a.count)}</span>
+            <span className="tnum" style={{ color: "var(--label-3)", width: 38, textAlign: "right" }}>{Math.round(a.frac * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// estrelas a partir de um rótulo tipo "5 estrelas" / "4 estrela"
+function starsOf(key: string): number | null {
+  const m = key.match(/(\d)\s*estrela/i);
+  return m ? Number(m[1]) : null;
+}
+// ── Qualificação por estrelas: uma linha por nível, com ★ ──
+function StarBars({ rows }: { rows: Row[] }) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  // ordena por nº de estrelas desc quando aplicável
+  const sorted = [...rows].sort((a, b) => (starsOf(b.key) ?? -1) - (starsOf(a.key) ?? -1));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {sorted.map((r, i) => {
+        const n = starsOf(r.key);
+        return (
+          <div key={r.key} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ width: 92, fontSize: 13, color: n ? "var(--atencao)" : "var(--label)", letterSpacing: 1, flex: "0 0 92px" }}>
+              {n ? "★".repeat(n) + "☆".repeat(Math.max(0, 5 - n)) : fill(r.key)}
+            </span>
+            <span style={{ flex: 1, height: 8, borderRadius: 999, background: "var(--surface)", overflow: "hidden" }}>
+              <span style={{ display: "block", height: "100%", width: `${(r.count / max) * 100}%`, background: pieColor(i) }} />
+            </span>
+            <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700, width: 28, textAlign: "right" }}>{fmt(r.count)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── card de agrupamento — alterna Lista / Pizza (e Estrelas p/ qualificação) ──
 function GroupCard({
   title,
   rows,
   color,
   empty,
+  defaultViz = "list",
+  stars = false,
 }: {
   title: string;
   rows: Row[];
   color: string | ((i: number) => string);
   empty: string;
+  defaultViz?: "list" | "pizza";
+  stars?: boolean; // qualificação: mostra ★ em vez de texto
 }) {
+  const [viz, setViz] = useState<"list" | "pizza">(defaultViz);
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="card">
       <div className="card-head">
         <div className="t">{title}</div>
-        <span className="badge">{rows.length}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {rows.length > 0 && (
+            <div className="seg" style={{ transform: "scale(.86)", transformOrigin: "right center" }}>
+              <button className={viz === "list" ? "on" : ""} onClick={() => setViz("list")} type="button" title="Lista">☰</button>
+              <button className={viz === "pizza" ? "on" : ""} onClick={() => setViz("pizza")} type="button" title="Pizza">◔</button>
+            </div>
+          )}
+          <span className="badge">{rows.length}</span>
+        </div>
       </div>
-      {rows.length ? (
+      {!rows.length ? (
+        <div className="sub" style={{ color: "var(--label-3)" }}>{empty}</div>
+      ) : viz === "pizza" ? (
+        <PieChart rows={rows} />
+      ) : stars ? (
+        <StarBars rows={rows} />
+      ) : (
         rows.map((r, i) => (
           <BarRow
             key={r.key}
@@ -571,10 +668,53 @@ function GroupCard({
             formatted={r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}
           />
         ))
-      ) : (
-        <div className="sub" style={{ color: "var(--label-3)" }}>{empty}</div>
       )}
     </div>
+  );
+}
+
+// ── Transparência: como a leitura do CRM funciona (de onde vem cada número) ──
+const DIM_LABELS: { k: string; lbl: string }[] = [
+  { k: "channel", lbl: "Canal" },
+  { k: "category", lbl: "Categoria de produto" },
+  { k: "product", lbl: "Tipo de produto" },
+  { k: "qualification", lbl: "Qualificação" },
+  { k: "status", lbl: "Status" },
+  { k: "stage", lbl: "Funil / etapa" },
+  { k: "value", lbl: "Valor" },
+  { k: "lossReason", lbl: "Motivo de perda" },
+];
+function ConnectionPanel({ mapping }: { mapping?: Record<string, string | null> }) {
+  const m = mapping ?? {};
+  return (
+    <details className="card" style={{ marginBottom: 16, padding: 0 }}>
+      <summary style={{ cursor: "pointer", listStyle: "none", padding: "14px 18px", display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 13.5 }}>
+        <span aria-hidden>🔎</span> Como esta leitura funciona
+        <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 500, color: "var(--label-3)" }}>de onde vem cada número</span>
+      </summary>
+      <div style={{ borderTop: "1px solid var(--hairline)", padding: "14px 18px", fontSize: 12.5, color: "var(--label-2)", lineHeight: 1.6 }}>
+        <p style={{ margin: "0 0 10px" }}>
+          Puxo as tasks da lista do ClickUp e traduzo cada uma num lead. <b>Total de leads</b> = tasks criadas no período
+          (pela <b>data de criação</b> da task). <b>Ganho/Perdido/Em aberto</b> vêm do campo <b>&quot;status CRM&quot;</b> (ganho/perdido)
+          e/ou das datas <b>&quot;data ganho&quot;/&quot;data perdido&quot;</b> preenchidas — não adivinho por texto.
+        </p>
+        <div style={{ fontWeight: 700, color: "var(--label)", margin: "10px 0 6px" }}>Campo do ClickUp lido em cada dimensão:</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "6px 18px" }}>
+          {DIM_LABELS.map(({ k, lbl }) => (
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 8, borderBottom: "1px solid var(--hairline)", padding: "4px 0" }}>
+              <span style={{ color: "var(--label-3)" }}>{lbl}</span>
+              <span style={{ fontWeight: 600, color: m[k] ? "var(--label)" : "var(--label-3)", textAlign: "right" }}>
+                {m[k] || "— não detectado —"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p style={{ margin: "12px 0 0", color: "var(--label-3)" }}>
+          Detecção automática por nome do campo. Se algum campo estiver &quot;não detectado&quot; ou errado, use
+          <b> Reconfigurar → Detectar campos</b> pra apontar o campo certo (isso tem prioridade sobre a detecção automática).
+        </p>
+      </div>
+    </details>
   );
 }
 
@@ -623,19 +763,21 @@ function Dashboard({ data }: { data: LeadsData }) {
         </div>
       </div>
 
+      <ConnectionPanel mapping={data.mapping} />
+
       <div className="grid two-col" style={{ marginBottom: 16 }}>
-        <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." />
-        <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." />
+        <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" />
+        <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="pizza" />
       </div>
 
       <div className="grid two-col" style={{ marginBottom: 16 }}>
         <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." />
-        <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." />
+        <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars />
       </div>
 
       <div className="grid two-col" style={{ marginBottom: 16 }}>
         <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." />
-        <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." />
+        <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="pizza" />
       </div>
 
       {data.lossReasons.length > 0 && (
@@ -742,14 +884,15 @@ function LeadsTable({ leads }: { leads: LeadRow[] }) {
         <span className="badge">{hasFilter ? `${filtered.length}/${leads.length}` : leads.length}</span>
       </div>
 
-      {/* filtros por dimensão */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        <FilterSelect v={fCanal} set={setFCanal} list={opts.canal} ph="Todos os canais" />
-        <FilterSelect v={fCategoria} set={setFCategoria} list={opts.categoria} ph="Todas as categorias" />
-        <FilterSelect v={fProduto} set={setFProduto} list={opts.produto} ph="Todos os produtos" />
-        <FilterSelect v={fQualif} set={setFQualif} list={opts.qualif} ph="Todas as qualificações" />
-        <FilterSelect v={fStatus} set={setFStatus} list={opts.status} ph="Todos os status" />
-        {hasFilter && <button className="btn-link" type="button" onClick={clear}>Limpar filtros</button>}
+      {/* filtros por dimensão — barra única, enxuta */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 14, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--hairline)" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".5px", textTransform: "uppercase", color: "var(--label-3)", marginRight: 2 }}>Filtrar</span>
+        <FilterSelect v={fCanal} set={setFCanal} list={opts.canal} ph="Canal" />
+        <FilterSelect v={fCategoria} set={setFCategoria} list={opts.categoria} ph="Categoria" />
+        <FilterSelect v={fProduto} set={setFProduto} list={opts.produto} ph="Produto" />
+        <FilterSelect v={fQualif} set={setFQualif} list={opts.qualif} ph="Qualificação" />
+        <FilterSelect v={fStatus} set={setFStatus} list={opts.status} ph="Status" />
+        {hasFilter && <button className="btn-link" type="button" onClick={clear} style={{ marginLeft: "auto" }}>Limpar</button>}
       </div>
 
       <div style={{ overflowX: "auto" }}>

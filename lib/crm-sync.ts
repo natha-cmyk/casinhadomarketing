@@ -86,18 +86,24 @@ function resolveOutcome(task: ClickUpTask, statusVal: string | null): "won" | "l
   return null;
 }
 
-function resolveDims(task: ClickUpTask, fm: Record<string, string>): Record<Dim, string | null> {
+// resolve o valor de cada dimensão + a FONTE (nome do campo ClickUp que alimentou), pra
+// transparência ("de onde vem cada número"). fieldMap explícito tem prioridade; depois heurística.
+function resolveDims(task: ClickUpTask, fm: Record<string, string>): { out: Record<Dim, string | null>; src: Record<Dim, string | null> } {
   const fields = task.custom_fields ?? [];
   const used = new Set<string>();
   const out = {} as Record<Dim, string | null>;
+  const src = {} as Record<Dim, string | null>;
+  for (const dim of DIMS) { out[dim] = null; src[dim] = null; }
+
+  // 1) mapa explícito do usuário
   for (const dim of DIMS) {
     const wanted = fm[dim];
     if (wanted && wanted.trim()) {
       const cf = fields.find((c) => norm(c.name || "") === norm(wanted));
-      if (cf) { out[dim] = readCustomField(cf); used.add(cf.id); continue; }
+      if (cf) { out[dim] = readCustomField(cf); src[dim] = cf.name; used.add(cf.id); }
     }
-    out[dim] = null;
   }
+  // 2) heurística por sinônimo (só dimensões não mapeadas e não resolvidas)
   for (const dim of DIMS) {
     if (fm[dim] && fm[dim].trim()) continue;
     if (out[dim] != null) continue;
@@ -106,11 +112,42 @@ function resolveDims(task: ClickUpTask, fm: Record<string, string>): Record<Dim,
       if (used.has(cf.id)) continue;
       const name = norm(cf.name || "");
       if (!name) continue;
-      if (syns.some((syn) => name.includes(syn))) { out[dim] = readCustomField(cf); used.add(cf.id); break; }
+      if (syns.some((syn) => name.includes(syn))) { out[dim] = readCustomField(cf); src[dim] = cf.name; used.add(cf.id); break; }
     }
   }
-  return out;
+  return { out, src };
 }
+
+// Interpretação COMPLETA de uma task → dimensões + desfecho + valor + fontes. Ponto ÚNICO
+// usado pelo sync E pela leitura (leads route), pra a lógica ser sempre a mesma e melhorias
+// valerem na hora (sem depender de re-sync). fm = fieldMap do CrmConfig.
+export interface Interpreted {
+  channel: string | null; category: string | null; product: string | null;
+  qualification: string | null; stage: string | null; status: string | null;
+  lossReason: string | null; value: number; hasValue: boolean;
+  outcome: "won" | "lost" | "open" | null;
+  sources: Record<Dim, string | null>;
+}
+export function interpretTask(t: ClickUpTask, fm: Record<string, string>): Interpreted {
+  const { out: dims, src } = resolveDims(t, fm);
+  const nativeStatus = t.status?.status ?? null;
+  const status = dims.status ?? nativeStatus;
+  const stage = dims.stage ?? nativeStatus;
+  return {
+    channel: dims.channel,
+    category: dims.category,
+    product: dims.product, // NÃO cai pra category (senão "tipo de produto" mostra as categorias)
+    qualification: dims.qualification,
+    stage,
+    status,
+    lossReason: dims.lossReason,
+    value: parseMoney(dims.value) ?? 0,
+    hasValue: dims.value != null,
+    outcome: resolveOutcome(t, status),
+    sources: src,
+  };
+}
+export type { ClickUpTask };
 
 export interface CrmSyncResult { ok: true; imported: number; incremental: boolean }
 export type CrmSyncError = { ok: false; status: number; error: string };
@@ -148,22 +185,14 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
 
   const fm = (cfg.fieldMap ?? {}) as Record<string, string>;
   const ops = tasks.map((t) => {
-    const dims = resolveDims(t, fm);
-    const nativeStatus = t.status?.status ?? null;
-    const channel = dims.channel;
-    const category = dims.category;
-    const product = dims.product; // NÃO cai pra category (senão "tipo de produto" mostra as categorias)
-    const qualification = dims.qualification;
-    const stage = dims.stage ?? nativeStatus;
-    const status = dims.status ?? nativeStatus;
-    const lossReason = dims.lossReason;
-    const value = parseMoney(dims.value) ?? 0;
+    const it = interpretTask(t, fm);
     const createdAt = t.date_created ? new Date(Number(t.date_created)) : new Date();
-    // desfecho fiel (status CRM + datas ganho/perdido) — persistido pra leads route não precisar adivinhar
-    const outcome = resolveOutcome(t, status);
-    const parsed = { channel, category, product, qualification, stage, status, value: dims.value != null ? value : null, lossReason, outcome };
+    const parsed = {
+      channel: it.channel, category: it.category, product: it.product, qualification: it.qualification,
+      stage: it.stage, status: it.status, value: it.hasValue ? it.value : null, lossReason: it.lossReason, outcome: it.outcome,
+    };
     const data = {
-      source: "clickup", title: t.name ?? null, channel, product, status, stage, value, lossReason,
+      source: "clickup", title: t.name ?? null, channel: it.channel, product: it.product, status: it.status, stage: it.stage, value: it.value, lossReason: it.lossReason,
       createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
       raw: { ...(t as unknown as Record<string, unknown>), _parsed: parsed } as object,
     };
