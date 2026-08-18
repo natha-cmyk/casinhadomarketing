@@ -62,7 +62,7 @@ export async function GET(req: Request) {
     if (since) createdAt.gte = new Date(since + "T00:00:00");
     if (until) createdAt.lte = new Date(until + "T23:59:59.999");
 
-    const [cfg, leads] = await Promise.all([
+    const [cfg, leadsAll] = await Promise.all([
       prisma.crmConfig.findUnique({ where: { workspaceId: ws } }),
       prisma.lead.findMany({
         where: { workspaceId: ws, ...(since || until ? { createdAt } : {}) },
@@ -70,6 +70,8 @@ export async function GET(req: Request) {
       }),
     ]);
     const fm = (cfg?.fieldMap ?? {}) as Record<string, string>;
+    // NÃO conta tasks arquivadas (efeito imediato; o purge definitivo vem no "Ressincronizar tudo").
+    const leads = leadsAll.filter((l) => (l.raw as { archived?: boolean } | null)?.archived !== true);
 
     const byChannel = new Map<string, Bucket>();
     const byCategory = new Map<string, Bucket>();

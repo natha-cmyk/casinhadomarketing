@@ -190,7 +190,10 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
   }
 
   const fm = (cfg.fieldMap ?? {}) as Record<string, string>;
-  const ops = tasks.map((t) => {
+  // Ignora tasks ARQUIVADAS — não entram na contagem (ClickUp já exclui por padrão no fetch,
+  // mas filtramos de novo por garantia).
+  const active = tasks.filter((t) => (t as unknown as { archived?: boolean }).archived !== true);
+  const ops = active.map((t) => {
     const it = interpretTask(t, fm);
     const createdAt = t.date_created ? new Date(Number(t.date_created)) : new Date();
     const parsed = {
@@ -211,6 +214,15 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
 
   const BATCH = 20;
   for (let i = 0; i < ops.length; i += BATCH) await Promise.all(ops.slice(i, i + BATCH));
+
+  // RECONCILIAÇÃO (só no sync COMPLETO): remove da base os leads que não vieram mais do ClickUp
+  // — tasks arquivadas ou deletadas. No incremental não dá (não busca tudo), então só no full.
+  if (!incremental) {
+    const activeIds = active.map((t) => t.id);
+    await prisma.lead.deleteMany({
+      where: { workspaceId, source: "clickup", extId: { notIn: activeIds.length ? activeIds : ["__none__"] } },
+    });
+  }
 
   await prisma.crmConfig.update({ where: { workspaceId }, data: { lastSyncAt: startedAt } });
   return { ok: true, imported: ops.length, incremental };
