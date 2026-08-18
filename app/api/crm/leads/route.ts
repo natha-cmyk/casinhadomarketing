@@ -79,6 +79,7 @@ export async function GET(req: Request) {
     const byStatus = new Map<string, Bucket>();
     const lossReasons = new Map<string, Bucket>();
     const sourceTally: Record<string, Map<string, number>> = {}; // dim → {campo: contagem} p/ transparência
+    const fieldSeen = new Map<string, { type: string; sample: string | null; filled: number }>(); // campos ClickUp vistos
 
     let totalValue = 0, pipelineValue = 0, wonValue = 0, won = 0, lost = 0, open = 0;
 
@@ -94,6 +95,21 @@ export async function GET(req: Request) {
         for (const [dim, field] of Object.entries((it as Interpreted).sources || {})) {
           if (!field) continue;
           (sourceTally[dim] ??= new Map()).set(field, ((sourceTally[dim].get(field)) || 0) + 1);
+        }
+        // cataloga os campos personalizados vistos (nome/tipo/exemplo) p/ diagnóstico
+        for (const cf of task.custom_fields ?? []) {
+          const nm = cf?.name;
+          if (!nm) continue;
+          const has = cf?.value != null && cf?.value !== "";
+          const cur = fieldSeen.get(nm) ?? { type: String(cf?.type || ""), sample: null, filled: 0 };
+          if (has) {
+            cur.filled += 1;
+            if (!cur.sample) {
+              const v = cf!.value;
+              cur.sample = typeof v === "object" ? JSON.stringify(v).slice(0, 60) : String(v).slice(0, 60);
+            }
+          }
+          fieldSeen.set(nm, cur);
         }
       } else {
         it = {
@@ -139,6 +155,11 @@ export async function GET(req: Request) {
       mapping[dim] = m ? [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null : null;
     }
 
+    // campos ClickUp vistos (nome/tipo/quantos preenchidos/exemplo) — diagnóstico da leitura
+    const availableFields = [...fieldSeen.entries()]
+      .map(([name, v]) => ({ name, type: v.type, filled: v.filled, sample: v.sample }))
+      .sort((a, b) => b.filled - a.filled);
+
     return NextResponse.json({
       ok: true,
       total: leads.length,
@@ -152,6 +173,7 @@ export async function GET(req: Request) {
       byStatus: toRows(byStatus),
       lossReasons: toRows(lossReasons),
       mapping, // { dimensão: nome do campo ClickUp que alimentou }
+      availableFields, // todos os campos personalizados vistos (p/ diagnóstico)
       leads: rows.slice(0, 500),
     });
   } catch (e) {

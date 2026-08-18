@@ -63,6 +63,7 @@ interface LeadsData {
   lossReasons: Row[];
   leads: LeadRow[];
   mapping?: Record<string, string | null>; // dimensão → campo do ClickUp que alimentou (transparência)
+  availableFields?: { name: string; type: string; filled: number; sample: string | null }[];
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -684,8 +685,9 @@ const DIM_LABELS: { k: string; lbl: string }[] = [
   { k: "value", lbl: "Valor" },
   { k: "lossReason", lbl: "Motivo de perda" },
 ];
-function ConnectionPanel({ mapping }: { mapping?: Record<string, string | null> }) {
+function ConnectionPanel({ mapping, fields }: { mapping?: Record<string, string | null>; fields?: LeadsData["availableFields"] }) {
   const m = mapping ?? {};
+  const fs = fields ?? [];
   return (
     <details className="card" style={{ marginBottom: 16, padding: 0 }}>
       <summary style={{ cursor: "pointer", listStyle: "none", padding: "14px 18px", display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 13.5 }}>
@@ -713,6 +715,34 @@ function ConnectionPanel({ mapping }: { mapping?: Record<string, string | null> 
           Detecção automática por nome do campo. Se algum campo estiver &quot;não detectado&quot; ou errado, use
           <b> Reconfigurar → Detectar campos</b> pra apontar o campo certo (isso tem prioridade sobre a detecção automática).
         </p>
+
+        {fs.length > 0 && (
+          <>
+            <div style={{ fontWeight: 700, color: "var(--label)", margin: "14px 0 6px" }}>Campos personalizados vistos no ClickUp ({fs.length}):</div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "var(--label-3)" }}>
+                    <th style={{ padding: "4px 8px", fontWeight: 600 }}>Campo</th>
+                    <th style={{ padding: "4px 8px", fontWeight: 600 }}>Tipo</th>
+                    <th style={{ padding: "4px 8px", fontWeight: 600, textAlign: "right" }}>Preenchidos</th>
+                    <th style={{ padding: "4px 8px", fontWeight: 600 }}>Exemplo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fs.map((f) => (
+                    <tr key={f.name} style={{ borderTop: "1px solid var(--hairline)" }}>
+                      <td style={{ padding: "4px 8px", fontWeight: 600, color: "var(--label)" }}>{f.name}</td>
+                      <td style={{ padding: "4px 8px", color: "var(--label-3)" }}>{f.type || "—"}</td>
+                      <td style={{ padding: "4px 8px", textAlign: "right" }} className="tnum">{f.filled}</td>
+                      <td style={{ padding: "4px 8px", color: "var(--label-2)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.sample || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </details>
   );
@@ -763,21 +793,22 @@ function Dashboard({ data }: { data: LeadsData }) {
         </div>
       </div>
 
-      <ConnectionPanel mapping={data.mapping} />
+      <ConnectionPanel mapping={data.mapping} fields={data.availableFields} />
 
+      {/* pizza/lista em XADREZ: nenhuma coluna repete o mesmo tipo em sequência */}
       <div className="grid two-col" style={{ marginBottom: 16 }}>
         <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" />
-        <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="pizza" />
+        <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" />
       </div>
 
       <div className="grid two-col" style={{ marginBottom: 16 }}>
-        <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." />
+        <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" />
         <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars />
       </div>
 
       <div className="grid two-col" style={{ marginBottom: 16 }}>
-        <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." />
-        <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="pizza" />
+        <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" />
+        <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" />
       </div>
 
       {data.lossReasons.length > 0 && (

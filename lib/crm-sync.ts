@@ -103,9 +103,10 @@ function resolveDims(task: ClickUpTask, fm: Record<string, string>): { out: Reco
       if (cf) { out[dim] = readCustomField(cf); src[dim] = cf.name; used.add(cf.id); }
     }
   }
-  // 2) heurística por sinônimo (só dimensões não mapeadas e não resolvidas)
+  // 2) heurística por sinônimo — roda quando o explícito NÃO resolveu (ou não existe).
+  // (Antes pulava se fm[dim] estivesse setado mesmo que o campo não fosse achado → dimensão ficava
+  // null pra sempre. Agora, se o explícito falhou o match exato, a heurística ainda tenta.)
   for (const dim of DIMS) {
-    if (fm[dim] && fm[dim].trim()) continue;
     if (out[dim] != null) continue;
     const syns = [...SYNONYMS[dim]].sort((a, b) => b.length - a.length);
     for (const cf of fields) {
