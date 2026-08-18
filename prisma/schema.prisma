@@ -129,6 +129,7 @@ model EnvConfig {
   adConfig    Json      @default("{}") // { manualChannels: [...], adAccounts: {…} } — mídia paga
   customInd   Json      @default("{}") // { painel: [ {id,label,metric,...} ] } — indicadores criados pelo perfil
   calManuais  Json      @default("[]") // ["WhatsApp (grupos)", ...] — canais MANUAIS do calendário (só registro, sem publicação síncrona)
+  agentsConfig Json     @default("{}") // { agentKey: { enabled, panels:[]|null, promptExtra } } — personalização dos agentes
   updatedAt   DateTime  @updatedAt
 }
 

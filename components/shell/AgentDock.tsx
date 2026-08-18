@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { viewForPath } from "@/lib/nav";
+import { agentVisibleOn, panelOfView } from "@/lib/agents-meta";
 import { Ic } from "../Ic";
 import { AgentMarkdown } from "./AgentMarkdown";
 import { AgentLlmConnect } from "./AgentLlmConnect";
@@ -81,7 +82,12 @@ export function AgentDock() {
   const defaultKey = (AGENT_BY_VIEW[view] || "poseidon") as string;
   // agente escolhido manualmente pelo seletor (sobrepõe o padrão da tela)
   const [picked, setPicked] = useState<string | null>(null);
-  const key = picked ?? defaultKey;
+  // personalização: visibilidade dos agentes por painel (Personalização → Assistentes)
+  const agentsConfig = useStore((s) => s.agentsConfig);
+  const panelId = panelOfView(view);
+  const visibleKeys = (Object.keys(AGENTS) as string[]).filter((k) => agentVisibleOn(agentsConfig[k], panelId));
+  const effectiveDefault = visibleKeys.includes(defaultKey) ? defaultKey : visibleKeys[0];
+  const key = picked && visibleKeys.includes(picked) ? picked : effectiveDefault;
   const a = AGENTS[key];
   const open = useStore((s) => s.agentOpen);
   const toggle = useStore((s) => s.toggleAgent);
@@ -216,6 +222,9 @@ export function AgentDock() {
     }
   };
 
+  // nenhum agente visível neste painel (todos ocultos/desativados pela Personalização) → sem dock
+  if (!a) return null;
+
   const av = (
     <div className="ag-av" style={{ background: a.cor }}>
       <Ic name={a.icon} />
@@ -254,7 +263,7 @@ export function AgentDock() {
             </div>
           </div>
           <div className="ag-switch">
-            {(Object.keys(AGENTS) as string[]).map((k) => {
+            {visibleKeys.map((k) => {
               const ag = AGENTS[k];
               return (
                 <button

@@ -28,6 +28,7 @@ export async function PUT(req: Request) {
       adConfig: b.adConfig ?? {},
       customInd: b.customInd ?? {},
       calManuais: Array.isArray(b.calManuais) ? b.calManuais : [],
+      agentsConfig: b.agentsConfig && typeof b.agentsConfig === "object" ? b.agentsConfig : {},
     };
     const c = await prisma.envConfig.upsert({
       where: { workspaceId: ws },
