@@ -373,37 +373,45 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
                 </div>
               )}
 
-              {/* Cards secundários — alinha ao topo p/ o card curto ("Como te encontram")
-                  não esticar à altura do card de Avaliações (elimina o espaço branco). */}
-              <div className="si-flow" style={{ alignItems: "flex-start" }}>
-                {showImpr && (
-                  <div className="card pad-lg tcard" style={{ "--tcard-accent": CY } as CSSProperties}>
-                    <div className="card-head">
-                      <div>
-                        <div className="t">Como te encontram</div>
-                        <div className="sub">{impressionsTotal != null ? `${kfmt(impressionsTotal)} impressões no período` : "impressões da ficha"}</div>
+              {/* Cards secundários — coluna esquerda (impressões + ações, empilhados) ao lado
+                  do card alto de Avaliações. Assim os cards curtos preenchem a altura em vez
+                  de deixar um retângulo branco embaixo. */}
+              <div
+                className="grid"
+                style={{ gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 16, marginBottom: 16, alignItems: "start" }}
+              >
+                {(showImpr || showActions) && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {showImpr && (
+                      <div className="card pad-lg tcard" style={{ "--tcard-accent": CY } as CSSProperties}>
+                        <div className="card-head">
+                          <div>
+                            <div className="t">Como te encontram</div>
+                            <div className="sub">{impressionsTotal != null ? `${kfmt(impressionsTotal)} impressões no período` : "impressões da ficha"}</div>
+                          </div>
+                        </div>
+                        {imprRows.map((r) => (
+                          <BarRow key={r.k} k={IMPRESSION_PT[r.k] || r.k} v={r.v} max={imprMax} color={CY} formatted={fmt(r.v)} />
+                        ))}
+                        <div className="insight" style={{ marginTop: 12 }}>
+                          <div className="ib" style={{ background: searchImpr >= mapsImpr ? CY : GREEN }} />
+                          <p>{searchImpr >= mapsImpr
+                            ? <>A maioria das impressões vem da <b>Busca</b> do Google.</>
+                            : <>A maioria das impressões vem do <b>Google Maps</b>.</>}</p>
+                        </div>
                       </div>
-                    </div>
-                    {imprRows.map((r) => (
-                      <BarRow key={r.k} k={IMPRESSION_PT[r.k] || r.k} v={r.v} max={imprMax} color={CY} formatted={fmt(r.v)} />
-                    ))}
-                    <div className="insight" style={{ marginTop: 12 }}>
-                      <div className="ib" style={{ background: searchImpr >= mapsImpr ? CY : GREEN }} />
-                      <p>{searchImpr >= mapsImpr
-                        ? <>A maioria das impressões vem da <b>Busca</b> do Google.</>
-                        : <>A maioria das impressões vem do <b>Google Maps</b>.</>}</p>
-                    </div>
-                  </div>
-                )}
+                    )}
 
-                {showActions && (
-                  <div className="card pad-lg tcard" style={{ "--tcard-accent": GREEN } as CSSProperties}>
-                    <div className="card-head"><div className="t">Ações dos clientes</div></div>
-                    <div className="mini">
-                      {actionRows.map((r) => (
-                        <MiniStat key={r.key} l={r.k} n={fmt(mtot(r.key) ?? 0)} />
-                      ))}
-                    </div>
+                    {showActions && (
+                      <div className="card pad-lg tcard" style={{ "--tcard-accent": GREEN } as CSSProperties}>
+                        <div className="card-head"><div className="t">Ações dos clientes</div></div>
+                        <div className="mini">
+                          {actionRows.map((r) => (
+                            <MiniStat key={r.key} l={r.k} n={fmt(mtot(r.key) ?? 0)} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
