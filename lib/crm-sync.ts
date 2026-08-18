@@ -103,18 +103,23 @@ function resolveDims(task: ClickUpTask, fm: Record<string, string>): { out: Reco
       if (cf) { out[dim] = readCustomField(cf); src[dim] = cf.name; used.add(cf.id); }
     }
   }
-  // 2) heurística por sinônimo — roda quando o explícito NÃO resolveu (ou não existe).
-  // (Antes pulava se fm[dim] estivesse setado mesmo que o campo não fosse achado → dimensão ficava
-  // null pra sempre. Agora, se o explícito falhou o match exato, a heurística ainda tenta.)
+  // 2) heurística — roda quando o explícito NÃO resolveu. Prioriza o sinônimo MAIS ESPECÍFICO
+  // (mais longo) varrendo TODOS os campos: assim "tipo de produto" vence "produto", e o campo
+  // "TIPO DE PRODUTO" é escolhido em vez de "SALA/PRODUTO" (que só casa o genérico "produto").
+  // Empate no mesmo sinônimo → prefere o nome de campo MAIS CURTO (mais provável de ser o exato).
   for (const dim of DIMS) {
     if (out[dim] != null) continue;
     const syns = [...SYNONYMS[dim]].sort((a, b) => b.length - a.length);
-    for (const cf of fields) {
-      if (used.has(cf.id)) continue;
-      const name = norm(cf.name || "");
-      if (!name) continue;
-      if (syns.some((syn) => name.includes(syn))) { out[dim] = readCustomField(cf); src[dim] = cf.name; used.add(cf.id); break; }
+    let picked: (typeof fields)[number] | null = null;
+    for (const syn of syns) {
+      const cands = fields.filter((cf) => !used.has(cf.id) && norm(cf.name || "").includes(syn));
+      if (cands.length) {
+        cands.sort((a, b) => (a.name || "").length - (b.name || "").length);
+        picked = cands[0];
+        break;
+      }
     }
+    if (picked) { out[dim] = readCustomField(picked); src[dim] = picked.name; used.add(picked.id); }
   }
   return { out, src };
 }
