@@ -19,8 +19,9 @@ interface Bucket {
   count: number;
   value: number;
 }
+// chave vazia = "" (o cliente renderiza como "Não preenchido"); nunca usa travessão.
 function tally(map: Map<string, Bucket>, key: string | null | undefined, value: number) {
-  const k = (key && String(key).trim()) || "—";
+  const k = (key && String(key).trim()) || "";
   const b = map.get(k) ?? { count: 0, value: 0 };
   b.count += 1;
   b.value += value;

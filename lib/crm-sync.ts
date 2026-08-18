@@ -133,7 +133,7 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
     const nativeStatus = t.status?.status ?? null;
     const channel = dims.channel;
     const category = dims.category;
-    const product = dims.product ?? category;
+    const product = dims.product; // NÃO cai pra category (senão "tipo de produto" mostra as categorias)
     const qualification = dims.qualification;
     const stage = dims.stage ?? nativeStatus;
     const status = dims.status ?? nativeStatus;
