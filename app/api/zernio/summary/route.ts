@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { listWorkspaceAccounts } from "@/lib/profiles";
+import { cached } from "@/lib/ttl-cache";
 import {
   accountInsightsFull, youtubeChannelInsights, linkedinAggregate,
   gbpPerformance, gbpLocations, postAnalytics,
@@ -125,27 +126,26 @@ export async function GET(req: Request) {
     const since = q.get("since") || iso(new Date(now.getTime() - 30 * 864e5));
     const range = { since, until };
 
-    const accounts = await listWorkspaceAccounts(ws); // agrega todos os profiles (multi-conta)
-    // conta conectada = social (posting habilitado) OU com analytics própria.
-    // ads-only (mídia paga) fica fora do overview de canais — vive na visão de Ads.
-    const connected = accounts.filter(
-      (a) =>
-        !ADS_ONLY.has(String(a.platform)) &&
-        (a.enabled === true || (a as Record<string, unknown>).analyticsEnabled === true)
-    );
-
-    const summaries = await Promise.all(
-      connected.map((a) =>
-        summarize(a, range).catch<AccountSummary>(() => ({
-          platform: String(a.platform),
-          displayName: (a.displayName as string | undefined),
-          username: (a as Record<string, unknown>).username as string | undefined,
-          followersCount: num(a.followersCount) ?? null,
-          metrics: {},
-          posts: null,
-        }))
-      )
-    );
+    // cache 45s por (workspace + período) — colapsa reloads/idas-e-vindas do overview
+    const summaries = await cached(`summary:${ws.id}:${since}:${until}`, 45_000, async () => {
+      const accounts = await listWorkspaceAccounts(ws); // agrega todos os profiles (multi-conta)
+      // conta conectada = social (posting habilitado) OU com analytics própria.
+      const connected = accounts.filter(
+        (a) => !ADS_ONLY.has(String(a.platform)) && (a.enabled === true || (a as Record<string, unknown>).analyticsEnabled === true)
+      );
+      return Promise.all(
+        connected.map((a) =>
+          summarize(a, range).catch<AccountSummary>(() => ({
+            platform: String(a.platform),
+            displayName: (a.displayName as string | undefined),
+            username: (a as Record<string, unknown>).username as string | undefined,
+            followersCount: num(a.followersCount) ?? null,
+            metrics: {},
+            posts: null,
+          }))
+        )
+      );
+    });
 
     return NextResponse.json({ accounts: summaries });
   } catch (e) {

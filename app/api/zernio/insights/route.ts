@@ -10,6 +10,7 @@
 // daily, top, content, linkTaps, stories, bestTime, demographics }.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
+import { cached } from "@/lib/ttl-cache";
 import {
   accountInsightsFull, followerHistory, keyMetricSeries, dailyMetrics,
   postAnalytics, profileLinkTaps, listStories, bestTime, demographics,
@@ -135,6 +136,8 @@ export async function GET(req: Request) {
     const until = q.get("until") ?? undefined;
     const range = { since, until };
 
+    // cache 30s por (workspace + conta + período) — reloads e trocas de card ficam instantâneos
+    const payload = await cached(`insights:${ws.id}:${platform}:${accountId}:${since}:${until}`, 30_000, async () => {
     const isIG = platform === "instagram";
     // plataformas com posting/série (account-insights com série, daily-metrics, posts, best-time)
     const hasPosting = platform === "instagram" || platform === "facebook" || platform === "tiktok";
@@ -180,7 +183,10 @@ export async function GET(req: Request) {
     const recentSrc = recentResp?.posts?.length ? recentResp.posts : posts;
     const recent = recentSrc.length ? recentPosts(recentSrc, 9) : null;
 
-    return NextResponse.json({ insights, followers, keySeries, daily, top, content, recent, linkTaps, stories, bestTime: bestSlots, demographics: demo });
+    return { insights, followers, keySeries, daily, top, content, recent, linkTaps, stories, bestTime: bestSlots, demographics: demo };
+    });
+
+    return NextResponse.json(payload);
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 502 });
   }
