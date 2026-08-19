@@ -11,6 +11,7 @@ import { Ic } from "@/components/Ic";
 import { fmt, money } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
 import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
+import { CRM_PROVIDERS, crmProvider } from "@/lib/crm/providers";
 
 // ── tipos ──
 interface CrmConfig {
@@ -387,14 +388,35 @@ function ConnectCard({
         </div>
       </div>
 
-      <div className="seg" style={{ marginBottom: 16 }}>
-        <button className={mode === "clickup" ? "on" : ""} onClick={() => setMode("clickup")} type="button">
-          ClickUp
-        </button>
-        <button className={mode === "webhook" ? "on" : ""} onClick={() => setMode("webhook")} type="button">
-          Webhook
-        </button>
+      {/* provedores de CRM — ativos conectam; "em breve" são o seam pra novos adapters */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+        {CRM_PROVIDERS.map((p) => {
+          const on = mode === p.id;
+          const ativo = p.status === "ativo";
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setMode(p.id)}
+              title={p.desc}
+              style={{
+                fontSize: 12.5, padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                border: `1px solid ${on ? "var(--cyan)" : "var(--hairline)"}`,
+                background: on ? "color-mix(in srgb, var(--cyan) 12%, #fff)" : "#fff",
+                color: on ? "var(--cyan)" : ativo ? "var(--label)" : "var(--label-3)", fontWeight: on ? 700 : 500,
+              }}
+            >
+              {p.label}{!ativo && " · em breve"}
+            </button>
+          );
+        })}
       </div>
+      {crmProvider(mode)?.status === "em_breve" && (
+        <div className="pm-hint" style={{ marginBottom: 16 }}>
+          {crmProvider(mode)?.desc} Se você usa <b>{crmProvider(mode)?.label}</b>, me avise que eu ligo o adapter
+          (a leitura já é normalizada — só falta a integração + a chave). Por ora, use <b>ClickUp</b> ou <b>Webhook</b>.
+        </div>
+      )}
 
       {mode === "clickup" && (
         <div>
