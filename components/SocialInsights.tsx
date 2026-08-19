@@ -6,8 +6,8 @@
 // conteúdo, seguidores, engajamento por tipo, rendimento orgânico, atividade & audiência,
 // conversas, top conteúdos e heatmap de melhores horários. COMPARAÇÃO de períodos preservada.
 import {
-  Fragment, cloneElement, useEffect, useState,
-  type CSSProperties, type ReactElement, type HTMLAttributes, type DragEvent,
+  Fragment, useEffect, useState,
+  type CSSProperties, type ReactElement, type HTMLAttributes,
 } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
@@ -213,18 +213,6 @@ const SI_CARD_LABELS: Record<string, string> = {
   top: "Top conteúdos", recentes: "Últimas publicações", horarios: "Melhores horários", audiencia: "Audiência",
 };
 
-function applyCardOrder<T extends { id: string }>(defs: T[], saved: string[]): T[] {
-  const byId = new Map(defs.map((d) => [d.id, d]));
-  const out: T[] = [];
-  const used = new Set<string>();
-  for (const id of saved) {
-    const d = byId.get(id);
-    if (d && !used.has(id)) { out.push(d); used.add(id); }
-  }
-  for (const d of defs) if (!used.has(d.id)) out.push(d);
-  return out;
-}
-
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -248,8 +236,6 @@ export function SocialInsights({ rede }: { rede: string }) {
   // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras)
   const [perfChart, setPerfChart] = useState<"line" | "bar">("line");
   // modo "organizar" (drag-and-drop dos cards reordenáveis) + card em arraste
-  const [editing, setEditing] = useState(false);
-  const [dragId, setDragId] = useState<string | null>(null);
 
   // fetch combinado (métricas + seguidores + série + daily + top + demografia) + comparação
   useEffect(() => {
@@ -888,39 +874,7 @@ export function SocialInsights({ rede }: { rede: string }) {
     </div>
   ) });
 
-  const orderedCards = applyCardOrder(cards, s.cardOrder[rede] || []);
-  const orderedIds = orderedCards.map((c) => c.id);
-  // move o card `from` para a posição de `to` e persiste a nova ordem (só os visíveis).
-  const moveCard = (from: string, to: string) => {
-    if (from === to) return;
-    const arr = [...orderedIds];
-    const fi = arr.indexOf(from), ti = arr.indexOf(to);
-    if (fi < 0 || ti < 0) return;
-    arr.splice(fi, 1);
-    arr.splice(ti, 0, from);
-    s.setCardOrder(rede, arr);
-  };
-  // renderiza um card; no modo "organizar" torna-o arrastável (HTML5 DnD) com handle visível.
-  const renderCard = (c: CardDef) => {
-    const node = c.node;
-    const cls = [node.props.className, c.full ? "si-card-full" : "", editing ? "si-drag" : "", dragId === c.id ? "dragging" : ""]
-      .filter(Boolean).join(" ");
-    if (!editing) return cloneElement(node, { key: c.id, className: cls });
-    return cloneElement(
-      node,
-      {
-        key: c.id,
-        className: cls,
-        draggable: true,
-        onDragStart: (e: DragEvent<HTMLDivElement>) => { e.dataTransfer.effectAllowed = "move"; setDragId(c.id); },
-        onDragOver: (e: DragEvent<HTMLDivElement>) => { e.preventDefault(); if (dragId && dragId !== c.id) moveCard(dragId, c.id); },
-        onDrop: (e: DragEvent<HTMLDivElement>) => e.preventDefault(),
-        onDragEnd: () => setDragId(null),
-      },
-      <span key="__drag" className="drag-handle" aria-hidden="true">⠿</span>,
-      <Fragment key="__body">{node.props.children}</Fragment>,
-    );
-  };
+  // organização dos cards agora é via WidgetBoard (mode flow). cards[] é mapeado direto pra ele.
 
   return (
     <>
