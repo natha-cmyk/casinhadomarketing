@@ -45,6 +45,50 @@ model Workspace {
   llmConfig       LlmConfig?
   events          Event[]
   profiles        WorkspaceProfile[]
+  subscription    Subscription?
+  invoices        Invoice[]
+  referrals       Referral[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// Conta: assinatura + faturas + indicações (billing sem provider ainda — dados reais,
+// editáveis; a cobrança automática entra quando ligarmos o meio de pagamento).
+// ─────────────────────────────────────────────────────────────
+model Subscription {
+  id              String    @id @default(cuid())
+  workspaceId     String    @unique
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plano           String    @default("mensal") // mensal | anual
+  valorMensal     Int       @default(500) // R$/mês no mensal
+  valorAnualMes   Int       @default(420) // R$/mês equivalente no anual
+  proximaCobranca DateTime?
+  status          String    @default("ativa")
+  updatedAt       DateTime  @updatedAt
+}
+
+model Invoice {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  competencia String // ex.: "Ago/2026"
+  valor       Int       @default(0)
+  status      String    @default("aberta") // paga | abonada | aberta
+  vencimento  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+model Referral {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cliente     String
+  status      String    @default("convidado") // convidado | negociando | convertido
+  abonouMes   String? // mês da mensalidade abonada quando convertido
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
 }
 
 // ─────────────────────────────────────────────────────────────
