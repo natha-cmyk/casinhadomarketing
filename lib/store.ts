@@ -117,7 +117,7 @@ export interface UIState {
   agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
   // layout dos widgets por painel. grid = coordenadas livres {x,y,w,h} por widget (tipo ClickUp);
   // order/size/height mantidos por compat. hidden = ocultos. Persistido no config.
-  widgetLayout: Record<string, { order?: string[]; size?: Record<string, number>; height?: Record<string, number>; hidden: string[]; grid?: Record<string, { x: number; y: number; w: number; h: number }> }>;
+  widgetLayout: Record<string, { order?: string[]; size?: Record<string, number>; height?: Record<string, number>; hidden: string[]; grid?: Record<string, { x: number; y: number; w: number; h: number }>; custom?: { id: string; dim: string; viz: "list" | "pizza"; title: string }[] }>;
   // qual painel de widgets está em modo "Organizar" (o botão fica no topo da página). Só UI.
   widgetEdit: string | null;
 
@@ -154,6 +154,8 @@ export interface UIState {
   setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
   setWidgetLayout: (panel: string, layout: UIState["widgetLayout"][string]) => void;
   toggleWidgetEdit: (panel: string) => void;
+  addCustomWidget: (panel: string, w: { id: string; dim: string; viz: "list" | "pizza"; title: string }) => void;
+  removeCustomWidget: (panel: string, id: string) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
@@ -251,6 +253,16 @@ export const useStore = create<UIState>((set) => ({
   setWidgetLayout: (panel, layout) =>
     set((s) => ({ widgetLayout: { ...s.widgetLayout, [panel]: layout } })),
   toggleWidgetEdit: (panel) => set((s) => ({ widgetEdit: s.widgetEdit === panel ? null : panel })),
+  addCustomWidget: (panel, w) =>
+    set((s) => {
+      const cur = s.widgetLayout[panel] ?? { hidden: [] };
+      return { widgetLayout: { ...s.widgetLayout, [panel]: { ...cur, custom: [...(cur.custom ?? []), w] } } };
+    }),
+  removeCustomWidget: (panel, id) =>
+    set((s) => {
+      const cur = s.widgetLayout[panel] ?? { hidden: [] };
+      return { widgetLayout: { ...s.widgetLayout, [panel]: { ...cur, custom: (cur.custom ?? []).filter((w) => w.id !== id) } } };
+    }),
   setZernioAccounts: (accounts) =>
     set((s) => {
       // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).

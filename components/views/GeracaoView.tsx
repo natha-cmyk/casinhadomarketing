@@ -775,8 +775,24 @@ function ConnectionPanel({ mapping, fields }: { mapping?: Record<string, string 
   );
 }
 
+// dimensões disponíveis pro chart builder (rótulo + de onde vêm as linhas)
+const CRM_DIMS: { dim: string; label: string }[] = [
+  { dim: "channel", label: "Canal" },
+  { dim: "category", label: "Categoria de produto" },
+  { dim: "product", label: "Tipo de produto" },
+  { dim: "qualification", label: "Qualificação" },
+  { dim: "stage", label: "Funil / etapa" },
+  { dim: "status", label: "Status" },
+  { dim: "lossReason", label: "Motivo de perda" },
+];
+
 // ── Dashboard de leads ──
 function Dashboard({ data }: { data: LeadsData }) {
+  const custom = useStore((s) => s.widgetLayout["crm"]?.custom) ?? [];
+  const addCustomWidget = useStore((s) => s.addCustomWidget);
+  const removeCustomWidget = useStore((s) => s.removeCustomWidget);
+  const [builderOpen, setBuilderOpen] = useState(false);
+
   if (data.total === 0) {
     return (
       <div className="empty">
@@ -791,6 +807,11 @@ function Dashboard({ data }: { data: LeadsData }) {
 
   const cycle = (i: number) => CHANNEL_COLORS[i % CHANNEL_COLORS.length];
   const conv = `${(data.convRate * 100).toFixed(1)}%`;
+  // dimensão → linhas (usado pelos gráficos criados no chart builder)
+  const dimRows: Record<string, Row[]> = {
+    channel: data.byChannel, category: data.byCategory, product: data.byProduct,
+    qualification: data.byQualification, stage: data.byStage, status: data.byStatus, lossReason: data.lossReasons,
+  };
   // indicadores derivados (inteligência de marketing) — só do que já temos, sem inventar
   const ticket = data.won ? data.wonValue / data.won : 0; // ticket médio do ganho
   const lossRate = data.total ? data.lost / data.total : 0; // taxa de perda
@@ -829,7 +850,12 @@ function Dashboard({ data }: { data: LeadsData }) {
         </div>
       </div>
 
-      {/* Widgets organizáveis (arrasta, redimensiona, oculta) — persiste por painel */}
+      {/* barra do chart builder */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <button className="btn-link" type="button" onClick={() => setBuilderOpen(true)}>+ Novo gráfico</button>
+      </div>
+
+      {/* Widgets organizáveis (arrasta, redimensiona, oculta) + gráficos criados pelo usuário */}
       <WidgetBoard
         panel="crm"
         widgets={[
@@ -841,11 +867,83 @@ function Dashboard({ data }: { data: LeadsData }) {
           { id: "status", label: "Por status", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
           ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, defaultH: 9, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
           ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Saúde por canal", defaultSpan: 6, defaultH: 9, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
+          // gráficos criados pelo usuário (chart builder)
+          ...custom.map((cw) => ({
+            id: `c-${cw.id}`,
+            label: cw.title,
+            defaultSpan: 3,
+            defaultH: 10,
+            node: <GroupCard title={cw.title} rows={dimRows[cw.dim] || []} color={cw.viz === "pizza" ? pieColor : cycle} empty="Sem dados nesta dimensão." defaultViz={cw.viz} stars={cw.dim === "qualification"} showValue={false} />,
+          })),
         ]}
       />
 
       <LeadsTable leads={data.leads} />
+
+      {builderOpen && (
+        <ChartBuilder
+          custom={custom}
+          onClose={() => setBuilderOpen(false)}
+          onCreate={(dim, viz, title) => addCustomWidget("crm", { id: "cw_" + Math.random().toString(36).slice(2, 9), dim, viz, title })}
+          onDelete={(id) => removeCustomWidget("crm", id)}
+        />
+      )}
     </>
+  );
+}
+
+// mapa dimensão → linhas (fora do render pra reuso)
+// (definido dentro do Dashboard via closure abaixo)
+
+// ── Chart builder: cria um gráfico escolhendo dimensão + tipo ──
+function ChartBuilder({ custom, onClose, onCreate, onDelete }: {
+  custom: { id: string; dim: string; viz: "list" | "pizza"; title: string }[];
+  onClose: () => void;
+  onCreate: (dim: string, viz: "list" | "pizza", title: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [dim, setDim] = useState("channel");
+  const [viz, setViz] = useState<"list" | "pizza">("pizza");
+  const [title, setTitle] = useState("");
+  const dimLabel = (d: string) => CRM_DIMS.find((x) => x.dim === d)?.label || d;
+  const criar = () => {
+    onCreate(dim, viz, (title.trim() || `${dimLabel(dim)} (${viz === "pizza" ? "pizza" : "lista"})`));
+    setTitle("");
+  };
+  return (
+    <div className="pm-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pm" role="dialog" aria-modal="true" style={{ width: "min(520px,100%)" }} onClick={(e) => e.stopPropagation()}>
+        <div className="pm-head"><b>Novo gráfico</b><button className="pm-x" aria-label="Fechar" onClick={onClose}>✕</button></div>
+        <div className="pm-body">
+          <label className="field-lbl">Indicador (dimensão)</label>
+          <select className="field-edit" value={dim} onChange={(e) => setDim(e.target.value)}>
+            {CRM_DIMS.map((d) => <option key={d.dim} value={d.dim}>{d.label}</option>)}
+          </select>
+          <label className="field-lbl" style={{ marginTop: 10 }}>Tipo de gráfico</label>
+          <div className="seg">
+            <button className={viz === "pizza" ? "on" : ""} onClick={() => setViz("pizza")} type="button">Pizza</button>
+            <button className={viz === "list" ? "on" : ""} onClick={() => setViz("list")} type="button">Lista</button>
+          </div>
+          <label className="field-lbl" style={{ marginTop: 10 }}>Título (opcional)</label>
+          <input className="field-edit" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${dimLabel(dim)}`} />
+          <div style={{ marginTop: 14 }}>
+            <button className="btn-link ig" type="button" onClick={criar}>Criar gráfico</button>
+          </div>
+
+          {custom.length > 0 && (
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--hairline)" }}>
+              <div className="field-lbl" style={{ marginBottom: 8 }}>Gráficos criados</div>
+              {custom.map((cw) => (
+                <div key={cw.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--hairline)" }}>
+                  <span style={{ flex: 1, fontSize: 13 }}>{cw.title} <span style={{ color: "var(--label-3)", fontSize: 11 }}>· {dimLabel(cw.dim)} · {cw.viz}</span></span>
+                  <button className="btn-link" type="button" onClick={() => onDelete(cw.id)} style={{ color: "var(--red)" }}>Excluir</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
