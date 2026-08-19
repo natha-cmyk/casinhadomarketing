@@ -832,14 +832,14 @@ function Dashboard({ data }: { data: LeadsData }) {
       <WidgetBoard
         panel="crm"
         widgets={[
-          { id: "canal", label: "Por canal", defaultSize: "sm", node: <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" /> },
-          { id: "categoria", label: "Por categoria de produto", defaultSize: "sm", node: <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} /> },
-          { id: "produto", label: "Por tipo de produto", defaultSize: "sm", node: <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} /> },
-          { id: "qualificacao", label: "Por qualificação", defaultSize: "sm", node: <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
-          { id: "funil", label: "Por funil / etapa", defaultSize: "sm", node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
-          { id: "status", label: "Por status", defaultSize: "sm", node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
-          ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSize: "sm" as const, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
-          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Saúde por canal", defaultSize: "lg" as const, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
+          { id: "canal", label: "Por canal", defaultSpan: 3, node: <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" /> },
+          { id: "categoria", label: "Por categoria de produto", defaultSpan: 3, node: <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} /> },
+          { id: "produto", label: "Por tipo de produto", defaultSpan: 3, node: <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} /> },
+          { id: "qualificacao", label: "Por qualificação", defaultSpan: 3, node: <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
+          { id: "funil", label: "Por funil / etapa", defaultSpan: 3, node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
+          { id: "status", label: "Por status", defaultSpan: 3, node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
+          ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
+          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Saúde por canal", defaultSpan: 6, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
         ]}
       />
 
@@ -865,35 +865,48 @@ function StatGroup({ title, items }: { title: string; items: { l: string; n: str
   );
 }
 
-// ── Saúde por canal: conversão (ganho/total) por canal, ordenado ──
+// ── Saúde por canal: conversão (ganho/total) por canal, ordenado. Alterna barras/pizza ──
 function ChannelHealthCard({ rows }: { rows: NonNullable<LeadsData["channelHealth"]> }) {
+  const [viz, setViz] = useState<"list" | "pizza">("list");
   const top = rows.slice(0, 8);
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
+    <div className="card">
       <div className="card-head">
         <div className="t">Saúde por canal</div>
-        <span className="badge">conversão</span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {top.map((c, i) => (
-          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ width: 130, fontSize: 12.5, fontWeight: 600, color: "var(--label)", flex: "0 0 130px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fill(c.key)}</span>
-            {/* barra empilhada ganho/aberto/perdido */}
-            <span style={{ flex: 1, minWidth: 120, display: "flex", height: 12, borderRadius: 999, overflow: "hidden", background: "var(--cream)" }}>
-              {c.won > 0 && <span style={{ width: `${(c.won / c.total) * 100}%`, background: "var(--excelente)" }} title={`Ganhos: ${c.won}`} />}
-              {c.open > 0 && <span style={{ width: `${(c.open / c.total) * 100}%`, background: "var(--cyan)" }} title={`Em aberto: ${c.open}`} />}
-              {c.lost > 0 && <span style={{ width: `${(c.lost / c.total) * 100}%`, background: "var(--red)" }} title={`Perdidos: ${c.lost}`} />}
-            </span>
-            <span className="tnum" style={{ fontSize: 12.5, color: "var(--label-2)", width: 54, textAlign: "right" }}>{fmt(c.total)} leads</span>
-            <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)", width: 62, textAlign: "right" }}>
-              {(c.conv * 100).toFixed(0)}% conv.
-            </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="seg" style={{ transform: "scale(.86)", transformOrigin: "right center" }}>
+            <button className={viz === "list" ? "on" : ""} onClick={() => setViz("list")} type="button" title="Barras">☰</button>
+            <button className={viz === "pizza" ? "on" : ""} onClick={() => setViz("pizza")} type="button" title="Pizza">◔</button>
           </div>
-        ))}
+          <span className="badge">conversão</span>
+        </div>
       </div>
-      <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 10 }}>
-        Verde = ganho · azul = em aberto · vermelho = perdido. Conversão = ganhos ÷ total do canal.
-      </div>
+      {viz === "pizza" ? (
+        <PieChart rows={rows.map((c) => ({ key: c.key, count: c.total, value: 0 }))} />
+      ) : (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {top.map((c) => (
+              <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ width: 130, fontSize: 12.5, fontWeight: 600, color: "var(--label)", flex: "0 0 130px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fill(c.key)}</span>
+                {/* barra empilhada ganho/aberto/perdido */}
+                <span style={{ flex: 1, minWidth: 120, display: "flex", height: 12, borderRadius: 999, overflow: "hidden", background: "var(--cream)" }}>
+                  {c.won > 0 && <span style={{ width: `${(c.won / c.total) * 100}%`, background: "var(--excelente)" }} title={`Ganhos: ${c.won}`} />}
+                  {c.open > 0 && <span style={{ width: `${(c.open / c.total) * 100}%`, background: "var(--cyan)" }} title={`Em aberto: ${c.open}`} />}
+                  {c.lost > 0 && <span style={{ width: `${(c.lost / c.total) * 100}%`, background: "var(--red)" }} title={`Perdidos: ${c.lost}`} />}
+                </span>
+                <span className="tnum" style={{ fontSize: 12.5, color: "var(--label-2)", width: 54, textAlign: "right" }}>{fmt(c.total)} leads</span>
+                <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)", width: 62, textAlign: "right" }}>
+                  {(c.conv * 100).toFixed(0)}% conv.
+                </span>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 10 }}>
+            Verde = ganho · azul = em aberto · vermelho = perdido. Conversão = ganhos ÷ total do canal.
+          </div>
+        </>
+      )}
     </div>
   );
 }

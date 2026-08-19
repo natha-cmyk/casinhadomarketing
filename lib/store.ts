@@ -115,8 +115,8 @@ export interface UIState {
   calManuais: string[];
   // personalização dos agentes por workspace: { agentKey: {enabled, panels, promptExtra} }. Persistido no config.
   agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
-  // layout dos widgets por painel (ordem + tamanho sm/lg + ocultos). Persistido no config.
-  widgetLayout: Record<string, { order: string[]; size: Record<string, "sm" | "lg">; hidden: string[] }>;
+  // layout dos widgets por painel (ordem + tamanho = span de coluna 2..6 + ocultos). Persistido no config.
+  widgetLayout: Record<string, { order: string[]; size: Record<string, number>; hidden: string[] }>;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
@@ -149,7 +149,7 @@ export interface UIState {
   addCalManual: (nome: string) => void;
   removeCalManual: (nome: string) => void;
   setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
-  setWidgetLayout: (panel: string, layout: { order: string[]; size: Record<string, "sm" | "lg">; hidden: string[] }) => void;
+  setWidgetLayout: (panel: string, layout: { order: string[]; size: Record<string, number>; hidden: string[] }) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;

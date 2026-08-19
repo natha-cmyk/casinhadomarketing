@@ -20,7 +20,7 @@ async function putJSON(url: string, body: unknown): Promise<void> {
 }
 
 export interface HydrationData {
-  config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; calManuais?: string[]; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, { order: string[]; size: Record<string, "sm" | "lg">; hidden: string[] }> } | null;
+  config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; calManuais?: string[]; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, { order: string[]; size: Record<string, number>; hidden: string[] }> } | null;
   perfil: UIState["perfil"] | null;
   okr: { objetivo: string; areas: { id: string; nome: string; krs: { id: string; kr: string; alvo: string; un: string; tag: string; resp: string }[] }[] } | null;
   posts: { posts: UIState["posts"] } | null;
