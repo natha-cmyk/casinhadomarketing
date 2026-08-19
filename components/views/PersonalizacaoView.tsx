@@ -573,6 +573,15 @@ export default function PersonalizacaoView() {
         </div>
       </PSection>
 
+      {/* ===== Equipe (multi-usuário) ===== */}
+      <PSection
+        title="Equipe"
+        sub="Convide pessoas pro seu ambiente. Elas entram com o Google usando o e-mail convidado."
+        accent="var(--cyan)"
+      >
+        <TeamSection />
+      </PSection>
+
       {/* ===== Assistentes (agentes) ===== */}
       <PSection
         title="Assistentes"
@@ -716,6 +725,89 @@ export default function PersonalizacaoView() {
         />
       </PSection>
     </>
+  );
+}
+
+/* ===== Equipe — membros + convites (multi-usuário) ===== */
+interface TeamMember { email: string; nome: string; role: string }
+interface TeamInvite { id: string; email: string; role: string }
+function TeamSection() {
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [invites, setInvites] = useState<TeamInvite[]>([]);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("member");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch("/api/invites", { cache: "no-store" });
+      const d = await r.json();
+      if (d?.ok) { setMembers(d.members || []); setInvites(d.invites || []); }
+    } catch {}
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const convidar = async () => {
+    setBusy(true); setErr(null); setMsg(null);
+    try {
+      const r = await fetch("/api/invites", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, role }) });
+      const d = await r.json();
+      if (!d?.ok) { setErr(d?.error || "Não foi possível convidar."); return; }
+      setMsg(`Convite enviado pra ${email}. Ela entra com o Google usando esse e-mail.`);
+      setEmail("");
+      load();
+    } catch { setErr("Falha ao convidar."); } finally { setBusy(false); }
+  };
+  const cancelar = async (id: string) => {
+    await fetch(`/api/invites?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+    load();
+  };
+
+  return (
+    <div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--label-3)", marginBottom: 8 }}>Membros ({members.length})</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+        {members.map((m) => (
+          <div key={m.email} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{m.email}{m.nome ? ` · ${m.nome}` : ""}</span>
+            <span className="badge" style={{ background: m.role === "owner" ? "rgba(0,187,197,.12)" : "var(--cream)", color: m.role === "owner" ? "var(--cyan)" : "var(--label-2)" }}>{m.role === "owner" ? "dono" : "membro"}</span>
+          </div>
+        ))}
+      </div>
+
+      {invites.length > 0 && (
+        <>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--label-3)", marginBottom: 8 }}>Convites pendentes ({invites.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+            {invites.map((i) => (
+              <div key={i.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", color: "var(--label-2)" }}>{i.email}</span>
+                <span style={{ fontSize: 11, color: "var(--label-3)" }}>{i.role === "owner" ? "dono" : "membro"}</span>
+                <button className="btn-link" type="button" onClick={() => cancelar(i.id)} style={{ color: "var(--red)" }}>Cancelar</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <label className="field-lbl">Convidar por e-mail</label>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input className="field-edit" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@empresa.com" style={{ flex: "1 1 220px" }} />
+        <select className="field-edit" value={role} onChange={(e) => setRole(e.target.value)} style={{ flex: "0 1 140px" }} aria-label="Papel">
+          <option value="member">Membro</option>
+          <option value="owner">Dono</option>
+        </select>
+        <button className="btn-link ig" type="button" onClick={convidar} disabled={busy || !email.trim()}>{busy ? "Enviando…" : "Convidar"}</button>
+      </div>
+      {msg && <div className="pm-hint" style={{ marginTop: 8, color: "var(--excelente)" }}>{msg}</div>}
+      {err && <div className="pm-hint" style={{ marginTop: 8, color: "var(--red)" }}>{err}</div>}
+      <div className="tfoot-note" style={{ marginTop: 12 }}>
+        Só o dono do ambiente convida. O convidado entra em <b>Login → Entrar com Google</b> com o e-mail convidado e cai direto neste ambiente.
+        <br />⚠️ Requer o login Google habilitado no Supabase (Authentication → Providers → Google).
+      </div>
+    </div>
   );
 }
 

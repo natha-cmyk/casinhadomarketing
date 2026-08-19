@@ -27,6 +27,14 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  async function google() {
+    setErr(null);
+    const supabase = createClient();
+    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/` : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
+    if (error) setErr(error.message.includes("provider is not enabled") ? "Login com Google ainda não está habilitado. Use e-mail e senha." : error.message);
+  }
+
   return (
     <AuthShell titulo="Entrar" sub="Acesse o seu ambiente na Casinha.">
       <form onSubmit={submit} className="auth-form">
@@ -39,6 +47,12 @@ export default function LoginPage() {
           {loading ? "Entrando…" : "Entrar"}
         </button>
       </form>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0", color: "var(--label-3)", fontSize: 12 }}>
+        <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} /> ou <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+      </div>
+      <button className="btn-link auth-btn" type="button" onClick={google} style={{ width: "100%", justifyContent: "center", border: "1px solid var(--hairline)" }}>
+        Entrar com Google
+      </button>
       <p className="auth-alt">
         Não tem conta? <Link href="/cadastro">Cadastre-se</Link>
       </p>

@@ -27,6 +27,18 @@ export async function provisionWorkspace(userId: string, email: string): Promise
     const existing = await tx.membership.findFirst({ where: { userId }, orderBy: { createdAt: "asc" } });
     if (existing) return existing.workspaceId;
 
+    // CONVITE: se há convite pendente pra esse e-mail, ENTRA no workspace que convidou
+    // (em vez de criar um novo). Multi-usuário.
+    const invite = await tx.invite.findFirst({
+      where: { email: email.toLowerCase(), acceptedAt: null },
+      orderBy: { createdAt: "asc" },
+    });
+    if (invite) {
+      await tx.membership.create({ data: { userId, workspaceId: invite.workspaceId, role: invite.role } });
+      await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
+      return invite.workspaceId;
+    }
+
     const zernioProfileId = isSeahub && process.env.ZERNIO_PROFILE_ID ? process.env.ZERNIO_PROFILE_ID : null;
     const ws = await tx.workspace.create({
       data: {

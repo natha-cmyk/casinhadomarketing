@@ -48,6 +48,23 @@ model Workspace {
   subscription    Subscription?
   invoices        Invoice[]
   referrals       Referral[]
+  invites         Invite[]
+}
+
+// Convite pra entrar num workspace (multi-usuário). A pessoa aceita entrando com o Google
+// usando o e-mail convidado (provisionamento casa o e-mail com um convite pendente).
+model Invite {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        Role      @default(member)
+  invitedBy   String    @default("") // e-mail de quem convidou
+  createdAt   DateTime  @default(now())
+  acceptedAt  DateTime?
+
+  @@index([workspaceId])
+  @@index([email])
 }
 
 // ─────────────────────────────────────────────────────────────
