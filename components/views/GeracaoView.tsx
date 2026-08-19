@@ -832,14 +832,14 @@ function Dashboard({ data }: { data: LeadsData }) {
       <WidgetBoard
         panel="crm"
         widgets={[
-          { id: "canal", label: "Por canal", defaultSpan: 3, node: <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" /> },
-          { id: "categoria", label: "Por categoria de produto", defaultSpan: 3, node: <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} /> },
-          { id: "produto", label: "Por tipo de produto", defaultSpan: 3, node: <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} /> },
-          { id: "qualificacao", label: "Por qualificação", defaultSpan: 3, node: <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
-          { id: "funil", label: "Por funil / etapa", defaultSpan: 3, node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
-          { id: "status", label: "Por status", defaultSpan: 3, node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
-          ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
-          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Saúde por canal", defaultSpan: 6, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
+          { id: "canal", label: "Por canal", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" /> },
+          { id: "categoria", label: "Por categoria de produto", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} /> },
+          { id: "produto", label: "Por tipo de produto", defaultSpan: 3, defaultH: 14, node: <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} /> },
+          { id: "qualificacao", label: "Por qualificação", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
+          { id: "funil", label: "Por funil / etapa", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
+          { id: "status", label: "Por status", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
+          ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, defaultH: 9, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
+          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Saúde por canal", defaultSpan: 6, defaultH: 9, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
         ]}
       />
 

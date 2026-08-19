@@ -1,186 +1,181 @@
 "use client";
-// Quadro de widgets maleável (estilo editor) — pointer events. Personalização ponto-a-ponto:
-// ARRASTAR: segura a alça ⠿ e solta ANTES/DEPOIS de outro widget (metade esquerda = antes, direita = depois).
-// LARGURA: puxa a borda direita (colunas 1/3..inteiro). ALTURA: puxa a borda inferior. CANTO: os dois.
-// −/+ atalho de largura. Layout (ordem + span + altura + ocultos) persiste por painel.
+// Quadro de widgets em GRID LIVRE (tipo ClickUp/react-grid-layout). Cada widget tem
+// coordenadas {x,y,w,h} numa grade de 6 colunas × linhas de 28px. Modo "Organizar":
+// ARRASTA a alça ⠿ pra QUALQUER célula (inclusive espaços vazios); PUXA as bordas pra
+// redimensionar (largura em colunas, altura em linhas). Ao soltar, compacta pra cima
+// (sem sobreposição, preenche buracos). Layout persiste por painel.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 
-export interface WidgetDef { id: string; label: string; node: ReactNode; defaultSpan?: number }
+export interface WidgetDef { id: string; label: string; node: ReactNode; defaultSpan?: number; defaultH?: number }
 
-const COLS = 6, MIN = 2, MAX = 6, DEF = 3, GAP = 16, MINH = 160;
-const clamp = (n: number) => Math.max(MIN, Math.min(MAX, Math.round(n)));
-const fracLabel = (s: number) => (s >= 6 ? "inteiro" : s >= 4 ? "2/3" : s === 3 ? "metade" : "1/3");
+const COLS = 6, GAP = 12, ROWH = 28, MINW = 2, MINH = 5, DEFH = 9;
+const clampW = (n: number) => Math.max(MINW, Math.min(COLS, Math.round(n)));
+const clampX = (x: number, w: number) => Math.max(0, Math.min(COLS - w, Math.round(x)));
+const fracLabel = (w: number) => (w >= 6 ? "inteiro" : w >= 4 ? "2/3" : w === 3 ? "metade" : "1/3");
 
-type Axis = "x" | "y" | "xy";
+type Cell = { x: number; y: number; w: number; h: number };
+const coll = (a: Cell, b: Cell) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+// compacta pra cima: empacota respeitando ordem (y, x), sem sobreposição, preenchendo buracos
+function compact(grid: Record<string, Cell>, ids: string[]): Record<string, Cell> {
+  const items = ids.filter((id) => grid[id]).map((id) => ({ id, ...grid[id] })).sort((a, b) => a.y - b.y || a.x - b.x);
+  const placed: (Cell & { id: string })[] = [];
+  for (const it of items) {
+    let y = 0;
+    while (placed.some((p) => coll({ ...it, y }, p))) y++;
+    placed.push({ ...it, y });
+  }
+  const out: Record<string, Cell> = {};
+  for (const p of placed) out[p.id] = { x: p.x, y: p.y, w: p.w, h: p.h };
+  return out;
+}
 
 export function WidgetBoard({ panel, widgets }: { panel: string; widgets: WidgetDef[] }) {
   const layout = useStore((s) => s.widgetLayout[panel]);
   const setLayout = useStore((s) => s.setWidgetLayout);
   const [editing, setEditing] = useState(false);
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [drop, setDrop] = useState<{ id: string; after: boolean } | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  const [live, setLive] = useState<Record<string, Cell> | null>(null); // override durante arrasto/resize
   const gridRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ id: string; drop: { id: string; after: boolean } | null } | null>(null);
-  const resize = useRef<{ id: string; axis: Axis; startX: number; startY: number; startSpan: number; startH: number; step: number; lastSpan: number; el: HTMLElement } | null>(null);
+  const drag = useRef<{ id: string } | null>(null);
+  const resize = useRef<{ id: string; axis: "x" | "y" | "xy" } | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 760px)");
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
 
   const byId = new Map(widgets.map((w) => [w.id, w]));
-  const compute = (lay = layout) => {
-    const savedOrder = (lay?.order ?? []).filter((id) => byId.has(id));
-    const order = [...savedOrder, ...widgets.filter((w) => !savedOrder.includes(w.id)).map((w) => w.id)];
-    return { order, hidden: new Set(lay?.hidden ?? []) };
-  };
-  const { order, hidden } = compute();
-  const spanOf = (id: string, lay = layout) => clamp(lay?.size?.[id] ?? byId.get(id)?.defaultSpan ?? DEF);
-  const heightOf = (id: string, lay = layout) => lay?.height?.[id];
+  const hidden = new Set(layout?.hidden ?? []);
+  const savedOrder = (layout?.order ?? []).filter((id) => byId.has(id));
+  const order = [...savedOrder, ...widgets.filter((w) => !savedOrder.includes(w.id)).map((w) => w.id)];
   const visible = order.filter((id) => !hidden.has(id));
   const hiddenList = order.filter((id) => hidden.has(id));
 
-  const apply = (patch: Partial<{ order: string[]; size: Record<string, number>; height: Record<string, number>; hidden: string[] }>) => {
-    const lay = useStore.getState().widgetLayout[panel];
-    const { order: ord, hidden: hid } = compute(lay);
-    setLayout(panel, {
-      order: patch.order ?? ord,
-      size: patch.size ?? { ...(lay?.size ?? {}) },
-      height: patch.height ?? { ...(lay?.height ?? {}) },
-      hidden: patch.hidden ?? [...hid],
-    });
+  // gera grid padrão a partir de defaultSpan (empacota 2 por linha ~)
+  const genDefault = (ids: string[]): Record<string, Cell> => {
+    const g: Record<string, Cell> = {};
+    let x = 0, y = 0, rowH = 0;
+    for (const id of ids) {
+      const w = clampW(byId.get(id)?.defaultSpan ?? 3);
+      const h = byId.get(id)?.defaultH ?? DEFH;
+      if (x + w > COLS) { x = 0; y += rowH; rowH = 0; }
+      g[id] = { x, y, w, h };
+      x += w; rowH = Math.max(rowH, h);
+    }
+    return g;
   };
-  // insere `from` ANTES ou DEPOIS de `to` — posicionamento livre (não é só swap)
-  const moveRel = (from: string, to: string, after: boolean) => {
-    if (from === to) return;
-    const { order: ord } = compute(useStore.getState().widgetLayout[panel]);
-    const a = ord.filter((x) => x !== from);
-    const ti = a.indexOf(to);
-    if (ti < 0) return;
-    a.splice(after ? ti + 1 : ti, 0, from);
-    apply({ order: a });
+  // grid efetivo: salvo (+ novos widgets anexados no fim) ou padrão; live sobrepõe durante interação
+  const buildGrid = (): Record<string, Cell> => {
+    const stored = layout?.grid;
+    if (!stored) return genDefault(visible);
+    const g: Record<string, Cell> = {};
+    let maxY = 0;
+    for (const id of visible) if (stored[id]) { g[id] = stored[id]; maxY = Math.max(maxY, stored[id].y + stored[id].h); }
+    // widgets visíveis sem coordenada → anexa no fim
+    for (const id of visible) if (!g[id]) { g[id] = { x: 0, y: maxY, w: clampW(byId.get(id)?.defaultSpan ?? 3), h: byId.get(id)?.defaultH ?? DEFH }; maxY += g[id].h; }
+    return g;
   };
-  const setSpan = (id: string, span: number) => apply({ size: { ...(useStore.getState().widgetLayout[panel]?.size ?? {}), [id]: clamp(span) } });
-  const setHeight = (id: string, h: number) => apply({ height: { ...(useStore.getState().widgetLayout[panel]?.height ?? {}), [id]: Math.max(MINH, Math.round(h)) } });
-  const hide = (id: string) => apply({ hidden: [...compute(useStore.getState().widgetLayout[panel]).hidden, id] });
-  const show = (id: string) => apply({ hidden: [...compute(useStore.getState().widgetLayout[panel]).hidden].filter((x) => x !== id) });
-  const reset = () => setLayout(panel, { order: widgets.map((w) => w.id), size: {}, height: {}, hidden: [] });
+  const grid = { ...buildGrid(), ...(live ?? {}) };
+
+  const persistGrid = (g: Record<string, Cell>) => {
+    const compacted = compact(g, visible);
+    setLayout(panel, { ...(useStore.getState().widgetLayout[panel] ?? { hidden: [] }), hidden: [...hidden], grid: { ...(layout?.grid ?? {}), ...compacted } });
+  };
+  const hide = (id: string) => setLayout(panel, { ...(layout ?? { hidden: [] }), hidden: [...hidden, id] });
+  const show = (id: string) => setLayout(panel, { ...(layout ?? { hidden: [] }), hidden: [...hidden].filter((x) => x !== id) });
+  const reset = () => setLayout(panel, { hidden: [], grid: undefined, order: widgets.map((w) => w.id), size: {}, height: {} });
+  const setW = (id: string, w: number) => { const g = { ...grid, [id]: { ...grid[id], w: clampW(w), x: clampX(grid[id].x, clampW(w)) } }; persistGrid(g); };
 
   useEffect(() => {
     if (!editing) return;
+    const step = () => {
+      const rect = gridRef.current!.getBoundingClientRect();
+      return { rect, colStep: (rect.width - GAP * (COLS - 1)) / COLS + GAP, rowStep: ROWH + GAP };
+    };
     const onMove = (e: PointerEvent) => {
-      if (resize.current) {
-        const r = resize.current;
-        if (r.axis !== "y") {
-          const next = clamp(r.startSpan + (e.clientX - r.startX) / r.step);
-          if (next !== r.lastSpan) { r.lastSpan = next; setSpan(r.id, next); }
-        }
-        if (r.axis !== "x") setHeight(r.id, r.startH + (e.clientY - r.startY));
-        return;
-      }
+      if (!gridRef.current) return;
+      const { rect, colStep, rowStep } = step();
       if (drag.current) {
-        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-        const wrap = el?.closest("[data-wid]") as HTMLElement | null;
-        const tid = wrap?.getAttribute("data-wid") || null;
-        if (tid && tid !== drag.current.id) {
-          const rect = wrap!.getBoundingClientRect();
-          const after = e.clientX > rect.left + rect.width / 2; // metade direita = depois
-          drag.current.drop = { id: tid, after };
-          setDrop({ id: tid, after });
-        } else {
-          drag.current.drop = null;
-          setDrop(null);
-        }
+        const id = drag.current.id;
+        const cur = grid[id];
+        const x = clampX((e.clientX - rect.left) / colStep - cur.w / 2 + 0.5, cur.w);
+        const y = Math.max(0, Math.round((e.clientY - rect.top) / rowStep - cur.h / 2 + 0.5));
+        setLive({ [id]: { ...cur, x, y } });
+      } else if (resize.current) {
+        const { id, axis } = resize.current;
+        const cur = grid[id];
+        let { w, h } = cur;
+        if (axis !== "y") w = Math.max(MINW, Math.min(COLS - cur.x, Math.round((e.clientX - rect.left) / colStep - cur.x)));
+        if (axis !== "x") h = Math.max(MINH, Math.round((e.clientY - rect.top) / rowStep - cur.y));
+        setLive({ [id]: { ...cur, w, h } });
       }
     };
     const onUp = () => {
-      if (drag.current) {
-        const { id, drop: dp } = drag.current;
-        if (dp) moveRel(id, dp.id, dp.after);
-        drag.current = null; setDragId(null); setDrop(null);
-      }
-      if (resize.current) { resize.current = null; setBusyId(null); }
+      if ((drag.current || resize.current) && live) persistGrid({ ...grid });
+      drag.current = null; resize.current = null; setLive(null);
       document.body.style.userSelect = "";
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing]);
+  }, [editing, live, layout]);
 
-  const startDrag = (e: React.PointerEvent, id: string) => {
-    e.preventDefault();
-    drag.current = { id, drop: null };
-    setDragId(id);
-    document.body.style.userSelect = "none";
-  };
-  const startResize = (e: React.PointerEvent, id: string, axis: Axis) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const gw = gridRef.current?.getBoundingClientRect().width ?? 600;
-    const cell = (e.currentTarget as HTMLElement).closest("[data-wid]")?.querySelector(".wb-fill") as HTMLElement | null;
-    const startH = cell?.getBoundingClientRect().height ?? MINH;
-    const cur = spanOf(id);
-    resize.current = { id, axis, startX: e.clientX, startY: e.clientY, startSpan: cur, startH, step: (gw + GAP) / COLS, lastSpan: cur, el: cell as HTMLElement };
-    setBusyId(id);
-    document.body.style.userSelect = "none";
-  };
+  const startDrag = (e: React.PointerEvent, id: string) => { e.preventDefault(); drag.current = { id }; document.body.style.userSelect = "none"; };
+  const startResize = (e: React.PointerEvent, id: string, axis: "x" | "y" | "xy") => { e.preventDefault(); e.stopPropagation(); resize.current = { id, axis }; document.body.style.userSelect = "none"; };
+
+  // ── modo estreito: empilha tudo, sem edição ──
+  if (narrow) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 16 }}>
+        {visible.map((id) => <div key={id}>{byId.get(id)!.node}</div>)}
+      </div>
+    );
+  }
+
+  const handleBar = (active: boolean) => (active ? "var(--cyan)" : "color-mix(in srgb, var(--cyan) 50%, transparent)");
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
-        {editing && <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>Arraste pela alça ⠿ (solta antes/depois) · puxe as bordas ↔ / ↕ · 👁 oculta</span>}
+        {editing && <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>Arraste ⠿ pra qualquer lugar (inclusive espaços vazios) · puxe as bordas ↔ / ↕ · 👁 oculta</span>}
         {editing && <button className="btn-link" type="button" onClick={reset}>Restaurar padrão</button>}
-        <button className="btn-link ig" type="button" onClick={() => setEditing((v) => !v)} title="Organizar widgets">
-          {editing ? "✓ Concluir" : "✎ Organizar"}
-        </button>
+        <button className="btn-link ig" type="button" onClick={() => setEditing((v) => !v)}>{editing ? "✓ Concluir" : "✎ Organizar"}</button>
       </div>
 
-      <div
-        ref={gridRef}
-        className={`wb-grid${editing ? " wb-editing" : ""}`}
-        style={{ display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gap: GAP, marginBottom: 16, alignItems: "start" }}
-      >
+      <div ref={gridRef} className="wb-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gridAutoRows: `${ROWH}px`, gap: GAP, marginBottom: 16 }}>
         {visible.map((id) => {
+          const c = grid[id];
+          if (!c) return null;
           const w = byId.get(id)!;
-          const span = spanOf(id);
-          const h = heightOf(id);
-          const isDropL = editing && drop?.id === id && !drop.after && dragId !== id;
-          const isDropR = editing && drop?.id === id && drop.after && dragId !== id;
+          const active = (drag.current?.id === id || resize.current?.id === id) && !!live;
           return (
-            <div key={id} data-wid={id} style={{ gridColumn: `span ${span}`, position: "relative", opacity: dragId === id ? 0.4 : 1 }}>
-              {/* indicadores de solte (antes/depois) */}
-              {isDropL && <span style={dropBar("left")} />}
-              {isDropR && <span style={dropBar("right")} />}
-
+            <div key={id} data-wid={id} style={{ gridColumn: `${c.x + 1} / span ${c.w}`, gridRow: `${c.y + 1} / span ${c.h}`, position: "relative", zIndex: active ? 5 : 1, opacity: drag.current?.id === id && live ? 0.75 : 1 }}>
               {editing && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, fontSize: 12, color: "var(--label-2)" }}>
-                  <span onPointerDown={(e) => startDrag(e, id)} style={{ cursor: "grab", fontSize: 16, lineHeight: 1, padding: "0 4px", userSelect: "none", touchAction: "none" }} title="Arraste pra reposicionar" aria-label="Arrastar">⠿</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, position: "absolute", top: 6, left: 8, right: 8, zIndex: 4, fontSize: 12, color: "var(--label-2)", background: "color-mix(in srgb, var(--white) 82%, transparent)", borderRadius: 8, padding: "2px 4px", backdropFilter: "blur(2px)" }}>
+                  <span onPointerDown={(e) => startDrag(e, id)} style={{ cursor: "grab", fontSize: 16, touchAction: "none", userSelect: "none" }} title="Arraste">⠿</span>
                   <b style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.label}</b>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 4px" }}>
-                    <button type="button" onClick={() => setSpan(id, span - 1)} disabled={span <= MIN} title="Estreitar" style={sbtn}>−</button>
-                    <span style={{ fontSize: 11, minWidth: 44, textAlign: "center", color: "var(--label-3)" }}>{fracLabel(span)}</span>
-                    <button type="button" onClick={() => setSpan(id, span + 1)} disabled={span >= MAX} title="Alargar" style={sbtn}>+</button>
-                  </span>
-                  {h != null && <button type="button" onClick={() => apply({ height: Object.fromEntries(Object.entries(useStore.getState().widgetLayout[panel]?.height ?? {}).filter(([k]) => k !== id)) })} title="Altura automática" style={{ ...sbtn, fontSize: 11 }}>auto↕</button>}
-                  <button type="button" onClick={() => hide(id)} title="Ocultar" style={{ ...sbtn, fontSize: 13, padding: "2px 6px" }}>👁</button>
+                  <button type="button" onClick={() => setW(id, c.w - 1)} disabled={c.w <= MINW} style={sbtn} title="Estreitar">−</button>
+                  <span style={{ fontSize: 11, color: "var(--label-3)", minWidth: 40, textAlign: "center" }}>{fracLabel(c.w)}</span>
+                  <button type="button" onClick={() => setW(id, c.w + 1)} disabled={c.w >= COLS} style={sbtn} title="Alargar">+</button>
+                  <button type="button" onClick={() => hide(id)} style={{ ...sbtn, fontSize: 13 }} title="Ocultar">👁</button>
                 </div>
               )}
-
-              <div className="wb-fill" style={{ position: "relative", height: h ? `${h}px` : undefined, overflow: h ? "auto" : undefined, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 3, borderRadius: 14 }}>
+              <div className="wb-fill" style={{ height: "100%", overflow: "auto", borderRadius: 14, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 2, position: "relative" }}>
                 {w.node}
-                {editing && (
-                  <>
-                    {/* borda direita = largura */}
-                    <span onPointerDown={(e) => startResize(e, id, "x")} title="Puxe pra largura" style={{ position: "absolute", top: 0, right: -4, width: 14, height: "100%", cursor: "ew-resize", zIndex: 2, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span style={{ width: 4, height: 40, borderRadius: 999, background: busyId === id ? "var(--cyan)" : "color-mix(in srgb, var(--cyan) 50%, transparent)" }} />
-                    </span>
-                    {/* borda inferior = altura */}
-                    <span onPointerDown={(e) => startResize(e, id, "y")} title="Puxe pra altura" style={{ position: "absolute", left: 0, bottom: -4, height: 14, width: "100%", cursor: "ns-resize", zIndex: 2, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span style={{ height: 4, width: 40, borderRadius: 999, background: busyId === id ? "var(--cyan)" : "color-mix(in srgb, var(--cyan) 50%, transparent)" }} />
-                    </span>
-                    {/* canto = os dois */}
-                    <span onPointerDown={(e) => startResize(e, id, "xy")} title="Puxe pra ajustar largura e altura" style={{ position: "absolute", right: -2, bottom: -2, width: 18, height: 18, cursor: "nwse-resize", zIndex: 3, touchAction: "none", borderRight: `3px solid ${busyId === id ? "var(--cyan)" : "color-mix(in srgb, var(--cyan) 60%, transparent)"}`, borderBottom: `3px solid ${busyId === id ? "var(--cyan)" : "color-mix(in srgb, var(--cyan) 60%, transparent)"}`, borderBottomRightRadius: 12 }} />
-                  </>
-                )}
               </div>
+              {editing && (
+                <>
+                  <span onPointerDown={(e) => startResize(e, id, "x")} title="Largura" style={{ position: "absolute", top: 0, right: -3, width: 12, height: "100%", cursor: "ew-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: 4, height: 40, borderRadius: 999, background: handleBar(resize.current?.id === id) }} /></span>
+                  <span onPointerDown={(e) => startResize(e, id, "y")} title="Altura" style={{ position: "absolute", left: 0, bottom: -3, height: 12, width: "100%", cursor: "ns-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ height: 4, width: 40, borderRadius: 999, background: handleBar(resize.current?.id === id) }} /></span>
+                  <span onPointerDown={(e) => startResize(e, id, "xy")} title="Largura + altura" style={{ position: "absolute", right: -2, bottom: -2, width: 18, height: 18, cursor: "nwse-resize", zIndex: 5, touchAction: "none", borderRight: `3px solid ${handleBar(resize.current?.id === id)}`, borderBottom: `3px solid ${handleBar(resize.current?.id === id)}`, borderBottomRightRadius: 12 }} />
+                </>
+              )}
             </div>
           );
         })}
@@ -191,9 +186,7 @@ export function WidgetBoard({ panel, widgets }: { panel: string; widgets: Widget
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--label-3)", marginBottom: 8 }}>Widgets ocultos</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {hiddenList.map((id) => (
-              <button key={id} className="btn-link" type="button" onClick={() => show(id)} style={{ padding: "4px 12px", border: "1px solid var(--hairline)", borderRadius: 999 }}>
-                + {byId.get(id)?.label}
-              </button>
+              <button key={id} className="btn-link" type="button" onClick={() => show(id)} style={{ padding: "4px 12px", border: "1px solid var(--hairline)", borderRadius: 999 }}>+ {byId.get(id)?.label}</button>
             ))}
           </div>
         </div>
@@ -203,4 +196,3 @@ export function WidgetBoard({ panel, widgets }: { panel: string; widgets: Widget
 }
 
 const sbtn: React.CSSProperties = { cursor: "pointer", border: "none", background: "transparent", color: "var(--label)", fontSize: 15, lineHeight: 1, padding: "0 4px", fontWeight: 700 };
-const dropBar = (side: "left" | "right"): React.CSSProperties => ({ position: "absolute", top: 24, bottom: 0, [side]: -9, width: 4, borderRadius: 999, background: "var(--cyan)", zIndex: 3 });
