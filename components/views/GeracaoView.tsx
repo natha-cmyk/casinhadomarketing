@@ -10,7 +10,7 @@ import { Spinner } from "@/components/Spinner";
 import { Ic } from "@/components/Ic";
 import { fmt, money } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
-import { WidgetBoard } from "@/components/WidgetBoard";
+import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 
 // ── tipos ──
 interface CrmConfig {
@@ -257,6 +257,7 @@ export function GeracaoView() {
                   </button>
                 </>
               )}
+              <WidgetEditButton panel="crm" />
               <button className="btn-link" onClick={() => setEditing(true)} type="button">
                 Reconfigurar
               </button>

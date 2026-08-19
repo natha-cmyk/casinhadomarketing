@@ -9,7 +9,7 @@ import { PageHead, KpiCard, MiniStat } from "@/components/ui";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { Ic } from "@/components/Ic";
 import { Spinner } from "@/components/Spinner";
-import { WidgetBoard } from "@/components/WidgetBoard";
+import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { REDES } from "@/lib/seed-data";
 import { fmt, money, pct, kfmt } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
@@ -176,9 +176,12 @@ export function AdsView() {
         title="Canais Pagos"
         desc="Investimento, CPL e desempenho de campanhas — mídia paga conectada + canais informados à mão."
         right={
-          <button className="btn-link ig" onClick={() => setShowManual((v) => !v)} type="button">
-            <Ic name="upload" /> Canal manual
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {(data || []).length > 0 && <WidgetEditButton panel="ads" />}
+            <button className="btn-link ig" onClick={() => setShowManual((v) => !v)} type="button">
+              <Ic name="upload" /> Canal manual
+            </button>
+          </div>
         }
       />
 

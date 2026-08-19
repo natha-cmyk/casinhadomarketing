@@ -10,7 +10,7 @@ import { REDES } from "@/lib/seed-data";
 import { PageHead, KpiCard } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { ChannelSummaryCard, ChannelBrandIcon } from "@/components/ChannelSummaryCard";
-import { WidgetBoard } from "@/components/WidgetBoard";
+import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
 
@@ -136,7 +136,7 @@ export function PainelView() {
 
   return (
     <>
-      <PageHead eyebrow="VISÃO GERAL" title="Painel" />
+      <PageHead eyebrow="VISÃO GERAL" title="Painel" right={!isEmpty && list.length > 0 ? <WidgetEditButton panel="overview" /> : undefined} />
 
       {isEmpty ? (
         <div className="empty">

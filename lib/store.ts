@@ -118,6 +118,8 @@ export interface UIState {
   // layout dos widgets por painel. grid = coordenadas livres {x,y,w,h} por widget (tipo ClickUp);
   // order/size/height mantidos por compat. hidden = ocultos. Persistido no config.
   widgetLayout: Record<string, { order?: string[]; size?: Record<string, number>; height?: Record<string, number>; hidden: string[]; grid?: Record<string, { x: number; y: number; w: number; h: number }> }>;
+  // qual painel de widgets está em modo "Organizar" (o botão fica no topo da página). Só UI.
+  widgetEdit: string | null;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
@@ -151,6 +153,7 @@ export interface UIState {
   removeCalManual: (nome: string) => void;
   setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
   setWidgetLayout: (panel: string, layout: UIState["widgetLayout"][string]) => void;
+  toggleWidgetEdit: (panel: string) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
@@ -216,6 +219,7 @@ export const useStore = create<UIState>((set) => ({
   calManuais: [],
   agentsConfig: {},
   widgetLayout: {},
+  widgetEdit: null,
 
   set: (patch) => set(patch),
   addManualAd: (a) => set((s) => ({ manualAds: [...s.manualAds, a] })),
@@ -246,6 +250,7 @@ export const useStore = create<UIState>((set) => ({
     }),
   setWidgetLayout: (panel, layout) =>
     set((s) => ({ widgetLayout: { ...s.widgetLayout, [panel]: layout } })),
+  toggleWidgetEdit: (panel) => set((s) => ({ widgetEdit: s.widgetEdit === panel ? null : panel })),
   setZernioAccounts: (accounts) =>
     set((s) => {
       // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).

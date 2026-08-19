@@ -29,10 +29,21 @@ function compact(grid: Record<string, Cell>, ids: string[]): Record<string, Cell
 const sbtn: React.CSSProperties = { cursor: "pointer", border: "none", background: "transparent", color: "var(--label)", fontSize: 15, lineHeight: 1, padding: "0 4px", fontWeight: 700 };
 const barCol = (active: boolean) => (active ? "var(--cyan)" : "color-mix(in srgb, var(--cyan) 50%, transparent)");
 
+// Botão "Organizar" pra colocar no TOPO da página (PageHead), junto dos outros botões.
+export function WidgetEditButton({ panel, className = "btn-link" }: { panel: string; className?: string }) {
+  const editing = useStore((s) => s.widgetEdit) === panel;
+  const toggle = useStore((s) => s.toggleWidgetEdit);
+  return (
+    <button className={`${className}${editing ? " on" : ""}`} type="button" onClick={() => toggle(panel)} title="Organizar widgets (arrastar/redimensionar)">
+      {editing ? "✓ Concluir" : "✎ Organizar"}
+    </button>
+  );
+}
+
 export function WidgetBoard({ panel, widgets, mode = "grid" }: { panel: string; widgets: WidgetDef[]; mode?: "grid" | "flow" }) {
   const layout = useStore((s) => s.widgetLayout[panel]);
   const setLayout = useStore((s) => s.setWidgetLayout);
-  const [editing, setEditing] = useState(false);
+  const editing = useStore((s) => s.widgetEdit) === panel;
   const [narrow, setNarrow] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -58,13 +69,13 @@ export function WidgetBoard({ panel, widgets, mode = "grid" }: { panel: string; 
     return <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 16 }}>{visible.map((id) => <div key={id}>{byId.get(id)!.node}</div>)}</div>;
   }
 
-  const header = (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
-      {editing && <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>{mode === "grid" ? "Arraste ⠿ pra qualquer lugar · puxe as bordas ↔ / ↕ · 👁 oculta" : "Arraste ⠿ pra reposicionar · puxe a borda ↔ pra largura · 👁 oculta"}</span>}
-      {editing && <button className="btn-link" type="button" onClick={() => setLayout(panel, { hidden: [], grid: undefined, order: widgets.map((w) => w.id), size: {}, height: {} })}>Restaurar padrão</button>}
-      <button className="btn-link ig" type="button" onClick={() => setEditing((v) => !v)}>{editing ? "✓ Concluir" : "✎ Organizar"}</button>
+  // barra fina só no modo edição (dica + restaurar). O toggle "Organizar" fica no topo (WidgetEditButton).
+  const header = editing ? (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+      <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>{mode === "grid" ? "Arraste ⠿ pra qualquer lugar · puxe as bordas ↔ / ↕ · 👁 oculta" : "Arraste ⠿ pra reposicionar · puxe a borda ↔ pra largura · 👁 oculta"}</span>
+      <button className="btn-link" type="button" onClick={() => setLayout(panel, { hidden: [], grid: undefined, order: widgets.map((w) => w.id), size: {}, height: {} })}>Restaurar padrão</button>
     </div>
-  );
+  ) : null;
 
   if (mode === "flow") return <FlowBoard {...{ panel, byId, order, visible, hiddenList, hidden, layout, setLayout, editing, header, hide, show, gridRef }} />;
   return <GridBoard {...{ panel, byId, visible, hiddenList, layout, setLayout, editing, header, hide, show, gridRef }} />;
