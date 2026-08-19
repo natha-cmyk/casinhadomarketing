@@ -14,6 +14,10 @@ const LABEL: Record<string, string> = {
   "onboarding.completed": "Concluiu onboarding",
   "llm.connected": "Conectou LLM",
   "crm.connected": "Conectou CRM",
+  "crm.configured": "Configurou CRM",
+  "crm.synced": "Sincronizou CRM",
+  "persona.updated": "Editou personas",
+  "okr.updated": "Editou metas/OKR",
 };
 
 // ativo = visto nos últimos 7 dias (helper de módulo p/ não chamar Date.now() no render)

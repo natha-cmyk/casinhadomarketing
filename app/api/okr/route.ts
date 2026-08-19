@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
+import { logEvent } from "@/lib/events";
 
 export async function GET() {
   try {
@@ -50,6 +51,7 @@ export async function PUT(req: Request) {
         },
       });
     }
+    void logEvent(ws, "okr.updated", `${areas.length} área(s)`);
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "db" }, { status: 503 });
