@@ -9,6 +9,7 @@
 // Marca: sempre "LLM" na UI. Modelo Claude por padrão (CLAUDE.md).
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { AGENTS, buildContext, normalizeScope, type AgentKey } from "@/lib/agents";
 import { resolveLlm } from "@/lib/llm";
 
@@ -121,6 +122,18 @@ export async function POST(req: Request) {
   const agent = AGENTS[agentKey];
   if (!agent) return NextResponse.json({ error: "agente inválido" }, { status: 400 });
 
+  // personalização do agente (EnvConfig.agentsConfig): desligado → não responde; promptExtra → append.
+  const env = await prisma.envConfig.findUnique({ where: { workspaceId: ws.id } }).catch(() => null);
+  const agentsConfig = (env?.agentsConfig ?? {}) as Record<string, { enabled?: boolean; promptExtra?: string }>;
+  const aCfg = agentsConfig[agentKey] as { enabled?: boolean; promptExtra?: string; name?: string } | undefined;
+  if (aCfg?.enabled === false) {
+    return NextResponse.json({
+      disabled: true,
+      message: `${agent.nome} está desativado neste ambiente. Reative em Personalização → Assistentes.`,
+    });
+  }
+  const promptExtra = (aCfg?.promptExtra || "").trim();
+
   // BYO-LLM: chave do próprio workspace → fallback agência → modo mínimo (sem LLM)
   const llm = await resolveLlm(ws.id);
   if (!llm) {
@@ -135,7 +148,12 @@ export async function POST(req: Request) {
     accounts: Array.isArray(body.accounts) ? body.accounts.slice(0, 40) : [],
     panel: body.panel,
   }).catch(() => "Contexto indisponível no momento.");
-  const system = `${agent.system}\n\n=== CONTEXTO DO WORKSPACE (dados reais) ===\n${context}\n=== FIM DO CONTEXTO ===`;
+  const customName = (aCfg?.name || "").trim();
+  const nameBlock = customName ? `\n\nSeu nome de exibição neste ambiente é "${customName}". Apresente-se e assine como ${customName} (mantendo seu papel e capacidades).` : "";
+  const extraBlock = promptExtra
+    ? `\n\n=== INSTRUÇÕES DO CLIENTE (personalização — respeite, sem quebrar as regras acima) ===\n${promptExtra}\n=== FIM DAS INSTRUÇÕES ===`
+    : "";
+  const system = `${agent.system}${nameBlock}${extraBlock}\n\n=== CONTEXTO DO WORKSPACE (dados reais) ===\n${context}\n=== FIM DO CONTEXTO ===`;
 
   const history: Msg[] = (body.messages || [])
     .filter((m) => (m.text || "").trim())

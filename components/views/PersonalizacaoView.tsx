@@ -10,6 +10,7 @@ import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { Ic } from "@/components/Ic";
 import { REDES, PANEL_INDICATORS, type IndGroup } from "@/lib/seed-data";
 import { UFS, RAMOS, maskPhone } from "@/lib/perfil-fields";
+import { AGENTS_META, AGENT_PANELS } from "@/lib/agents-meta";
 import { SOCIAL_IDS, META } from "@/lib/nav";
 import { socialIndGroups, indShown, isSocialPanel, socialCatalog } from "@/lib/indicators";
 import { useStore, newId, type FonteItem, type CustomInd } from "@/lib/store";
@@ -174,6 +175,8 @@ export default function PersonalizacaoView() {
   const setFonteMap = useStore((s) => s.setFonteMap);
   const set = useStore((s) => s.set);
   const setZernioAccounts = useStore((s) => s.setZernioAccounts);
+  const agentsConfig = useStore((s) => s.agentsConfig);
+  const setAgentConfig = useStore((s) => s.setAgentConfig);
 
   // Kit do Panteão: só nome do arquivo (extração no backend — OpenClaw).
   const [kit, setKit] = useState<string | null>(null);
@@ -567,6 +570,96 @@ export default function PersonalizacaoView() {
           {REDES.filter((r) => r.grupo === "ads").map((r) => (
             <RedeToggle key={r.id} rede={r} on={!!redes[r.id]} onToggle={() => toggleRede(r.id)} />
           ))}
+        </div>
+      </PSection>
+
+      {/* ===== Assistentes (agentes) ===== */}
+      <PSection
+        title="Assistentes"
+        sub="Personalize os agentes de IA: onde aparecem e como respondem. Rodam pela LLM que você conectou."
+        accent="#8E5BE0"
+        meta={<span className="psec-count">{AGENTS_META.filter((a) => agentsConfig[a.key]?.enabled !== false).length}/{AGENTS_META.length}</span>}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {AGENTS_META.map((ag) => {
+            const cfg = agentsConfig[ag.key] ?? { enabled: true, panels: null, promptExtra: "" };
+            const on = cfg.enabled !== false;
+            const allPanels = cfg.panels == null;
+            const togglePanel = (pid: string) => {
+              const cur = cfg.panels == null ? AGENT_PANELS.map((p) => p.id) : [...cfg.panels];
+              const next = cur.includes(pid) ? cur.filter((x) => x !== pid) : [...cur, pid];
+              setAgentConfig(ag.key, { panels: next.length === AGENT_PANELS.length ? null : next });
+            };
+            return (
+              <div key={ag.key} style={{ border: "1px solid var(--hairline)", borderRadius: 14, padding: "14px 16px", opacity: on ? 1 : 0.62 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <span aria-hidden style={{ width: 38, height: 38, flex: "0 0 38px", borderRadius: 11, display: "grid", placeItems: "center", background: `color-mix(in srgb, ${ag.cor} 14%, #fff)`, color: ag.cor }}>
+                    <Ic name={ag.icon} />
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <input
+                        className="field-edit"
+                        style={{ fontSize: 14.5, fontWeight: 700, maxWidth: 200, padding: "4px 8px" }}
+                        value={cfg.name ?? ""}
+                        onChange={(e) => setAgentConfig(ag.key, { name: e.target.value })}
+                        placeholder={ag.nome}
+                        aria-label={`Nome do ${ag.nome}`}
+                      />
+                      <span style={{ fontSize: 12, color: "var(--label-3)" }}>{ag.papel}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--label-2)", marginTop: 4, lineHeight: 1.5 }}>{ag.desc}</div>
+                    <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 2 }}>Nome de fábrica: {ag.nome}. Deixe vazio pra manter.</div>
+                  </div>
+                  <button
+                    className={`switch ${on ? "on" : ""}`}
+                    onClick={() => setAgentConfig(ag.key, { enabled: !on })}
+                    role="switch" aria-checked={on} aria-label={`Ativar ${ag.nome}`} type="button"
+                    style={{ flex: "0 0 auto" }}
+                  />
+                </div>
+
+                {on && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--hairline)" }}>
+                    <div className="field-lbl" style={{ marginBottom: 6 }}>Aparece nos ambientes</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                      {AGENT_PANELS.map((pn) => {
+                        const active = allPanels || (cfg.panels?.includes(pn.id) ?? false);
+                        return (
+                          <button
+                            key={pn.id}
+                            type="button"
+                            onClick={() => togglePanel(pn.id)}
+                            style={{
+                              fontSize: 12, padding: "5px 11px", borderRadius: 999, cursor: "pointer",
+                              border: `1px solid ${active ? ag.cor : "var(--hairline)"}`,
+                              background: active ? `color-mix(in srgb, ${ag.cor} 12%, #fff)` : "#fff",
+                              color: active ? ag.cor : "var(--label-3)", fontWeight: active ? 700 : 500,
+                            }}
+                          >
+                            {pn.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="field-lbl" style={{ marginBottom: 6 }}>
+                      Instruções extras <span style={{ fontWeight: 400, color: "var(--label-3)" }}>· adicionadas ao comportamento base (não substitui)</span>
+                    </div>
+                    <textarea
+                      className="field-edit"
+                      style={{ minHeight: 72, resize: "vertical", fontSize: 13 }}
+                      value={cfg.promptExtra || ""}
+                      onChange={(e) => setAgentConfig(ag.key, { promptExtra: e.target.value })}
+                      placeholder={`Ex.: foque no público de ${ag.key === "dionisio" ? "coworking B2B" : "Natal/RN"}; use tom mais direto; priorize WhatsApp…`}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="tfoot-note" style={{ marginTop: 12 }}>
+          Os assistentes rodam pela LLM conectada em Conexões. Desativar um agente esconde ele dos painéis e ele para de responder.
         </div>
       </PSection>
 

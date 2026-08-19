@@ -10,6 +10,7 @@ import { REDES } from "@/lib/seed-data";
 import { PageHead, KpiCard } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { ChannelSummaryCard, ChannelBrandIcon } from "@/components/ChannelSummaryCard";
+import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
 
@@ -135,7 +136,7 @@ export function PainelView() {
 
   return (
     <>
-      <PageHead eyebrow="VISÃO GERAL" title="Painel" />
+      <PageHead eyebrow="VISÃO GERAL" title="Painel" right={!isEmpty && list.length > 0 ? <WidgetEditButton panel="overview" /> : undefined} />
 
       {isEmpty ? (
         <div className="empty">
@@ -210,12 +211,16 @@ export function PainelView() {
             </div>
           )}
 
-          {/* Cards por canal: 1 conta = card individual; 2+ contas = GRANDE WIDGET agrupando */}
-          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))" }}>
-            {groups.map((g) =>
-              g.accts.length === 1 ? (
+          {/* Cards por canal — organizáveis (arrasta/redimensiona). 1 conta = card; 2+ = grupo full. */}
+          <WidgetBoard
+            panel="overview"
+            widgets={groups.map((g) => ({
+              id: `ch-${g.platform}`,
+              label: redeLabel(g.platform),
+              defaultSpan: g.accts.length > 1 ? 6 : 3,
+              defaultH: 9,
+              node: g.accts.length === 1 ? (
                 <ChannelSummaryCard
-                  key={`${g.platform}-solo`}
                   platform={g.platform}
                   displayName={g.accts[0].displayName}
                   username={g.accts[0].username}
@@ -226,24 +231,12 @@ export function PainelView() {
                   locations={g.accts[0].locations}
                 />
               ) : (
-                <div
-                  key={`${g.platform}-multi`}
-                  style={{
-                    gridColumn: "1 / -1",
-                    border: `1px solid color-mix(in srgb, ${redeCor(g.platform)} 26%, var(--hairline))`,
-                    borderRadius: 16,
-                    padding: 16,
-                    background: `color-mix(in srgb, ${redeCor(g.platform)} 5%, #fff)`,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 12,
-                  }}
-                >
+                <div className="card" style={{ height: "100%", border: `1px solid color-mix(in srgb, ${redeCor(g.platform)} 26%, var(--hairline))`, background: `color-mix(in srgb, ${redeCor(g.platform)} 5%, #fff)`, display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <ChannelBrandIcon platform={g.platform} cor={redeCor(g.platform)} size={30} />
                     <b style={{ fontSize: 15 }}>{redeLabel(g.platform)}</b>
                   </div>
-                  <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12 }}>
+                  <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12 }}>
                     {g.accts.map((a) => (
                       <ChannelSummaryCard
                         key={`${g.platform}-${a.username || a.displayName || ""}`}
@@ -254,14 +247,14 @@ export function PainelView() {
                         metrics={a.metrics || {}}
                         posts={a.posts}
                         cor={redeCor(a.platform)}
-                              hideBrand
+                        hideBrand
                       />
                     ))}
                   </div>
                 </div>
-              )
-            )}
-          </div>
+              ),
+            }))}
+          />
         </div>
       )}
     </>

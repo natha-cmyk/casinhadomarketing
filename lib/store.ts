@@ -113,11 +113,18 @@ export interface UIState {
   cardOrder: Record<string, string[]>;
   // canais MANUAIS do calendário (só registro de conteúdo, sem publicação síncrona). Persistido no config.
   calManuais: string[];
+  // personalização dos agentes por workspace: { agentKey: {enabled, panels, promptExtra} }. Persistido no config.
+  agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
+  // layout dos widgets por painel. grid = coordenadas livres {x,y,w,h} por widget (tipo ClickUp);
+  // order/size/height mantidos por compat. hidden = ocultos. Persistido no config.
+  widgetLayout: Record<string, { order?: string[]; size?: Record<string, number>; height?: Record<string, number>; hidden: string[]; grid?: Record<string, { x: number; y: number; w: number; h: number }> }>;
+  // qual painel de widgets está em modo "Organizar" (o botão fica no topo da página). Só UI.
+  widgetEdit: string | null;
 
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[] } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, unknown> } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -144,6 +151,9 @@ export interface UIState {
   setCardOrder: (panel: string, ids: string[]) => void;
   addCalManual: (nome: string) => void;
   removeCalManual: (nome: string) => void;
+  setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
+  setWidgetLayout: (panel: string, layout: UIState["widgetLayout"][string]) => void;
+  toggleWidgetEdit: (panel: string) => void;
   // config
   toggleRede: (id: string) => void; toggleConta: (id: string) => void;
   setPainelInd: (panel: string, id: string, val: boolean) => void;
@@ -207,6 +217,9 @@ export const useStore = create<UIState>((set) => ({
   customInd: {},
   cardOrder: {},
   calManuais: [],
+  agentsConfig: {},
+  widgetLayout: {},
+  widgetEdit: null,
 
   set: (patch) => set(patch),
   addManualAd: (a) => set((s) => ({ manualAds: [...s.manualAds, a] })),
@@ -230,6 +243,14 @@ export const useStore = create<UIState>((set) => ({
       return { calManuais: [...s.calManuais, v] };
     }),
   removeCalManual: (nome) => set((s) => ({ calManuais: s.calManuais.filter((c) => c !== nome) })),
+  setAgentConfig: (key, patch) =>
+    set((s) => {
+      const cur = s.agentsConfig[key] ?? { enabled: true, panels: null, promptExtra: "" };
+      return { agentsConfig: { ...s.agentsConfig, [key]: { ...cur, ...patch } } };
+    }),
+  setWidgetLayout: (panel, layout) =>
+    set((s) => ({ widgetLayout: { ...s.widgetLayout, [panel]: layout } })),
+  toggleWidgetEdit: (panel) => set((s) => ({ widgetEdit: s.widgetEdit === panel ? null : panel })),
   setZernioAccounts: (accounts) =>
     set((s) => {
       // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).
@@ -266,6 +287,8 @@ export const useStore = create<UIState>((set) => ({
         if (d.config.adConfig?.cardOrder) patch.cardOrder = d.config.adConfig.cardOrder;
         if (d.config.customInd) patch.customInd = d.config.customInd;
         if (Array.isArray(d.config.calManuais)) patch.calManuais = d.config.calManuais;
+        if (d.config.agentsConfig && typeof d.config.agentsConfig === "object") patch.agentsConfig = d.config.agentsConfig;
+        if (d.config.widgetLayout && typeof d.config.widgetLayout === "object") patch.widgetLayout = d.config.widgetLayout as UIState["widgetLayout"];
       }
       if (d.perfil) patch.perfil = d.perfil;
       if (d.okr && d.okr.areas) patch.okr = d.okr;

@@ -9,6 +9,7 @@ import { PageHead, KpiCard, MiniStat } from "@/components/ui";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { Ic } from "@/components/Ic";
 import { Spinner } from "@/components/Spinner";
+import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { REDES } from "@/lib/seed-data";
 import { fmt, money, pct, kfmt } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
@@ -175,9 +176,12 @@ export function AdsView() {
         title="Canais Pagos"
         desc="Investimento, CPL e desempenho de campanhas — mídia paga conectada + canais informados à mão."
         right={
-          <button className="btn-link ig" onClick={() => setShowManual((v) => !v)} type="button">
-            <Ic name="upload" /> Canal manual
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {(data || []).length > 0 && <WidgetEditButton panel="ads" />}
+            <button className="btn-link ig" onClick={() => setShowManual((v) => !v)} type="button">
+              <Ic name="upload" /> Canal manual
+            </button>
+          </div>
         }
       />
 
@@ -270,15 +274,21 @@ export function AdsView() {
             </div>
           </div>
 
-          {/* Painéis por ad account — indicadores agrupados por tema */}
-          {(data || []).map((a) => (
-            <AdAccountPanel
-              key={a.id}
-              a={a}
-              open={!!openAcct[a.id]}
-              onToggle={() => setOpenAcct((o) => ({ ...o, [a.id]: !o[a.id] }))}
+          {/* Painéis por ad account — organizáveis (arrasta/largura; altura automática, são retráteis) */}
+          {(data || []).length > 0 && (
+            <WidgetBoard
+              panel="ads"
+              mode="flow"
+              widgets={(data || []).map((a) => ({
+                id: `acct-${a.id}`,
+                label: a.name || a.id,
+                defaultSpan: 6,
+                node: (
+                  <AdAccountPanel a={a} open={!!openAcct[a.id]} onToggle={() => setOpenAcct((o) => ({ ...o, [a.id]: !o[a.id] }))} />
+                ),
+              }))}
             />
-          ))}
+          )}
 
           {/* Canais manuais */}
           {manualInScope.length > 0 && (
