@@ -15,6 +15,7 @@ import { PageHead, KpiCard, DeltaChip, BarRow, MiniStat } from "@/components/ui"
 import { Ic } from "@/components/Ic";
 import { Chart } from "@/components/Chart";
 import { Spinner } from "@/components/Spinner";
+import { WidgetBoard } from "@/components/WidgetBoard";
 import { lineChart, barChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
@@ -205,6 +206,13 @@ function sparkline(values: number[], color: string): string {
 
 // aplica uma ordem salva a uma lista de cards: os ids salvos (presentes) primeiro, na ordem
 // gravada; ids novos/desconhecidos vão pro fim, mantendo a ordem padrão (ordem de construção).
+// rótulos amigáveis dos cards (usados na barra "Organizar" do WidgetBoard)
+const SI_CARD_LABELS: Record<string, string> = {
+  mix: "Mix de conteúdo", seguidores: "Seguidores", engajamento: "Engajamento",
+  organico: "Orgânico vs impulsionado", atividade: "Atividade", conversas: "Conversas",
+  top: "Top conteúdos", recentes: "Últimas publicações", horarios: "Melhores horários", audiencia: "Audiência",
+};
+
 function applyCardOrder<T extends { id: string }>(defs: T[], saved: string[]): T[] {
   const byId = new Map(defs.map((d) => [d.id, d]));
   const out: T[] = [];
@@ -922,17 +930,7 @@ export function SocialInsights({ rede }: { rede: string }) {
         desc={desc}
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {cards.length > 0 && (
-              <button
-                type="button"
-                className={`btn-link${editing ? " on" : ""}`}
-                aria-pressed={editing}
-                title={editing ? "Concluir organização dos cards" : "Organizar cards (arrastar)"}
-                onClick={() => { setEditing((v) => !v); setDragId(null); }}
-              >
-                {editing ? "✓ Concluir" : "✏️ Organizar"}
-              </button>
-            )}
+            {/* organização dos cards agora é pelo "✎ Organizar" do WidgetBoard (abaixo) */}
             {profileUrl && (
               <a className="btn-link" href={profileUrl} target="_blank" rel="noopener">Abrir perfil ↗</a>
             )}
@@ -1066,12 +1064,13 @@ export function SocialInsights({ rede }: { rede: string }) {
             </div>
           )}
 
-          {/* Cards reordenáveis (secundários + de baixo) — grid fluido auto-fit; ordem por workspace.
-              No modo "organizar" (lápis no topo) cada card vira arrastável (HTML5 DnD). */}
-          {orderedCards.length > 0 && (
-            <div className={`si-flow${editing ? " si-flow-edit" : ""}`}>
-              {orderedCards.map(renderCard)}
-            </div>
+          {/* Cards organizáveis via WidgetBoard (arrasta/reposiciona + largura; altura automática). */}
+          {cards.length > 0 && (
+            <WidgetBoard
+              panel={`rede:${rede}`}
+              mode="flow"
+              widgets={cards.map((c) => ({ id: c.id, label: SI_CARD_LABELS[c.id] || c.id, defaultSpan: c.full ? 6 : 3, node: c.node }))}
+            />
           )}
         </>
       )}
