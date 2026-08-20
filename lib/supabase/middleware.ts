@@ -31,9 +31,11 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isAuthPage = path.startsWith("/login") || path.startsWith("/cadastro") || path.startsWith("/auth");
   const isApi = path.startsWith("/api");
+  // páginas legais são públicas (linkadas no consentimento do Google e acessíveis a qualquer um)
+  const isPublic = path.startsWith("/privacidade") || path.startsWith("/termos");
 
   // Páginas: sem sessão → login. Com sessão em página de auth → painel.
-  if (!user && !isAuthPage && !isApi) {
+  if (!user && !isAuthPage && !isApi && !isPublic) {
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/login";
     return NextResponse.redirect(redirect);
