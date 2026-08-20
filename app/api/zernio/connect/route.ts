@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { connectUrl, connectAdsUrl } from "@/lib/zernio";
 import { ensurePrimaryProfile, targetProfileForConnect } from "@/lib/profiles";
+import { logEvent } from "@/lib/events";
 
 export async function GET(req: Request) {
   try {
@@ -18,6 +19,7 @@ export async function GET(req: Request) {
     // MULTI-PROFILE: pra social, escolhe um profile livre pra essa rede (ou cria um novo
     // → 2ª conta da mesma rede vira multi-conta em vez de substituir). Ads fica no primário.
     const profileId = isAds ? await ensurePrimaryProfile(ws) : await targetProfileForConnect(ws, platform);
+    void logEvent(ws.id, "channel.connect", platform, { ads: isAds });
 
     // volta pro nosso app depois do OAuth (cliente nunca vê o dashboard da Zernio)
     const origin = req.headers.get("origin") || url.origin;
