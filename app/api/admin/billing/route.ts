@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminUser } from "@/lib/admin";
 import { sendEmail } from "@/lib/email";
-import { referralConvertedEmail } from "@/lib/email-templates";
+import { referralConvertedEmail, referralRegisteredEmail } from "@/lib/email-templates";
 
 export const dynamic = "force-dynamic";
 
@@ -57,13 +57,13 @@ export async function POST(req: Request) {
       const status = String(b.status || "convidado");
       const abonouMes = b.abonouMes ? String(b.abonouMes) : null;
       const ref = await prisma.referral.create({ data: { workspaceId: ws, cliente: String(b.cliente), status, abonouMes } });
-      // converteu → avisa o dono do ambiente que indicou (recompensa)
-      if (status === "convertido") {
-        const owner = await prisma.membership.findFirst({ where: { workspaceId: ws, role: "owner" }, include: { user: true }, orderBy: { createdAt: "asc" } });
-        if (owner?.user.email) {
-          const t = referralConvertedEmail({ cliente: String(b.cliente), mes: abonouMes });
-          void sendEmail({ to: owner.user.email, subject: t.subject, html: t.html });
-        }
+      // avisa o dono do ambiente: convertido = recompensa; senão = confirmação de que registramos
+      const owner = await prisma.membership.findFirst({ where: { workspaceId: ws, role: "owner" }, include: { user: true }, orderBy: { createdAt: "asc" } });
+      if (owner?.user.email) {
+        const t = status === "convertido"
+          ? referralConvertedEmail({ cliente: String(b.cliente), mes: abonouMes })
+          : referralRegisteredEmail({ cliente: String(b.cliente) });
+        void sendEmail({ to: owner.user.email, subject: t.subject, html: t.html });
       }
       return NextResponse.json({ ok: true, referral: ref });
     }

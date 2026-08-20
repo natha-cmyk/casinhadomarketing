@@ -25,7 +25,7 @@ export async function provisionWorkspace(userId: string, email: string): Promise
     await tx.user.upsert({ where: { id: userId }, update: { email }, create: { id: userId, email } });
 
     const existing = await tx.membership.findFirst({ where: { userId }, orderBy: { createdAt: "asc" } });
-    if (existing) return { workspaceId: existing.workspaceId, welcome: false };
+    if (existing) return { workspaceId: existing.workspaceId, welcome: false, notify: null };
 
     // CONVITE: se há convite pendente pra esse e-mail, ENTRA no workspace que convidou
     // (em vez de criar um novo). Multi-usuário.
@@ -36,7 +36,10 @@ export async function provisionWorkspace(userId: string, email: string): Promise
     if (invite) {
       await tx.membership.create({ data: { userId, workspaceId: invite.workspaceId, role: invite.role } });
       await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
-      return { workspaceId: invite.workspaceId, welcome: false };
+      const ws = await tx.workspace.findUnique({ where: { id: invite.workspaceId }, select: { nome: true } });
+      // avisa quem convidou que a pessoa entrou (se houver quem)
+      const notify = invite.invitedBy ? { to: invite.invitedBy, membro: email, workspaceNome: ws?.nome || "seu ambiente" } : null;
+      return { workspaceId: invite.workspaceId, welcome: false, notify };
     }
 
     const zernioProfileId = isSeahub && process.env.ZERNIO_PROFILE_ID ? process.env.ZERNIO_PROFILE_ID : null;
@@ -50,7 +53,7 @@ export async function provisionWorkspace(userId: string, email: string): Promise
         objetivo: { create: {} },
       },
     });
-    return { workspaceId: ws.id, welcome: true };
+    return { workspaceId: ws.id, welcome: true, notify: null };
   });
 
   // boas-vindas só pra workspace NOVO (self-signup); convidado recebe o e-mail de convite.
@@ -59,6 +62,13 @@ export async function provisionWorkspace(userId: string, email: string): Promise
     const { sendEmail } = await import("./email");
     const t = welcomeEmail();
     void sendEmail({ to: email, subject: t.subject, html: t.html });
+  }
+  // convidado entrou → avisa quem convidou
+  if (result.notify) {
+    const { memberJoinedEmail } = await import("./email-templates");
+    const { sendEmail } = await import("./email");
+    const t = memberJoinedEmail({ membro: result.notify.membro, workspaceNome: result.notify.workspaceNome });
+    void sendEmail({ to: result.notify.to, subject: t.subject, html: t.html });
   }
   return result.workspaceId;
 }

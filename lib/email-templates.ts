@@ -65,6 +65,39 @@ export function referralConvertedEmail(opts: { cliente: string; mes?: string | n
   };
 }
 
+export function referralRegisteredEmail(opts: { cliente: string }) {
+  return {
+    subject: "Recebemos sua indicação 🙌",
+    html: layout("Indicação registrada", `
+      <p>Registramos a indicação de <b>${esc(opts.cliente)}</b> feita por você. Obrigado por espalhar a Casinha!</p>
+      <p>Assim que ${esc(opts.cliente)} virar cliente, a gente te avisa e sua mensalidade do mês é abonada. 🎁</p>
+      <p>Continue indicando pelo seu link — cada conversão zera um mês.</p>
+    `, { label: "🎯 Ver minhas indicações", href: `${APP_URL}/indicacoes` }),
+  };
+}
+
+export function memberJoinedEmail(opts: { membro: string; workspaceNome: string }) {
+  return {
+    subject: `${opts.membro} entrou no seu ambiente`,
+    html: layout("Novo membro na equipe", `
+      <p><b>${esc(opts.membro)}</b> aceitou o convite e agora faz parte do ambiente <b>${esc(opts.workspaceNome)}</b> na Casinha do Marketing.</p>
+      <p>Vocês já podem trabalhar juntos nos painéis, canais e metas.</p>
+    `, { label: "🏠 Abrir minha Casinha", href: APP_URL }),
+  };
+}
+
+export function connectionLostEmail(opts: { canal: string; nome?: string }) {
+  const oi = opts.nome ? `Olá, ${esc(opts.nome)}!` : "Olá!";
+  return {
+    subject: `Reconecte seu ${opts.canal} — a conexão caiu`,
+    html: layout("Uma conexão precisa de atenção", `
+      <p>${oi}</p>
+      <p>A conexão do canal <b>${esc(opts.canal)}</b> expirou ou foi revogada, então paramos de receber os dados dele. Seus painéis desse canal ficam desatualizados até religar.</p>
+      <p>É rápido: refazer o login seguro do canal em <b>Personalização → Conexões</b>.</p>
+    `, { label: "🔌 Reconectar agora", href: `${APP_URL}/personalizacao` }),
+  };
+}
+
 export function connectionsReminderEmail(nome?: string) {
   const oi = nome ? `Olá, ${esc(nome)}!` : "Olá!";
   return {
