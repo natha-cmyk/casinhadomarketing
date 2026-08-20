@@ -19,13 +19,13 @@ export async function provisionWorkspace(userId: string, email: string): Promise
   if (fast) return fast.workspaceId;
 
   // SLOW PATH (1ª vez): cria com advisory lock (idempotente sob concorrência).
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`;
 
     await tx.user.upsert({ where: { id: userId }, update: { email }, create: { id: userId, email } });
 
     const existing = await tx.membership.findFirst({ where: { userId }, orderBy: { createdAt: "asc" } });
-    if (existing) return existing.workspaceId;
+    if (existing) return { workspaceId: existing.workspaceId, welcome: false };
 
     // CONVITE: se há convite pendente pra esse e-mail, ENTRA no workspace que convidou
     // (em vez de criar um novo). Multi-usuário.
@@ -36,7 +36,7 @@ export async function provisionWorkspace(userId: string, email: string): Promise
     if (invite) {
       await tx.membership.create({ data: { userId, workspaceId: invite.workspaceId, role: invite.role } });
       await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
-      return invite.workspaceId;
+      return { workspaceId: invite.workspaceId, welcome: false };
     }
 
     const zernioProfileId = isSeahub && process.env.ZERNIO_PROFILE_ID ? process.env.ZERNIO_PROFILE_ID : null;
@@ -50,6 +50,15 @@ export async function provisionWorkspace(userId: string, email: string): Promise
         objetivo: { create: {} },
       },
     });
-    return ws.id;
+    return { workspaceId: ws.id, welcome: true };
   });
+
+  // boas-vindas só pra workspace NOVO (self-signup); convidado recebe o e-mail de convite.
+  if (result.welcome) {
+    const { welcomeEmail } = await import("./email-templates");
+    const { sendEmail } = await import("./email");
+    const t = welcomeEmail();
+    void sendEmail({ to: email, subject: t.subject, html: t.html });
+  }
+  return result.workspaceId;
 }
