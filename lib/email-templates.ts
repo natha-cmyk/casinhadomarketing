@@ -30,21 +30,27 @@ export function welcomeEmail(nome?: string) {
     subject: "Bem-vindo à Casinha do Marketing 🎉",
     html: layout("Sua Casinha está pronta", `
       <p>${oi}</p>
-      <p>Seu ambiente na <b>Casinha do Marketing</b> foi criado. Aqui você acompanha redes sociais, mídia paga, CRM, metas e conta com os assistentes de IA.</p>
-      <p>Pra começar: conecte seus canais e configure seu ambiente na <b>Personalização</b>.</p>
-    `, { label: "Acessar minha Casinha", href: APP_URL }),
+      <p>Seu ambiente na <b>Casinha do Marketing</b> está oficialmente pronto — é hora de entrar!</p>
+      <p>Aqui você acompanha redes sociais, mídia paga, CRM, metas e conta com os assistentes de IA.</p>
+      <p>Pra começar: conecte seus canais e configure seu ambiente na aba <b>Personalização</b>.</p>
+      <p>Estamos muito felizes em te receber por aqui! ✨</p>
+    `, { label: "🏠 Acesse sua Casinha", href: APP_URL }),
   };
 }
 
 export function inviteEmail(opts: { workspaceNome: string; convidadoPor?: string; role: string; email: string }) {
   const quem = opts.convidadoPor ? `<b>${esc(opts.convidadoPor)}</b>` : "A equipe";
   const papel = opts.role === "owner" ? "administrador(a)" : "membro";
+  const subject = opts.convidadoPor
+    ? `Você foi convidado(a) para a Casinha do Marketing — ${opts.convidadoPor}`
+    : "Você foi convidado(a) para a Casinha do Marketing";
   return {
-    subject: `Você foi convidado(a) para a Casinha do Marketing`,
+    subject,
     html: layout("Convite pra um ambiente", `
       <p>${quem} convidou você (${papel}) para o ambiente <b>${esc(opts.workspaceNome)}</b> na Casinha do Marketing.</p>
-      <p>Para entrar, acesse a plataforma e faça login <b>com este mesmo e-mail</b> (${esc(opts.email)}) — pelo Google ou por e-mail e senha. No primeiro acesso você já cai direto no ambiente.</p>
-    `, { label: "Entrar na Casinha", href: `${APP_URL}/login` }),
+      <p>Para entrar, acesse a plataforma e faça login <b>com este mesmo e-mail</b> (${esc(opts.email)}) — pelo Google ou por e-mail e senha (que você mesmo vai cadastrar).</p>
+      <p>Depois é só aproveitar e começar a usar!</p>
+    `, { label: "🏠 Entrar na Casinha", href: `${APP_URL}/login` }),
   };
 }
 
@@ -53,20 +59,20 @@ export function referralConvertedEmail(opts: { cliente: string; mes?: string | n
     subject: "Sua indicação virou cliente 🎁",
     html: layout("Indicação convertida!", `
       <p>Boa notícia: <b>${esc(opts.cliente)}</b> chegou pela sua indicação e virou cliente da Casinha.</p>
-      <p>${opts.mes ? `Como recompensa, sua mensalidade de <b>${esc(opts.mes)}</b> foi abonada.` : "Sua próxima mensalidade será abonada como recompensa."}</p>
-      <p>Continue indicando — cada conversão zera um mês.</p>
-    `, { label: "Ver minhas indicações", href: `${APP_URL}/indicacoes` }),
+      <p>${opts.mes ? `Como recompensa, sua mensalidade de <b>${esc(opts.mes)}</b> foi abonada! 🤗` : "Sua próxima mensalidade será abonada como recompensa! 🤗"}</p>
+      <p>Continue indicando usando o seu link — cada conversão zera um mês! 🔥</p>
+    `, { label: "🎯 Ver minhas indicações", href: `${APP_URL}/indicacoes` }),
   };
 }
 
 export function connectionsReminderEmail(nome?: string) {
   const oi = nome ? `Olá, ${esc(nome)}!` : "Olá!";
   return {
-    subject: "Conecte seus canais pra ver seus números",
+    subject: "Conecte seus canais pra ver todos seus números",
     html: layout("Seu painel está esperando dados", `
       <p>${oi}</p>
-      <p>Notamos que seu ambiente ainda não tem canais conectados. Conectando suas redes e a mídia paga, seus painéis passam a mostrar alcance, engajamento, leads e desempenho — de verdade.</p>
-      <p>Leva 1 minuto: é login seguro direto na própria rede, em <b>Personalização → Conexões</b>.</p>
-    `, { label: "Conectar meus canais", href: `${APP_URL}/personalizacao` }),
+      <p>Notamos que seu ambiente ainda não tem canais conectados. Conectando suas redes e a mídia paga, seus painéis passam a mostrar alcance, engajamento, leads e desempenho — fica mais usual e rico de informações!</p>
+      <p>Leva 1 minuto: é login seguro direto na própria rede, em <b>Personalização → Conexões</b>. Let's go! 🔥</p>
+    `, { label: "🎯 Conectar meus canais", href: `${APP_URL}/personalizacao` }),
   };
 }
