@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
+import { logEvent } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,7 @@ export async function PUT(req: Request) {
       create: { workspaceId: ws, ...data },
       update: data,
     });
+    void logEvent(ws, "crm.configured", provider);
     return NextResponse.json({ config, workspaceId: ws });
   } catch {
     return NextResponse.json({ error: "db" }, { status: 503 });

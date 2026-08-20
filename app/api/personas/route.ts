@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
+import { logEvent } from "@/lib/events";
 
 interface PersonaDetalhes {
   nomeProprio?: string; consome?: string[]; gosta?: string[]; naoGosta?: string[]; atividades?: string[];
@@ -65,6 +66,7 @@ export async function PUT(req: Request) {
         update: fields,
       });
     }
+    void logEvent(ws, "persona.updated", `${personas.length} persona(s)`);
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "db" }, { status: 503 });

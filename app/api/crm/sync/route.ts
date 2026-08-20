@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { syncClickupLeads } from "@/lib/crm-sync";
+import { logEvent } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
     const full = new URL(req.url).searchParams.get("full") === "1";
     const r = await syncClickupLeads(ws, { full });
     if (!r.ok) return NextResponse.json({ ok: false, error: r.error }, { status: r.status });
+    void logEvent(ws, "crm.synced", `${r.imported} lead(s)`, { incremental: r.incremental, full });
     return NextResponse.json({ ok: true, imported: r.imported, incremental: r.incremental });
   } catch (e) {
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
