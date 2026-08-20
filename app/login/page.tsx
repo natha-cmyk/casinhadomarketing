@@ -30,7 +30,7 @@ export default function LoginPage() {
   async function google() {
     setErr(null);
     const supabase = createClient();
-    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/` : undefined;
+    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
     const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
     if (error) setErr(error.message.includes("provider is not enabled") ? "Login com Google ainda não está habilitado. Use e-mail e senha." : error.message);
   }
