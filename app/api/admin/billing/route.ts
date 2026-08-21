@@ -63,7 +63,7 @@ export async function POST(req: Request) {
         const t = status === "convertido"
           ? referralConvertedEmail({ cliente: String(b.cliente), mes: abonouMes })
           : referralRegisteredEmail({ cliente: String(b.cliente) });
-        void sendEmail({ to: owner.user.email, subject: t.subject, html: t.html });
+        await sendEmail({ to: owner.user.email, subject: t.subject, html: t.html });
       }
       return NextResponse.json({ ok: true, referral: ref });
     }

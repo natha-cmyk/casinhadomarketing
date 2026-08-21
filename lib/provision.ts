@@ -57,18 +57,19 @@ export async function provisionWorkspace(userId: string, email: string): Promise
   });
 
   // boas-vindas só pra workspace NOVO (self-signup); convidado recebe o e-mail de convite.
+  // AWAIT: em serverless um fetch não-aguardado pode ser morto quando a request responde.
   if (result.welcome) {
     const { welcomeEmail } = await import("./email-templates");
     const { sendEmail } = await import("./email");
     const t = welcomeEmail();
-    void sendEmail({ to: email, subject: t.subject, html: t.html });
+    await sendEmail({ to: email, subject: t.subject, html: t.html });
   }
   // convidado entrou → avisa quem convidou
   if (result.notify) {
     const { memberJoinedEmail } = await import("./email-templates");
     const { sendEmail } = await import("./email");
     const t = memberJoinedEmail({ membro: result.notify.membro, workspaceNome: result.notify.workspaceNome });
-    void sendEmail({ to: result.notify.to, subject: t.subject, html: t.html });
+    await sendEmail({ to: result.notify.to, subject: t.subject, html: t.html });
   }
   return result.workspaceId;
 }

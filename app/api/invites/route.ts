@@ -52,10 +52,11 @@ export async function POST(req: Request) {
 
     const invite = await prisma.invite.create({ data: { workspaceId: ws, email, role, invitedBy: user.email || "" } });
     void logEvent(ws, "invite.created", email, { role });
-    // dispara o e-mail de convite (no-op se Resend não estiver configurado)
+    // dispara o e-mail de convite (no-op se Resend não estiver configurado).
+    // AWAIT: em serverless a função pode ser encerrada ao responder, matando um fetch não-aguardado.
     const wrec = await prisma.workspace.findUnique({ where: { id: ws }, select: { nome: true } });
     const t = inviteEmail({ workspaceNome: wrec?.nome || "seu ambiente", convidadoPor: user.email || undefined, role, email });
-    void sendEmail({ to: email, subject: t.subject, html: t.html, replyTo: user.email || undefined });
+    await sendEmail({ to: email, subject: t.subject, html: t.html, replyTo: user.email || undefined });
     return NextResponse.json({ ok: true, invite: { id: invite.id, email, role } });
   } catch {
     return NextResponse.json({ ok: false, error: "db" }, { status: 503 });
