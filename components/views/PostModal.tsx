@@ -272,12 +272,14 @@ export function PostModal() {
     const fmt = formatosDoCanal(canal);
     const rid = redeIdDoCanal(canal);
     const def = rid ? calDefaults[rid] : undefined;
+    const isManual = calManuais.includes(canal);
     setF((prev) => ({
       ...prev,
       canal,
       perfil: p.includes(prev.perfil) ? prev.perfil : def && p.includes(def) ? def : p[0] ?? "",
       formato: fmt.includes(prev.formato) ? prev.formato : fmt[0] ?? "",
-      contas: rid && !prev.contas.includes(rid) ? [...prev.contas, rid] : prev.contas,
+      // canal manual não tem publicação automática → nunca marca canal de publicação
+      contas: isManual ? [] : rid && !prev.contas.includes(rid) ? [...prev.contas, rid] : prev.contas,
     }));
   };
 
@@ -703,7 +705,9 @@ export function PostModal() {
               )}
             </div>
             <label className="field-lbl">Publicar em (canais conectados)</label>
-            {conn.length ? (
+            {calManuais.includes(f.canal) ? (
+              <div className="pm-hint">⚠️ Canal manual — <b>sem publicação automática sincronizada</b>. Serve só como registro no calendário; a publicação é feita manualmente por você na plataforma do canal.</div>
+            ) : conn.length ? (
               <div className="pm-contas" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
                 {conn.map((r) => {
                   const chk = f.contas.includes(r.id);
@@ -807,13 +811,17 @@ export function PostModal() {
             <button className="btn-link" id="pmSave" onClick={() => doSave()} disabled={busy}>
               Salvar
             </button>
-            {/* Disparo real via Zernio (POST /posts) */}
-            <button className="btn-link pm-pub" id="pmPublish" onClick={() => doPublish(true)} disabled={busy || uploading}>
-              {busy ? "Enviando…" : "Publicar agora"}
-            </button>
-            <button className="btn-link ig" id="pmSchedule" onClick={() => doPublish(false)} disabled={busy || uploading}>
-              {busy ? "Agendando…" : "Agendar publicação"}
-            </button>
+            {/* Disparo real via Zernio (POST /posts) — canal manual não publica */}
+            {!calManuais.includes(f.canal) && (
+              <>
+                <button className="btn-link pm-pub" id="pmPublish" onClick={() => doPublish(true)} disabled={busy || uploading}>
+                  {busy ? "Enviando…" : "Publicar agora"}
+                </button>
+                <button className="btn-link ig" id="pmSchedule" onClick={() => doPublish(false)} disabled={busy || uploading}>
+                  {busy ? "Agendando…" : "Agendar publicação"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
