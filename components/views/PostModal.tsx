@@ -2,7 +2,7 @@
 // Porta renderPostModal (blueprint 1475-1504) + savePost (1505-1515).
 // Modal de criação/edição de post do calendário de conteúdo.
 import { useRef, useState } from "react";
-import { useStore, newId, type PostItem, type PostMedia } from "@/lib/store";
+import { useStore, newId, type PostItem, type PostMedia, type PostOverride } from "@/lib/store";
 import { savePosts } from "@/lib/api";
 import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
 import {
@@ -135,7 +135,7 @@ interface Fields {
   notas: string;
   linkRef: string;
   roteiro: string;
-  overrides: Record<string, { caption?: string }>;
+  overrides: Record<string, PostOverride>;
   status: string;
   contas: string[];
 }
@@ -689,17 +689,47 @@ export function PostModal() {
                         <span className="conta-dot" style={{ background: r.cor }} />
                         {r.label}
                       </label>
-                      {chk && f.contas.length > 1 && (
-                        <input
-                          className="field-edit"
-                          style={{ marginTop: 5, fontSize: 12.5 }}
-                          value={f.overrides[r.id]?.caption ?? ""}
-                          placeholder={`Legenda só do ${r.label} (opcional — vazio usa a legenda geral)`}
-                          onChange={(e) =>
-                            upd({ overrides: { ...f.overrides, [r.id]: { ...f.overrides[r.id], caption: e.target.value } } })
-                          }
-                        />
-                      )}
+                      {chk && (() => {
+                        const ov = f.overrides[r.id] || {};
+                        const setOv = (patch: PostOverride) => upd({ overrides: { ...f.overrides, [r.id]: { ...ov, ...patch } } });
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 5, marginLeft: 22 }}>
+                            {f.contas.length > 1 && (
+                              <input
+                                className="field-edit"
+                                style={{ fontSize: 12.5 }}
+                                value={ov.caption ?? ""}
+                                placeholder={`Legenda só do ${r.label} (vazio = legenda geral)`}
+                                onChange={(e) => setOv({ caption: e.target.value })}
+                              />
+                            )}
+                            {r.id === "youtube" && (
+                              <>
+                                <input
+                                  className="field-edit"
+                                  style={{ fontSize: 12.5 }}
+                                  maxLength={100}
+                                  value={ov.ytTitle ?? ""}
+                                  placeholder="Título do YouTube (≤100; vazio usa o título do post)"
+                                  onChange={(e) => setOv({ ytTitle: e.target.value })}
+                                />
+                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                  <select className="field-edit" style={{ fontSize: 12.5, flex: 1 }} value={ov.ytVisibility ?? "public"} onChange={(e) => setOv({ ytVisibility: e.target.value })}>
+                                    <option value="public">Público</option>
+                                    <option value="unlisted">Não listado</option>
+                                    <option value="private">Privado</option>
+                                  </select>
+                                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--label-2)", whiteSpace: "nowrap" }}>
+                                    <input type="checkbox" checked={!!ov.ytMadeForKids} onChange={(e) => setOv({ ytMadeForKids: e.target.checked })} />
+                                    infantil
+                                  </label>
+                                </div>
+                                <div className="pm-hint">Vídeo &lt;3min vira Short automaticamente. Capa custom só em vídeo ≥3min (o YouTube não permite em Short).</div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}

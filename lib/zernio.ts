@@ -386,6 +386,7 @@ export interface ZernioPostPlatform {
   accountId: string;
   customContent?: string;
   scheduledFor?: string;
+  platformSpecificData?: Record<string, unknown>;
 }
 export interface ZernioPublishInput {
   content?: string;

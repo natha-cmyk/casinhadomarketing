@@ -56,15 +56,25 @@ export async function POST(req: Request) {
     // Contas conectadas de TODOS os profiles do workspace (multi-conta) → só as habilitadas.
     const accounts = await listWorkspaceAccounts(ws);
     // legenda específica por canal (Zernio customContent) — vazio cai na legenda geral
-    const overrides = (post.overrides && typeof post.overrides === "object" ? post.overrides : {}) as Record<string, { caption?: string }>;
-    const platforms: { platform: string; accountId: string; customContent?: string }[] = [];
+    const overrides = (post.overrides && typeof post.overrides === "object" ? post.overrides : {}) as Record<string, { caption?: string; ytTitle?: string; ytVisibility?: string; ytMadeForKids?: boolean }>;
+    const platforms: { platform: string; accountId: string; customContent?: string; platformSpecificData?: Record<string, unknown> }[] = [];
     const canaisIgnorados: string[] = [];
     for (const redeId of post.contas || []) {
       const plat = REDE_TO_PLAT[redeId] || redeId;
       const acc = accounts.find((a) => a.platform === plat && (a as { enabled?: boolean }).enabled !== false);
       if (acc) {
-        const cap = overrides[redeId]?.caption?.trim();
-        platforms.push({ platform: plat, accountId: acc._id, ...(cap ? { customContent: cap } : {}) });
+        const ov = overrides[redeId] || {};
+        const cap = ov.caption?.trim();
+        const target: { platform: string; accountId: string; customContent?: string; platformSpecificData?: Record<string, unknown> } = { platform: plat, accountId: acc._id };
+        if (cap) target.customContent = cap;
+        // YouTube: título/visibilidade/infantil por canal (YouTubePlatformData)
+        if (plat === "youtube") {
+          const psd: Record<string, unknown> = { visibility: ov.ytVisibility || "public", madeForKids: !!ov.ytMadeForKids };
+          const t = ov.ytTitle?.trim() || post.titulo?.trim();
+          if (t) psd.title = t.slice(0, 100);
+          target.platformSpecificData = psd;
+        }
+        platforms.push(target);
       } else canaisIgnorados.push(redeId);
     }
     if (!platforms.length)
