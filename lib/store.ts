@@ -114,6 +114,8 @@ export interface UIState {
   cardOrder: Record<string, string[]>;
   // canais MANUAIS do calendário (só registro de conteúdo, sem publicação síncrona). Persistido no config.
   calManuais: string[];
+  // perfil PADRÃO por canal (multiconta): { redeId: "nome do perfil" }. Persistido no config.
+  calDefaults: Record<string, string>;
   // personalização dos agentes por workspace: { agentKey: {enabled, panels, promptExtra} }. Persistido no config.
   agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
   // layout dos widgets por painel. grid = coordenadas livres {x,y,w,h} por widget (tipo ClickUp);
@@ -125,7 +127,7 @@ export interface UIState {
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, unknown> } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; calDefaults?: Record<string, string>; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, unknown> } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -152,6 +154,7 @@ export interface UIState {
   setCardOrder: (panel: string, ids: string[]) => void;
   addCalManual: (nome: string) => void;
   removeCalManual: (nome: string) => void;
+  setCalDefault: (redeId: string, perfil: string) => void;
   setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
   setWidgetLayout: (panel: string, layout: UIState["widgetLayout"][string]) => void;
   toggleWidgetEdit: (panel: string) => void;
@@ -220,6 +223,7 @@ export const useStore = create<UIState>((set) => ({
   customInd: {},
   cardOrder: {},
   calManuais: [],
+  calDefaults: {},
   agentsConfig: {},
   widgetLayout: {},
   widgetEdit: null,
@@ -246,6 +250,12 @@ export const useStore = create<UIState>((set) => ({
       return { calManuais: [...s.calManuais, v] };
     }),
   removeCalManual: (nome) => set((s) => ({ calManuais: s.calManuais.filter((c) => c !== nome) })),
+  setCalDefault: (redeId, perfil) =>
+    set((s) => {
+      const next = { ...s.calDefaults };
+      if (perfil) next[redeId] = perfil; else delete next[redeId];
+      return { calDefaults: next };
+    }),
   setAgentConfig: (key, patch) =>
     set((s) => {
       const cur = s.agentsConfig[key] ?? { enabled: true, panels: null, promptExtra: "" };
@@ -300,6 +310,7 @@ export const useStore = create<UIState>((set) => ({
         if (d.config.adConfig?.cardOrder) patch.cardOrder = d.config.adConfig.cardOrder;
         if (d.config.customInd) patch.customInd = d.config.customInd;
         if (Array.isArray(d.config.calManuais)) patch.calManuais = d.config.calManuais;
+        if (d.config.calDefaults && typeof d.config.calDefaults === "object") patch.calDefaults = d.config.calDefaults as Record<string, string>;
         if (d.config.agentsConfig && typeof d.config.agentsConfig === "object") patch.agentsConfig = d.config.agentsConfig;
         if (d.config.widgetLayout && typeof d.config.widgetLayout === "object") patch.widgetLayout = d.config.widgetLayout as UIState["widgetLayout"];
       }

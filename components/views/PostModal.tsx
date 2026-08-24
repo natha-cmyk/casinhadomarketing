@@ -96,7 +96,7 @@ function sugestaoFunil(formato: string, cta: string): string {
 // Perfis conectados FILTRADOS pela plataforma do canal escolhido. Canal manual/sem rede → todos.
 function perfisDoCanal(accounts: ZAccount[], canalLabel: string): string[] {
   const rede = REDES.find((r) => r.label === canalLabel);
-  if (!rede) return perfisConectados(accounts); // manual/desconhecido
+  if (!rede) return []; // canal manual → sem perfil social forçado
   const plat = platOfRede(rede.id);
   const out: string[] = [];
   const seen = new Set<string>();
@@ -157,6 +157,8 @@ export function PostModal() {
   const calYear = useStore((st) => st.calYear);
   const calCanal = useStore((st) => st.calCanal);
   const calPerfil = useStore((st) => st.calPerfil);
+  const calDefaults = useStore((st) => st.calDefaults);
+  const setCalDefault = useStore((st) => st.setCalDefault);
   const set = useStore((st) => st.set);
   const addPost = useStore((st) => st.addPost);
   const updatePost = useStore((st) => st.updatePost);
@@ -217,13 +219,19 @@ export function PostModal() {
     const perfisPre = perfisDoCanal(zernioAccounts, canalPre);
     const redePre = REDES.find((r) => r.label === canalPre);
     const ridPre = redePre && redesConectadas(zernioAccounts).some((r) => r.id === redePre.id) ? redePre.id : null;
+    // perfil inicial: filtro da visualização > perfil PADRÃO do canal > 1º perfil do canal
+    const defPre = ridPre ? calDefaults[ridPre] : undefined;
+    const perfilPre =
+      calPerfil !== "todos" && perfisPre.includes(calPerfil) ? calPerfil
+      : defPre && perfisPre.includes(defPre) ? defPre
+      : perfisPre[0] ?? "";
     return {
       data: String(d).padStart(2, "0") + "/" + String(m + 1).padStart(2, "0") + "/" + y,
       hora: "09:00",
       titulo: "",
       canal: canalPre,
       formato: formatosDoCanal(canalPre)[0] ?? "Reels",
-      perfil: calPerfil !== "todos" && perfisPre.includes(calPerfil) ? calPerfil : perfisPre[0] ?? perfisAll[0] ?? "",
+      perfil: perfilPre,
       colab: "",
       pilar: "Espaços",
       funil: "Topo",
@@ -263,10 +271,11 @@ export function PostModal() {
     const p = perfisDoCanal(zernioAccounts, canal);
     const fmt = formatosDoCanal(canal);
     const rid = redeIdDoCanal(canal);
+    const def = rid ? calDefaults[rid] : undefined;
     setF((prev) => ({
       ...prev,
       canal,
-      perfil: p.includes(prev.perfil) ? prev.perfil : p[0] ?? "",
+      perfil: p.includes(prev.perfil) ? prev.perfil : def && p.includes(def) ? def : p[0] ?? "",
       formato: fmt.includes(prev.formato) ? prev.formato : fmt[0] ?? "",
       contas: rid && !prev.contas.includes(rid) ? [...prev.contas, rid] : prev.contas,
     }));
@@ -527,6 +536,21 @@ export function PostModal() {
                   <option key={o}>{o}</option>
                 ))}
               </select>
+              {(() => {
+                const rid = redeIdDoCanal(f.canal);
+                if (!rid || perfis.length < 2 || !f.perfil) return null;
+                const isDef = calDefaults[rid] === f.perfil;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setCalDefault(rid, isDef ? "" : f.perfil)}
+                    style={{ marginTop: 5, border: 0, background: "transparent", color: isDef ? "var(--cyan)" : "var(--label-3)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }}
+                    title="Perfil que já vem selecionado quando você escolher este canal"
+                  >
+                    {isDef ? "★ perfil padrão deste canal" : "☆ tornar perfil padrão deste canal"}
+                  </button>
+                );
+              })()}
             </div>
             <div>
               <label className="field-lbl">Perfil colaborador</label>

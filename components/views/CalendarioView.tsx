@@ -113,22 +113,19 @@ function apWindows(periodo: ApPeriodo, year: number, month: number): [number, nu
   const dim = daysInMonth(year, month);
   if (periodo === "mes") return [[1, dim]];
   if (periodo === "quinzena") return dim > 15 ? [[1, 15], [16, dim]] : [[1, dim]];
-  // semana: alinhada a Dom–Sáb, recortada pelo mês
-  const wins: [number, number][] = [];
-  let start = 1;
-  while (start <= dim) {
-    const dow = new Date(year, month, start).getDay();
-    const end = Math.min(start + (6 - dow), dim);
-    wins.push([start, end]);
-    start = end + 1;
-  }
-  return wins;
+  // semana FIXA por data do mês (padrão Casinha): W1 1–7, W2 8–14, W3 15–21, W4 22–fim.
+  const bounds: [number, number][] = [[1, 7], [8, 14], [15, 21], [22, dim]];
+  return bounds.filter(([a]) => a <= dim).map(([a, b]) => [a, Math.min(b, dim)] as [number, number]);
+}
+// número da semana Casinha (W1–W4) a partir do dia inicial da janela.
+function semanaNum(diaInicio: number): number {
+  return Math.min(4, Math.floor((diaInicio - 1) / 7) + 1);
 }
 function apWindowLabel(periodo: ApPeriodo, win: [number, number], month: number): string {
   const mes = MONTHS_FULL[month];
   if (periodo === "mes") return mes;
   if (periodo === "quinzena") return `${win[0]}–${win[1]} de ${mes}`;
-  return `Semana · ${win[0]}–${win[1]} de ${mes}`;
+  return `Semana ${semanaNum(win[0])} (W${semanaNum(win[0])}) · ${win[0]}–${win[1]} de ${mes}`;
 }
 
 // feriados móveis do ano (Carnaval, Sexta-feira Santa, Corpus Christi) → [dd/mm, nome]
