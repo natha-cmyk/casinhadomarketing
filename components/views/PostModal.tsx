@@ -82,6 +82,16 @@ function formatosDoCanal(canalLabel: string): string[] {
   return FORMATS_BY_CANAL[canalLabel] || FORMATOS_POST;
 }
 
+// Sugestão automática de etapa do funil pelo formato + CTA. Manual continua mandando.
+// CTA de ação forte → Fundo (conversão); alcance (reels/story/short) → Topo; educação → Meio.
+function sugestaoFunil(formato: string, cta: string): string {
+  const c = (cta || "").toLowerCase();
+  if (/agend|visit|contrat|assin|compr|whats|fale|inscrev|garant|vaga|or[çc]ament|link na bio/.test(c)) return "Fundo";
+  if (/reels|story|short|v[íi]deo/i.test(formato)) return "Topo";
+  if (/carrossel|post|artigo|thread|blog/i.test(formato)) return "Meio";
+  return "Topo";
+}
+
 // Perfis conectados FILTRADOS pela plataforma do canal escolhido. Canal manual/sem rede → todos.
 function perfisDoCanal(accounts: ZAccount[], canalLabel: string): string[] {
   const rede = REDES.find((r) => r.label === canalLabel);
@@ -121,6 +131,9 @@ interface Fields {
   legenda: string;
   cta: string;
   hashtags: string;
+  notas: string;
+  linkRef: string;
+  roteiro: string;
   status: string;
   contas: string[];
 }
@@ -140,6 +153,8 @@ export function PostModal() {
   const calManuais = useStore((st) => st.calManuais);
   const calMonth = useStore((st) => st.calMonth);
   const calYear = useStore((st) => st.calYear);
+  const calCanal = useStore((st) => st.calCanal);
+  const calPerfil = useStore((st) => st.calPerfil);
   const set = useStore((st) => st.set);
   const addPost = useStore((st) => st.addPost);
   const updatePost = useStore((st) => st.updatePost);
@@ -181,6 +196,9 @@ export function PostModal() {
         legenda: existing.legenda,
         cta: existing.cta,
         hashtags: existing.hashtags,
+        notas: existing.notas ?? "",
+        linkRef: existing.linkRef ?? "",
+        roteiro: existing.roteiro ?? "",
         status: existing.status,
         contas: [...(existing.contas || [])],
       };
@@ -188,13 +206,16 @@ export function PostModal() {
     const y = pm?.y ?? calYear;
     const m = pm?.m ?? calMonth;
     const d = pm?.d ?? 1;
+    // herda o canal/perfil da visualização atual do calendário (se filtrada)
+    const canalPre = calCanal !== "todos" && canais.some((c) => c.nome === calCanal) ? calCanal : canais[0]?.nome ?? "Instagram";
+    const perfisPre = perfisDoCanal(zernioAccounts, canalPre);
     return {
       data: String(d).padStart(2, "0") + "/" + String(m + 1).padStart(2, "0") + "/" + y,
       hora: "09:00",
       titulo: "",
-      canal: canais[0]?.nome ?? "Instagram",
-      formato: formatosDoCanal(canais[0]?.nome ?? "Instagram")[0] ?? "Reels",
-      perfil: perfisDoCanal(zernioAccounts, canais[0]?.nome ?? "Instagram")[0] ?? perfisAll[0] ?? "",
+      canal: canalPre,
+      formato: formatosDoCanal(canalPre)[0] ?? "Reels",
+      perfil: calPerfil !== "todos" && perfisPre.includes(calPerfil) ? calPerfil : perfisPre[0] ?? perfisAll[0] ?? "",
       colab: "",
       pilar: "Espaços",
       funil: "Topo",
@@ -203,6 +224,9 @@ export function PostModal() {
       legenda: "",
       cta: "",
       hashtags: "",
+      notas: "",
+      linkRef: "",
+      roteiro: "",
       status: "rascunho",
       contas: [],
     };
@@ -288,6 +312,9 @@ export function PostModal() {
       legenda: f.legenda,
       cta: f.cta,
       hashtags: f.hashtags,
+      notas: f.notas,
+      linkRef: f.linkRef,
+      roteiro: f.roteiro,
       status: forceStatus ?? f.status,
       contas: f.contas,
       y,
@@ -478,6 +505,17 @@ export function PostModal() {
             <div>
               <label className="field-lbl">Funil</label>
               {sel("pmFunil", FUNIL_POST, f.funil, (v) => upd({ funil: v }))}
+              {(() => {
+                const sug = sugestaoFunil(f.formato, f.cta);
+                return sug !== f.funil ? (
+                  <div className="pm-hint" style={{ marginTop: 6 }}>
+                    Sugerido: <b>{sug}</b>{" "}
+                    <button type="button" onClick={() => upd({ funil: sug })} style={{ border: 0, background: "transparent", color: "var(--cyan)", cursor: "pointer", fontWeight: 700, padding: 0 }}>
+                      aplicar
+                    </button>
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
           <label className="field-lbl">Mídia (imagem, vídeo, gif ou pdf)</label>
@@ -545,6 +583,37 @@ export function PostModal() {
                 value={f.hashtags}
                 placeholder="#seahub"
                 onChange={(e) => upd({ hashtags: e.target.value })}
+              />
+            </div>
+          </div>
+          <label className="field-lbl">Notas de produção</label>
+          <textarea
+            className="field-edit"
+            id="pmNotas"
+            rows={2}
+            placeholder="Anotações internas (não vão na publicação)"
+            value={f.notas}
+            onChange={(e) => upd({ notas: e.target.value })}
+          />
+          <div className="pm-row">
+            <div>
+              <label className="field-lbl">Link de referência</label>
+              <input
+                className="field-edit"
+                id="pmLinkRef"
+                value={f.linkRef}
+                placeholder="https://… (inspiração/briefing)"
+                onChange={(e) => upd({ linkRef: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-lbl">Roteiro (link do doc)</label>
+              <input
+                className="field-edit"
+                id="pmRoteiro"
+                value={f.roteiro}
+                placeholder="https://docs… do roteiro"
+                onChange={(e) => upd({ roteiro: e.target.value })}
               />
             </div>
           </div>

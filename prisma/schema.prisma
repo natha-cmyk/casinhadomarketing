@@ -244,6 +244,9 @@ model Post {
   cta          String     @default("")
   hashtags     String     @default("")
   arquivo      String     @default("")
+  notas        String     @default("") // anotações internas de produção
+  linkRef      String     @default("") // link de referência (inspiração/briefing)
+  roteiro      String     @default("") // link do doc do roteiro
   // mídia enviada (presign Zernio): [{ type, url, filename, mimeType, size? }]
   media        Json       @default("[]")
   status       PostStatus @default(rascunho)
