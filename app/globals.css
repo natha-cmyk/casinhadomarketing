@@ -197,6 +197,7 @@ th.stick{z-index:3} table.data tr:hover td.stick{background:#fbfbfc}
 .post-chip.pub{background:var(--surface);opacity:.82}
 .post-chip:hover{border-color:var(--label-3)}
 .pc-dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px}
+.pc-ic{flex:0 0 auto;display:inline-flex}.pc-ic svg{width:13px;height:13px;display:block}
 .pc-h{font-size:10px;font-weight:700;color:var(--label-3);flex:0 0 auto}
 .pc-t{font-size:11px;font-weight:560;color:var(--label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0}
 .cc-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;padding-top:12px;border-top:1px solid var(--hairline)}

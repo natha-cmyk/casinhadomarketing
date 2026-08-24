@@ -217,7 +217,8 @@ export function CalendarioView() {
 
   const postChip = (p: PostItem) => {
     const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
-    const c = canalCor(p.canal);
+    const c = corMarca(p.canal, canalCor(p.canal));
+    const ico = iconeCanal(p.canal);
     const nc = (p.contas || []).length;
     const acc = nc ? ` → ${nc} ${nc === 1 ? "canal" : "canais"}` : "";
     return (
@@ -231,7 +232,11 @@ export function CalendarioView() {
           set({ postModal: { mode: "edit", id: p.id, y: p.y, m: p.m, d: p.d } });
         }}
       >
-        <span className="pc-dot" style={{ background: c }} />
+        {ico ? (
+          <span className="pc-ic" style={{ color: c }}><Ic name={ico} /></span>
+        ) : (
+          <span className="pc-dot" style={{ background: c }} />
+        )}
         <span className="pc-h">{p.hora || ""}</span>
         <span className="pc-t">{p.titulo}</span>
         {p.status === "publicado" && (
