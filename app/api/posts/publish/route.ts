@@ -55,13 +55,17 @@ export async function POST(req: Request) {
 
     // Contas conectadas de TODOS os profiles do workspace (multi-conta) → só as habilitadas.
     const accounts = await listWorkspaceAccounts(ws);
-    const platforms: { platform: string; accountId: string }[] = [];
+    // legenda específica por canal (Zernio customContent) — vazio cai na legenda geral
+    const overrides = (post.overrides && typeof post.overrides === "object" ? post.overrides : {}) as Record<string, { caption?: string }>;
+    const platforms: { platform: string; accountId: string; customContent?: string }[] = [];
     const canaisIgnorados: string[] = [];
     for (const redeId of post.contas || []) {
       const plat = REDE_TO_PLAT[redeId] || redeId;
       const acc = accounts.find((a) => a.platform === plat && (a as { enabled?: boolean }).enabled !== false);
-      if (acc) platforms.push({ platform: plat, accountId: acc._id });
-      else canaisIgnorados.push(redeId);
+      if (acc) {
+        const cap = overrides[redeId]?.caption?.trim();
+        platforms.push({ platform: plat, accountId: acc._id, ...(cap ? { customContent: cap } : {}) });
+      } else canaisIgnorados.push(redeId);
     }
     if (!platforms.length)
       return NextResponse.json(

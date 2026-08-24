@@ -247,6 +247,8 @@ model Post {
   notas        String     @default("") // anotações internas de produção
   linkRef      String     @default("") // link de referência (inspiração/briefing)
   roteiro      String     @default("") // link do doc do roteiro
+  // ajustes por canal na publicação: { redeId: { caption? } } — legenda específica por rede (Zernio customContent)
+  overrides    Json       @default("{}")
   // mídia enviada (presign Zernio): [{ type, url, filename, mimeType, size? }]
   media        Json       @default("[]")
   status       PostStatus @default(rascunho)

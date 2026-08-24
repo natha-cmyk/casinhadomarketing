@@ -19,6 +19,7 @@ export async function GET() {
         colab: p.colab, pilar: p.pilar, formato: p.formato, funil: p.funil, legenda: p.legenda,
         cta: p.cta, hashtags: p.hashtags, arquivo: p.arquivo, status: p.status, contas: p.contas,
         notas: p.notas, linkRef: p.linkRef, roteiro: p.roteiro,
+        overrides: p.overrides && typeof p.overrides === "object" ? p.overrides : {},
         media: Array.isArray(p.media) ? p.media : [],
       };
     });
@@ -33,6 +34,7 @@ interface PostIn {
   perfil: string; colab: string; pilar: string; formato: string; funil: string; legenda: string;
   cta: string; hashtags: string; arquivo: string; status: string; contas: string[];
   notas?: string; linkRef?: string; roteiro?: string;
+  overrides?: Record<string, { caption?: string }>;
   media?: unknown[];
 }
 
@@ -51,6 +53,7 @@ export async function PUT(req: Request) {
         colab: p.colab, pilar: p.pilar, formato: p.formato, funil: p.funil, legenda: p.legenda,
         cta: p.cta, hashtags: p.hashtags, arquivo: p.arquivo, status: p.status as PostStatus, contas: p.contas,
         notas: p.notas ?? "", linkRef: p.linkRef ?? "", roteiro: p.roteiro ?? "",
+        overrides: (p.overrides && typeof p.overrides === "object" ? p.overrides : {}) as object,
         media: (Array.isArray(p.media) ? p.media : []) as object[],
       };
       await prisma.post.upsert({

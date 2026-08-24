@@ -18,7 +18,8 @@ export interface Okr { objetivo: string; areas: AreaItem[] }
 // ── Post do calendário (mesma forma do blueprint; y/m/d) ──
 // mídia enviada via presign da Zernio (imagem/vídeo/gif/pdf)
 export interface PostMedia { type: "image" | "video" | "gif" | "document"; url: string; filename?: string; mimeType?: string; size?: number }
-export interface PostItem extends SeedPost { media?: PostMedia[]; notas?: string; linkRef?: string; roteiro?: string }
+export interface PostOverride { caption?: string }
+export interface PostItem extends SeedPost { media?: PostMedia[]; notas?: string; linkRef?: string; roteiro?: string; overrides?: Record<string, PostOverride> }
 
 // ── Persona editável (persistida por workspace) ──
 // `detalhes` trata a persona como pessoa real (consumo, gostos, atividades).

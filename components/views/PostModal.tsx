@@ -134,6 +134,7 @@ interface Fields {
   notas: string;
   linkRef: string;
   roteiro: string;
+  overrides: Record<string, { caption?: string }>;
   status: string;
   contas: string[];
 }
@@ -199,6 +200,7 @@ export function PostModal() {
         notas: existing.notas ?? "",
         linkRef: existing.linkRef ?? "",
         roteiro: existing.roteiro ?? "",
+        overrides: existing.overrides ? { ...existing.overrides } : {},
         status: existing.status,
         contas: [...(existing.contas || [])],
       };
@@ -227,6 +229,7 @@ export function PostModal() {
       notas: "",
       linkRef: "",
       roteiro: "",
+      overrides: {},
       status: "rascunho",
       contas: [],
     };
@@ -315,6 +318,7 @@ export function PostModal() {
       notas: f.notas,
       linkRef: f.linkRef,
       roteiro: f.roteiro,
+      overrides: f.overrides,
       status: forceStatus ?? f.status,
       contas: f.contas,
       y,
@@ -629,26 +633,39 @@ export function PostModal() {
             </div>
             <label className="field-lbl">Publicar em (canais conectados)</label>
             {conn.length ? (
-              <div className="pm-contas">
+              <div className="pm-contas" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
                 {conn.map((r) => {
                   const chk = f.contas.includes(r.id);
                   return (
-                    <label className="pm-conta" key={r.id}>
-                      <input
-                        type="checkbox"
-                        data-pmconta={r.id}
-                        checked={chk}
-                        onChange={(e) =>
-                          upd({
-                            contas: e.target.checked
-                              ? [...f.contas, r.id]
-                              : f.contas.filter((x) => x !== r.id),
-                          })
-                        }
-                      />
-                      <span className="conta-dot" style={{ background: r.cor }} />
-                      {r.label}
-                    </label>
+                    <div key={r.id}>
+                      <label className="pm-conta">
+                        <input
+                          type="checkbox"
+                          data-pmconta={r.id}
+                          checked={chk}
+                          onChange={(e) =>
+                            upd({
+                              contas: e.target.checked
+                                ? [...f.contas, r.id]
+                                : f.contas.filter((x) => x !== r.id),
+                            })
+                          }
+                        />
+                        <span className="conta-dot" style={{ background: r.cor }} />
+                        {r.label}
+                      </label>
+                      {chk && f.contas.length > 1 && (
+                        <input
+                          className="field-edit"
+                          style={{ marginTop: 5, fontSize: 12.5 }}
+                          value={f.overrides[r.id]?.caption ?? ""}
+                          placeholder={`Legenda só do ${r.label} (opcional — vazio usa a legenda geral)`}
+                          onChange={(e) =>
+                            upd({ overrides: { ...f.overrides, [r.id]: { ...f.overrides[r.id], caption: e.target.value } } })
+                          }
+                        />
+                      )}
+                    </div>
                   );
                 })}
               </div>
