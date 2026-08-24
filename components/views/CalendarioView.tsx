@@ -17,6 +17,21 @@ import { Ic } from "@/components/Ic";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { PostModal } from "./PostModal";
 
+// ícone (nome em ICONS) e COR DE MARCA por canal — usados na apresentação como ponto de identificação.
+const CANAL_ICONE: Record<string, string> = {
+  Instagram: "ig", TikTok: "tiktok", "X / Twitter": "x", Facebook: "facebook", LinkedIn: "linkedin",
+  YouTube: "youtube", Threads: "threads", Reddit: "reddit", Pinterest: "pinterest", Bluesky: "bluesky",
+  Snapchat: "snapchat", "Google Business": "googlebusiness",
+};
+const CANAL_MARCA: Record<string, string> = {
+  Instagram: "#E1306C", TikTok: "#111111", "X / Twitter": "#111111", Facebook: "#1877F2", LinkedIn: "#0A66C2",
+  YouTube: "#FF0000", Threads: "#111111", Reddit: "#FF4500", Pinterest: "#E60023", Bluesky: "#1185FE",
+  Snapchat: "#111111", "Google Business": "#4285F4",
+  "WhatsApp (grupos)": "#25D366", "Lista de transmissão": "#00BBC5", Blog: "#8E5BE0",
+};
+const iconeCanal = (nome: string) => CANAL_ICONE[nome] || "";
+const corMarca = (nome: string, fallback: string) => CANAL_MARCA[nome] || fallback;
+
 // plataforma Zernio → id da rede (Casinha): twitter → x
 const PLAT_REV: Record<string, string> = { twitter: "x" };
 
@@ -637,7 +652,11 @@ export function CalendarioView() {
                             })
                           }
                         >
-                          <span className="ap-chip-dot" style={{ background: c.cor }} />
+                          {iconeCanal(c.nome) ? (
+                            <span className="ap-canal-ic" style={{ color: corMarca(c.nome, c.cor) }}><Ic name={iconeCanal(c.nome)} /></span>
+                          ) : (
+                            <span className="ap-chip-dot" style={{ background: corMarca(c.nome, c.cor) }} />
+                          )}
                           {c.nome}
                         </button>
                       );
@@ -662,12 +681,18 @@ export function CalendarioView() {
                         <div className="ap-cards">
                           {dp.map((p) => {
                             const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
+                            const marca = corMarca(p.canal, canalCor(p.canal));
+                            const ico = iconeCanal(p.canal);
                             return (
-                              <article className="ap-card" key={p.id} style={{ borderLeftColor: canalCor(p.canal) }}>
+                              <article className="ap-card" key={p.id} style={{ borderLeftColor: marca }}>
                                 <div className="ap-card-top">
                                   <span className="ap-card-time">{p.hora || "--:--"}</span>
-                                  <span className="ap-card-canal">
-                                    <span className="ap-chip-dot" style={{ background: canalCor(p.canal) }} />
+                                  <span className="ap-card-canal" style={{ color: marca }}>
+                                    {ico ? (
+                                      <span className="ap-canal-ic" style={{ color: marca }}><Ic name={ico} /></span>
+                                    ) : (
+                                      <span className="ap-chip-dot" style={{ background: marca }} />
+                                    )}
                                     {p.canal}
                                   </span>
                                   {p.formato && <span className="ap-card-fmt">{p.formato}</span>}
