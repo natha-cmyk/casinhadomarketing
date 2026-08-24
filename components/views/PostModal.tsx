@@ -65,6 +65,40 @@ function perfisConectados(accounts: ZAccount[]): string[] {
   return out;
 }
 
+// id da rede (Casinha) → plataforma Zernio (x → twitter).
+const platOfRede = (id: string) => (id === "x" ? "twitter" : id);
+
+// Formatos válidos por canal (rótulo da rede). Canal manual / desconhecido → lista completa.
+const FORMATS_BY_CANAL: Record<string, string[]> = {
+  Instagram: ["Reels", "Carrossel", "Post único", "Story"],
+  Facebook: ["Reels", "Carrossel", "Post único", "Story"],
+  TikTok: ["Vídeo", "Story"],
+  YouTube: ["Short", "Vídeo"],
+  LinkedIn: ["Post único", "Carrossel", "Vídeo", "Artigo"],
+  X: ["Post único", "Thread", "Vídeo"],
+  Threads: ["Post único", "Carrossel", "Vídeo"],
+};
+function formatosDoCanal(canalLabel: string): string[] {
+  return FORMATS_BY_CANAL[canalLabel] || FORMATOS_POST;
+}
+
+// Perfis conectados FILTRADOS pela plataforma do canal escolhido. Canal manual/sem rede → todos.
+function perfisDoCanal(accounts: ZAccount[], canalLabel: string): string[] {
+  const rede = REDES.find((r) => r.label === canalLabel);
+  if (!rede) return perfisConectados(accounts); // manual/desconhecido
+  const plat = platOfRede(rede.id);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const a of contasSociais(accounts)) {
+    if (a.platform !== plat) continue;
+    const nome = (a.displayName || a.username || rede.label || a.platform || "").trim();
+    if (!nome || seen.has(nome)) continue;
+    seen.add(nome);
+    out.push(nome);
+  }
+  return out;
+}
+
 const POST_STATUS: Record<string, { label: string; cor: string }> = {
   rascunho: { label: "Rascunho", cor: "#8E8E93" },
   agendado: { label: "Agendado", cor: "#00BBC5" },
@@ -113,7 +147,7 @@ export function PostModal() {
 
   // Fonte única (auto-sincroniza quando novas contas conectam) + manuais do usuário:
   const canais = canaisConectados(zernioAccounts, calManuais);
-  const perfis = perfisConectados(zernioAccounts);
+  const perfisAll = perfisConectados(zernioAccounts);
 
   const existing = pm && pm.mode === "edit" ? posts.find((x) => x.id === pm.id) : undefined;
 
@@ -159,8 +193,8 @@ export function PostModal() {
       hora: "09:00",
       titulo: "",
       canal: canais[0]?.nome ?? "Instagram",
-      formato: "Reels",
-      perfil: perfis[0] ?? "",
+      formato: formatosDoCanal(canais[0]?.nome ?? "Instagram")[0] ?? "Reels",
+      perfil: perfisDoCanal(zernioAccounts, canais[0]?.nome ?? "Instagram")[0] ?? perfisAll[0] ?? "",
       colab: "",
       pilar: "Espaços",
       funil: "Topo",
@@ -178,6 +212,22 @@ export function PostModal() {
   if (pm.mode === "edit" && !existing) return null;
 
   const upd = (patch: Partial<Fields>) => setF((prev) => ({ ...prev, ...patch }));
+
+  // perfis e formatos VÁLIDOS pro canal escolhido (produtora: canal filtra perfis + formatos)
+  const perfis = perfisDoCanal(zernioAccounts, f.canal);
+  const formatos = formatosDoCanal(f.canal);
+
+  // trocar de canal reseta perfil e formato pros válidos daquele canal (evita "IG com perfil do TikTok")
+  const onCanalChange = (canal: string) => {
+    const p = perfisDoCanal(zernioAccounts, canal);
+    const fmt = formatosDoCanal(canal);
+    setF((prev) => ({
+      ...prev,
+      canal,
+      perfil: p.includes(prev.perfil) ? prev.perfil : p[0] ?? "",
+      formato: fmt.includes(prev.formato) ? prev.formato : fmt[0] ?? "",
+    }));
+  };
 
   // Upload real: presign na nossa API → PUT do arquivo DIRETO no storage (não passa
   // pelo servidor → sem limite de 4.5MB) → guarda publicUrl como MediaItem.
@@ -204,6 +254,15 @@ export function PostModal() {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
+  };
+  // Vários arquivos de uma vez (carrossel): envia em sequência, cada um vira 1 mídia do MESMO post.
+  const onPickFiles = async (files: FileList) => {
+    const arr = Array.from(files);
+    for (const file of arr) {
+      // eslint-disable-next-line no-await-in-loop
+      await onPickFile(file);
+    }
+    if (arr.length > 1) setMsg({ kind: "ok", text: `${arr.length} arquivos enviados ✓ (viram um carrossel no mesmo post)` });
   };
   const removeMedia = (url: string) => setF((prev) => ({ ...prev, media: prev.media.filter((m) => m.url !== url) }));
 
@@ -275,7 +334,8 @@ export function PostModal() {
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) {
         setBusy(false);
-        setMsg({ kind: "err", text: j?.error || "Falha ao agendar. Tente novamente." });
+        if (j?.detail) console.error("[publish] detalhe:", j.detail);
+        setMsg({ kind: "err", text: (j?.error || "Falha ao agendar. Tente novamente.") + (j?.detail ? ` — ${String(j.detail).slice(0, 160)}` : "") });
         return;
       }
       updatePost(id, { status: j.status || (publishNow ? "publicado" : "agendado") });
@@ -306,8 +366,8 @@ export function PostModal() {
     f.canal && !canais.some((c) => c.nome === f.canal)
       ? [f.canal, ...canais.map((c) => c.nome)]
       : canais.map((c) => c.nome);
+  const formatoOptions = f.formato && !formatos.includes(f.formato) ? [f.formato, ...formatos] : formatos;
   const perfilOptions = f.perfil && !perfis.includes(f.perfil) ? [f.perfil, ...perfis] : perfis;
-  const colabOptions = f.colab && !perfis.includes(f.colab) ? [f.colab, ...perfis] : perfis;
 
   const sel = (id: string, arr: string[], val: string, onChange: (v: string) => void) => (
     <select className="field-edit" id={id} value={val} onChange={(e) => onChange(e.target.value)}>
@@ -366,7 +426,7 @@ export function PostModal() {
           <div className="pm-row">
             <div>
               <label className="field-lbl">Canal</label>
-              {sel("pmCanal", canalOptions, f.canal, (v) => upd({ canal: v }))}
+              {sel("pmCanal", canalOptions, f.canal, onCanalChange)}
               {calManuais.includes(f.canal) && (
                 <div className="pm-hint" style={{ marginTop: 6 }}>
                   Canal manual — só registro de conteúdo. Não há publicação automática por aqui.
@@ -375,7 +435,7 @@ export function PostModal() {
             </div>
             <div>
               <label className="field-lbl">Formato</label>
-              {sel("pmFormato", FORMATOS_POST, f.formato, (v) => upd({ formato: v }))}
+              {sel("pmFormato", formatoOptions, f.formato, (v) => upd({ formato: v }))}
             </div>
           </div>
           <div className="pm-row">
@@ -395,17 +455,19 @@ export function PostModal() {
             </div>
             <div>
               <label className="field-lbl">Perfil colaborador</label>
-              <select
+              <input
                 className="field-edit"
                 id="pmColab"
+                list="pmColabList"
                 value={f.colab}
+                placeholder="@qualquer perfil (colab)"
                 onChange={(e) => upd({ colab: e.target.value })}
-              >
-                <option value="">— nenhum —</option>
-                {colabOptions.map((x) => (
-                  <option key={x}>{x}</option>
+              />
+              <datalist id="pmColabList">
+                {perfisAll.map((x) => (
+                  <option key={x} value={x} />
                 ))}
-              </select>
+              </datalist>
             </div>
           </div>
           <div className="pm-row">
@@ -423,9 +485,10 @@ export function PostModal() {
             ref={fileRef}
             type="file"
             id="pmArquivo"
+            multiple
             accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,application/pdf"
             style={{ display: "none" }}
-            onChange={(e) => { const file = e.target.files?.[0]; if (file) onPickFile(file); }}
+            onChange={(e) => { const files = e.target.files; if (files?.length) onPickFiles(files); }}
           />
           <button
             type="button"
