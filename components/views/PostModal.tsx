@@ -215,6 +215,8 @@ export function PostModal() {
     // herda o canal/perfil da visualização atual do calendário (se filtrada)
     const canalPre = calCanal !== "todos" && canais.some((c) => c.nome === calCanal) ? calCanal : canais[0]?.nome ?? "Instagram";
     const perfisPre = perfisDoCanal(zernioAccounts, canalPre);
+    const redePre = REDES.find((r) => r.label === canalPre);
+    const ridPre = redePre && redesConectadas(zernioAccounts).some((r) => r.id === redePre.id) ? redePre.id : null;
     return {
       data: String(d).padStart(2, "0") + "/" + String(m + 1).padStart(2, "0") + "/" + y,
       hora: "09:00",
@@ -235,7 +237,7 @@ export function PostModal() {
       roteiro: "",
       overrides: {},
       status: "rascunho",
-      contas: [],
+      contas: ridPre ? [ridPre] : [],
     };
   });
 
@@ -248,15 +250,25 @@ export function PostModal() {
   const perfis = perfisDoCanal(zernioAccounts, f.canal);
   const formatos = formatosDoCanal(f.canal);
 
+  // id da rede CONECTADA correspondente ao rótulo do canal (null se manual/não conectada)
+  const redeIdDoCanal = (canalLabel: string): string | null => {
+    const rede = REDES.find((r) => r.label === canalLabel);
+    if (!rede) return null;
+    return redesConectadas(zernioAccounts).some((r) => r.id === rede.id) ? rede.id : null;
+  };
+
   // trocar de canal reseta perfil e formato pros válidos daquele canal (evita "IG com perfil do TikTok")
+  // e já MARCA o checkbox de "Publicar em" da rede correspondente.
   const onCanalChange = (canal: string) => {
     const p = perfisDoCanal(zernioAccounts, canal);
     const fmt = formatosDoCanal(canal);
+    const rid = redeIdDoCanal(canal);
     setF((prev) => ({
       ...prev,
       canal,
       perfil: p.includes(prev.perfil) ? prev.perfil : p[0] ?? "",
       formato: fmt.includes(prev.formato) ? prev.formato : fmt[0] ?? "",
+      contas: rid && !prev.contas.includes(rid) ? [...prev.contas, rid] : prev.contas,
     }));
   };
 
