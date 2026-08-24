@@ -4,6 +4,7 @@
 import { useRef, useState } from "react";
 import { useStore, newId, type PostItem, type PostMedia } from "@/lib/store";
 import { savePosts } from "@/lib/api";
+import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -173,6 +174,9 @@ export function PostModal() {
   // Upload de mídia (presign Zernio → PUT direto no storage)
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // guarda o File local por url (pra recorte sem taint de CORS) + alvo do editor de recorte
+  const filesByUrl = useRef<Map<string, File>>(new Map());
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
 
   // Estado seed: post existente (edição) ou defaults do blueprint (novo).
   const [f, setF] = useState<Fields>(() => {
@@ -273,6 +277,7 @@ export function PostModal() {
       const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
       if (!put.ok) throw new Error(`upload falhou (${put.status})`);
       const item: PostMedia = { type: mimeToType(file.type), url: pj.publicUrl, filename: file.name, mimeType: file.type, size: file.size };
+      filesByUrl.current.set(pj.publicUrl, file); // guarda p/ recorte sem CORS
       setF((prev) => ({ ...prev, media: [...prev.media, item], arquivo: prev.arquivo || file.name }));
       setMsg({ kind: "ok", text: `“${file.name}” enviado ✓` });
     } catch (e) {
@@ -292,6 +297,31 @@ export function PostModal() {
     if (arr.length > 1) setMsg({ kind: "ok", text: `${arr.length} arquivos enviados ✓ (viram um carrossel no mesmo post)` });
   };
   const removeMedia = (url: string) => setF((prev) => ({ ...prev, media: prev.media.filter((m) => m.url !== url) }));
+
+  // upload de um Blob (usado pelo recorte) → publicUrl
+  const uploadBlob = async (blob: Blob, filename: string, contentType: string): Promise<string> => {
+    const pres = await fetch("/api/posts/presign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename, contentType, size: blob.size }) });
+    const pj = await pres.json().catch(() => null);
+    if (!pres.ok || !pj?.uploadUrl) throw new Error(pj?.error || "não foi possível preparar o upload");
+    const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": contentType }, body: blob });
+    if (!put.ok) throw new Error(`upload falhou (${put.status})`);
+    return pj.publicUrl as string;
+  };
+  // salva o recorte: sobe a imagem recortada e troca a mídia original por ela
+  const onCropSave = async (blob: Blob) => {
+    if (!cropTarget) return;
+    const oldUrl = cropTarget.url;
+    const baseName = (cropTarget.filename || "recorte").replace(/\.[^.]+$/, "");
+    const filename = `${baseName}-crop.jpg`;
+    const newUrl = await uploadBlob(blob, filename, "image/jpeg");
+    filesByUrl.current.set(newUrl, new File([blob], filename, { type: "image/jpeg" }));
+    setF((prev) => ({
+      ...prev,
+      media: prev.media.map((m) => (m.url === oldUrl ? { type: "image", url: newUrl, filename, mimeType: "image/jpeg", size: blob.size } : m)),
+    }));
+    setCropTarget(null);
+    setMsg({ kind: "ok", text: "Imagem recortada aplicada ✓" });
+  };
 
   const close = () => set({ postModal: null });
 
@@ -409,6 +439,8 @@ export function PostModal() {
   );
 
   return (
+    <>
+    {cropTarget && <MediaCropModal target={cropTarget} onCancel={() => setCropTarget(null)} onSave={onCropSave} />}
     <div
       className="pm-back"
       id="pmBack"
@@ -554,6 +586,9 @@ export function PostModal() {
                     </span>
                   )}
                   <span style={{ flex: 1, fontSize: 12.5, color: "var(--label)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.filename || m.url}</span>
+                  {m.type === "image" && (
+                    <button type="button" onClick={() => setCropTarget({ url: m.url, file: filesByUrl.current.get(m.url), filename: m.filename })} style={{ border: 0, background: "transparent", color: "var(--cyan)", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Ajustar</button>
+                  )}
                   <button type="button" onClick={() => removeMedia(m.url)} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 13 }} aria-label="Remover">✕</button>
                 </div>
               ))}
@@ -717,5 +752,6 @@ export function PostModal() {
         </div>
       </div>
     </div>
+    </>
   );
 }
