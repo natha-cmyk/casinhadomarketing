@@ -240,8 +240,8 @@ export function CalendarioView() {
         ) : (
           <span className="pc-dot" style={{ background: c }} />
         )}
-        <span className="pc-h">{p.hora || ""}</span>
         {fBadge && <span className={`pc-funil pc-funil-${fBadge}`} title={`Funil: ${p.funil}`}>{fBadge}</span>}
+        {p.pilar && <span className="pc-pilar">{p.pilar}</span>}
         <span className="pc-t">{p.titulo || "(sem título)"}</span>
         {p.status === "publicado" && (
           <span className="pc-check" title={`Publicado ${p.hora || ""}`}>

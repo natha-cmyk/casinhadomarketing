@@ -179,14 +179,15 @@ th.stick{z-index:3} table.data tr:hover td.stick{background:#fbfbfc}
 .cc-seg{display:inline-flex;background:var(--surface);border:1px solid var(--hairline);border-radius:9px;padding:2px;gap:2px}
 .cc-seg button{border:0;background:transparent;padding:5px 11px;border-radius:7px;font-size:12px;font-weight:600;color:var(--label-2);cursor:pointer}
 .cc-seg button.on{background:#fff;color:var(--label);box-shadow:var(--shadow-card)}
-.cc-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;align-items:start}
+.cc-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
 .cc-h{font-size:11px;font-weight:700;color:var(--label-3);text-transform:uppercase;letter-spacing:.03em;text-align:center;padding:2px 0}
-.cc-cell{min-height:64px;min-width:0;overflow:hidden;border:1px solid var(--hairline);border-radius:10px;padding:6px;background:#fff;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:.1s}
+.cc-cell{min-height:104px;min-width:0;overflow:hidden;border:1px solid var(--hairline);border-radius:10px;padding:6px;background:#fff;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:.1s}
 .cc-cell:hover{overflow:visible;z-index:5}
 .post-chip:hover{position:relative;z-index:6;align-items:flex-start;box-shadow:0 4px 14px rgba(0,0,0,.12)}
 .post-chip:hover .pc-t{white-space:normal;overflow:visible;text-overflow:clip}
 .pc-funil{flex:0 0 auto;width:13px;height:13px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:800;color:#fff}
 .pc-funil-T{background:#00BBC5}.pc-funil-M{background:#FF9F0A}.pc-funil-F{background:#2FB457}
+.pc-pilar{flex:0 0 auto;font-size:9px;font-weight:700;color:var(--label-2);background:var(--surface);border:1px solid var(--hairline);border-radius:5px;padding:1px 5px;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cc-cell:hover{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,187,197,.10)}
 .cc-cell.cc-we{background:var(--surface)}
 .cc-cell.cc-empty{border:0;background:transparent;cursor:default;min-height:0}

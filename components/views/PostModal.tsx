@@ -274,8 +274,9 @@ export function PostModal() {
         }
         const top = [...byHour.entries()]
           .map(([h, v]) => ({ h, avg: v.sum / (v.n || 1) }))
-          .sort((a, b) => b.avg - a.avg)
+          .sort((a, b) => b.avg - a.avg) // pega as 6 horas de MAIOR engajamento
           .slice(0, 6)
+          .sort((a, b) => a.h - b.h) // …mas exibe em ORDEM cronológica
           .map((x) => String(x.h).padStart(2, "0") + ":00");
         setSugHoras(top);
       })
@@ -545,25 +546,23 @@ export function PostModal() {
               <input
                 className="field-edit"
                 id="pmHora"
-                list="pmHorasList"
                 value={f.hora}
                 placeholder="hh:mm"
                 onChange={(e) => upd({ hora: e.target.value })}
               />
-              <datalist id="pmHorasList">
-                {sugHoras.map((h) => (
-                  <option key={h} value={h} />
-                ))}
-              </datalist>
               {sugHoras.length > 0 && (
-                <div className="pm-hint" style={{ marginTop: 5 }}>
-                  Melhores horários ({f.canal}):{" "}
+                <select
+                  className="field-edit"
+                  style={{ marginTop: 5, fontSize: 12.5 }}
+                  value=""
+                  onChange={(e) => { if (e.target.value) upd({ hora: e.target.value }); }}
+                  title={`Melhores horários pra postar no ${f.canal}, calculados pelo engajamento histórico das suas publicações nesse canal (Zernio). Ordenados por horário.`}
+                >
+                  <option value="">★ Melhores horários…</option>
                   {sugHoras.map((h) => (
-                    <button key={h} type="button" onClick={() => upd({ hora: h })} style={{ border: 0, background: "transparent", color: "var(--cyan)", cursor: "pointer", fontWeight: 700, padding: "0 4px" }}>
-                      {h}
-                    </button>
+                    <option key={h} value={h}>{h}</option>
                   ))}
-                </div>
+                </select>
               )}
             </div>
           </div>
