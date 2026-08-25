@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const ws = await getActiveWorkspaceId();
     if (!ws) return NextResponse.json(null, { status: 401 });
-    const rows = await prisma.post.findMany({ where: { workspaceId: ws }, orderBy: { data: "asc" } });
+    const rows = await prisma.post.findMany({ where: { workspaceId: ws, deletedAt: null }, orderBy: { data: "asc" } });
     const posts = rows.map((p) => {
       const { y, m, d } = fromDate(p.data);
       return {
@@ -74,7 +74,8 @@ export async function DELETE(req: Request) {
     if (!ws) return NextResponse.json({ error: "unauth" }, { status: 401 });
     const id = new URL(req.url).searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id ausente" }, { status: 400 });
-    await prisma.post.deleteMany({ where: { id, workspaceId: ws } });
+    // soft-delete: vai pra LIXEIRA (restaurável 7 dias). Purga automática via cron.
+    await prisma.post.updateMany({ where: { id, workspaceId: ws }, data: { deletedAt: new Date() } });
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "db" }, { status: 503 });

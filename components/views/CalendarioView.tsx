@@ -256,6 +256,7 @@ export function CalendarioView() {
   const connRedes = redesConectadas(zernioAccounts);
   const nConn = connRedes.length;
   const [contasOpen, setContasOpen] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
 
   // ── modo apresentação (cronograma de produção por período) ──
   const [apOpen, setApOpen] = useState(false);
@@ -337,6 +338,12 @@ export function CalendarioView() {
         desc="Planeje, agende e publique nos canais conectados (Instagram, TikTok, LinkedIn, YouTube…). Adicione canais manuais (WhatsApp, blog…) para registrar conteúdo — sem publicação automática. Clique num dia para criar; num post para editar."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn-link" onClick={() => setTrashOpen(true)} title="Posts excluídos (restauráveis por 7 dias)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+              </svg>
+              Lixeira
+            </button>
             <button className="btn-link" id="apresentarBtn" onClick={abrirApresentacao}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <rect x="3" y="4" width="18" height="12" rx="2" />
@@ -795,7 +802,55 @@ export function CalendarioView() {
           key={`${s.postModal.mode}-${s.postModal.id ?? ""}-${s.postModal.y}-${s.postModal.m}-${s.postModal.d}`}
         />
       )}
+      {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
     </>
+  );
+}
+
+// Lixeira — posts excluídos (soft-delete), restauráveis por 7 dias.
+interface TrashItem { id: string; titulo: string; canal: string; y: number; m: number; d: number; hora: string; diasRestantes: number }
+function TrashPanel({ onClose }: { onClose: () => void }) {
+  const set = useStore((st) => st.set);
+  const [items, setItems] = useState<TrashItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const load = () => {
+    setLoading(true);
+    fetch("/api/posts/trash").then((r) => r.json()).then((d) => setItems(Array.isArray(d?.items) ? d.items : [])).catch(() => setItems([])).finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+  const refreshPosts = () => fetch("/api/posts").then((r) => r.json()).then((d) => { if (Array.isArray(d?.posts)) set({ posts: d.posts }); }).catch(() => {});
+  const act = async (id: string, action: "restore" | "purge") => {
+    await fetch("/api/posts/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, action }) }).catch(() => {});
+    load();
+    if (action === "restore") refreshPosts();
+  };
+  return (
+    <div className="pm-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pm" role="dialog" aria-modal="true" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+        <div className="pm-head"><b>Lixeira</b><button className="pm-x" aria-label="Fechar" onClick={onClose}>✕</button></div>
+        <div className="pm-body">
+          <div className="pm-hint" style={{ marginBottom: 10 }}>Posts excluídos ficam aqui por <b>7 dias</b> e depois são apagados de vez. Restaure enquanto der.</div>
+          {loading ? (
+            <div className="pm-hint">Carregando…</div>
+          ) : items.length === 0 ? (
+            <div className="pm-hint">Lixeira vazia.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {items.map((it) => (
+                <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--hairline)", borderRadius: 10, padding: "8px 10px" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.titulo || "(sem título)"}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--label-3)" }}>{it.canal} · {String(it.d).padStart(2, "0")}/{String(it.m + 1).padStart(2, "0")} · restam {it.diasRestantes}d</div>
+                  </div>
+                  <button className="btn-link ig" onClick={() => act(it.id, "restore")}>Restaurar</button>
+                  <button type="button" onClick={() => act(it.id, "purge")} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Apagar</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -256,11 +256,13 @@ model Post {
   status       PostStatus @default(rascunho)
   contas       String[]   @default([])
   zernioPostId String?
+  deletedAt    DateTime?  // lixeira: soft-delete restaurável por 7 dias, depois purga automática
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@index([workspaceId, data])
   @@index([status])
+  @@index([deletedAt])
 }
 
 // ─────────────────────────────────────────────────────────────
