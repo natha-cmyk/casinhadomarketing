@@ -258,6 +258,8 @@ export function CalendarioView() {
   const [apPeriodo, setApPeriodo] = useState<ApPeriodo>("mes");
   const [apOff, setApOff] = useState(0);
   const [apHidden, setApHidden] = useState<Set<string>>(new Set()); // canais desligados nos chips
+  const [apModo, setApModo] = useState<"lista" | "grade" | "dia">("lista"); // como exibir os dias da janela
+  const [apDia, setApDia] = useState(0); // índice do dia no modo "dia a dia"
 
   const abrirApresentacao = () => {
     // abre na janela que contém "hoje" (se o mês exibido for o atual)
@@ -595,6 +597,44 @@ export function CalendarioView() {
           const canaisAtivos = new Set<string>();
           for (let d = win[0]; d <= win[1]; d++)
             for (const p of posts) if (p.y === year && p.m === month && p.d === d) canaisAtivos.add(p.canal);
+          // TODOS os dias da janela (inclusive vazios) — pra visão semana lado a lado e dia a dia
+          const diasGrade: { d: number; dow: number; posts: PostItem[] }[] = [];
+          for (let d = win[0]; d <= win[1]; d++) {
+            const dp = posts
+              .filter((p) => p.y === year && p.m === month && p.d === d && canaisVisiveis(p.canal))
+              .sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+            diasGrade.push({ d, dow: new Date(year, month, d).getDay(), posts: dp });
+          }
+          const diaIdx = Math.min(apDia, Math.max(0, diasGrade.length - 1));
+          const diaCur = diasGrade[diaIdx];
+          const renderCard = (p: PostItem) => {
+            const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
+            const marca = corMarca(p.canal, canalCor(p.canal));
+            const ico = iconeCanal(p.canal);
+            return (
+              <article className="ap-card" key={p.id} style={{ borderLeftColor: marca }}>
+                <div className="ap-card-top">
+                  <span className="ap-card-time">{p.hora || "--:--"}</span>
+                  <span className="ap-card-canal" style={{ color: marca }}>
+                    {ico ? (
+                      <span className="ap-canal-ic" style={{ color: marca }}><Ic name={ico} /></span>
+                    ) : (
+                      <span className="ap-chip-dot" style={{ background: marca }} />
+                    )}
+                    {p.canal}
+                  </span>
+                  {p.formato && <span className="ap-card-fmt">{p.formato}</span>}
+                  {p.pilar && <span className="ap-card-tag ap-tag-pilar">{p.pilar}</span>}
+                  {p.funil && <span className="ap-card-tag ap-tag-funil">{p.funil}</span>}
+                  <span className="ap-card-st" style={{ color: st.cor, background: st.cor + "1f" }}>
+                    {p.status === "publicado" ? "publicado ✓" : st.label}
+                  </span>
+                </div>
+                <div className="ap-card-title">{p.titulo}</div>
+                {p.legenda && <div className="ap-card-leg">{p.legenda}</div>}
+              </article>
+            );
+          };
           return (
             <div className="ap-back" role="dialog" aria-modal="true">
               <div className="ap-shell">
@@ -627,6 +667,13 @@ export function CalendarioView() {
                         </button>
                       )
                     )}
+                  </div>
+                  <div className="ap-seg">
+                    {([["lista", "Lista"], ["grade", "Semana"], ["dia", "Dia a dia"]] as ["lista" | "grade" | "dia", string][]).map(([v, l]) => (
+                      <button key={v} className={apModo === v ? "on" : ""} onClick={() => { setApModo(v); if (v === "dia") setApDia(0); }}>
+                        {l}
+                      </button>
+                    ))}
                   </div>
                   {wins.length > 1 && (
                     <div className="ap-nav">
@@ -676,50 +723,51 @@ export function CalendarioView() {
                   </div>
                 </div>
 
-                <div className="ap-body">
-                  {dias.length ? (
+                <div className={`ap-body${apModo === "grade" ? " ap-body-grade" : ""}`}>
+                  {apModo === "grade" ? (
+                    <div className="ap-grade">
+                      {diasGrade.map(({ d, dow, posts: dp }) => (
+                        <div className="ap-col" key={d}>
+                          <div className="ap-col-h">
+                            <b>{String(d).padStart(2, "0")}</b>
+                            <span>{H[dow]}</span>
+                            <em>{dp.length}</em>
+                          </div>
+                          <div className="ap-col-body">
+                            {dp.length ? dp.map(renderCard) : <div className="ap-col-empty">—</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : apModo === "dia" ? (
+                    diaCur ? (
+                      <div className="ap-diaview">
+                        <div className="ap-dia-nav">
+                          <button aria-label="Dia anterior" disabled={diaIdx <= 0} onClick={() => setApDia((i) => Math.max(0, i - 1))}>‹</button>
+                          <span>
+                            {diaCur.d} de {MONTHS_FULL[month]} · {WD_FULL[diaCur.dow]} · {diaCur.posts.length} {diaCur.posts.length === 1 ? "publicação" : "publicações"}
+                          </span>
+                          <button aria-label="Próximo dia" disabled={diaIdx >= diasGrade.length - 1} onClick={() => setApDia((i) => Math.min(diasGrade.length - 1, i + 1))}>›</button>
+                        </div>
+                        <div className="ap-cards ap-cards-big">
+                          {diaCur.posts.length ? diaCur.posts.map(renderCard) : <div className="ap-empty">Nenhuma publicação neste dia.</div>}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="ap-empty">Sem dias nesta janela.</div>
+                    )
+                  ) : dias.length ? (
                     dias.map(({ d, dow, posts: dp }) => (
                       <section className="ap-day" key={d}>
                         <div className="ap-day-h">
                           <span className="ap-day-num">{String(d).padStart(2, "0")}</span>
                           <div>
                             <div className="ap-day-wd">{WD_FULL[dow]}</div>
-                            <div className="ap-day-meta">
-                              {d} de {MONTHS_FULL[month]}
-                            </div>
+                            <div className="ap-day-meta">{d} de {MONTHS_FULL[month]}</div>
                           </div>
                           <span className="ap-day-count">{dp.length}</span>
                         </div>
-                        <div className="ap-cards">
-                          {dp.map((p) => {
-                            const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
-                            const marca = corMarca(p.canal, canalCor(p.canal));
-                            const ico = iconeCanal(p.canal);
-                            return (
-                              <article className="ap-card" key={p.id} style={{ borderLeftColor: marca }}>
-                                <div className="ap-card-top">
-                                  <span className="ap-card-time">{p.hora || "--:--"}</span>
-                                  <span className="ap-card-canal" style={{ color: marca }}>
-                                    {ico ? (
-                                      <span className="ap-canal-ic" style={{ color: marca }}><Ic name={ico} /></span>
-                                    ) : (
-                                      <span className="ap-chip-dot" style={{ background: marca }} />
-                                    )}
-                                    {p.canal}
-                                  </span>
-                                  {p.formato && <span className="ap-card-fmt">{p.formato}</span>}
-                                  {p.pilar && <span className="ap-card-tag ap-tag-pilar">{p.pilar}</span>}
-                                  {p.funil && <span className="ap-card-tag ap-tag-funil">{p.funil}</span>}
-                                  <span className="ap-card-st" style={{ color: st.cor, background: st.cor + "1f" }}>
-                                    {p.status === "publicado" ? "publicado ✓" : st.label}
-                                  </span>
-                                </div>
-                                <div className="ap-card-title">{p.titulo}</div>
-                                {p.legenda && <div className="ap-card-leg">{p.legenda}</div>}
-                              </article>
-                            );
-                          })}
-                        </div>
+                        <div className="ap-cards">{dp.map(renderCard)}</div>
                       </section>
                     ))
                   ) : (

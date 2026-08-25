@@ -726,6 +726,22 @@ svg.chartI{cursor:crosshair}
 .ap-day-meta{font-size:12.5px;color:var(--label-3)}
 .ap-day-count{margin-left:auto;font-size:12px;font-weight:700;color:#0a8a91;background:rgba(0,187,197,.14);padding:4px 11px;border-radius:20px}
 .ap-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;padding:16px 20px}
+.ap-cards-big{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+/* visão SEMANA lado a lado (colunas por dia) */
+.ap-body-grade{padding-bottom:20px}
+.ap-grade{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(200px,1fr);gap:12px;overflow-x:auto;padding-bottom:12px}
+.ap-col{background:#fff;border:1px solid var(--hairline);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.ap-col-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--hairline);background:var(--surface)}
+.ap-col-h b{font-size:18px;font-weight:800;color:var(--label)}
+.ap-col-h span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--label-3)}
+.ap-col-h em{margin-left:auto;font-style:normal;font-size:11px;font-weight:700;color:#0a8a91;background:rgba(0,187,197,.14);padding:2px 8px;border-radius:20px}
+.ap-col-body{display:flex;flex-direction:column;gap:8px;padding:10px}
+.ap-col-empty{text-align:center;color:var(--label-3);font-size:13px;padding:14px 0}
+/* visão DIA a DIA */
+.ap-dia-nav{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:14px}
+.ap-dia-nav span{font-size:14px;font-weight:700;color:var(--label)}
+.ap-dia-nav button{width:34px;height:34px;border-radius:50%;border:1px solid var(--hairline-2);background:#fff;font-size:18px;cursor:pointer;color:var(--label)}
+.ap-dia-nav button:disabled{opacity:.4;cursor:default}
 .ap-card{border:1px solid var(--hairline);border-left:4px solid var(--cyan);border-radius:12px;padding:13px 15px;background:var(--bg)}
 .ap-card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px}
 .ap-card-time{font-size:13px;font-weight:800;color:var(--label);font-variant-numeric:tabular-nums}
