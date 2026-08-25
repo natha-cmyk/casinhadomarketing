@@ -1,7 +1,7 @@
 "use client";
 // Porta renderPostModal (blueprint 1475-1504) + savePost (1505-1515).
 // Modal de criação/edição de post do calendário de conteúdo.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore, newId, type PostItem, type PostMedia, type PostOverride } from "@/lib/store";
 import { savePosts, deletePostApi } from "@/lib/api";
 import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
@@ -18,6 +18,7 @@ const PLAT_REV: Record<string, string> = { twitter: "x" };
 // Canais manuais de conteúdo agora vêm do store (store.calManuais). Só registro, sem publicação síncrona.
 
 type ZAccount = {
+  _id?: string;
   platform: string;
   displayName?: string;
   username?: string;
@@ -250,6 +251,37 @@ export function PostModal() {
       contas: ridPre ? [ridPre] : [],
     };
   });
+
+  // horários SUGERIDOS (melhores horários da conta, via Zernio best-time) pro canal/perfil atual
+  const [sugHoras, setSugHoras] = useState<string[]>([]);
+  useEffect(() => {
+    const rede = REDES.find((r) => r.label === f.canal);
+    const plat = rede ? platOfRede(rede.id) : null;
+    const acc = plat
+      ? (zernioAccounts as ZAccount[]).find((a) => a.platform === plat && (a.displayName || a.username) === f.perfil)
+      : null;
+    if (!acc?._id || !plat) { setSugHoras([]); return; }
+    let alive = true;
+    fetch(`/api/zernio/besttime?accountId=${encodeURIComponent(acc._id)}&platform=${encodeURIComponent(plat)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        const slots: { hour: number; avg_engagement: number }[] = Array.isArray(d?.slots) ? d.slots : [];
+        const byHour = new Map<number, { sum: number; n: number }>();
+        for (const s of slots) {
+          const e = byHour.get(s.hour) || { sum: 0, n: 0 };
+          e.sum += s.avg_engagement || 0; e.n += 1; byHour.set(s.hour, e);
+        }
+        const top = [...byHour.entries()]
+          .map(([h, v]) => ({ h, avg: v.sum / (v.n || 1) }))
+          .sort((a, b) => b.avg - a.avg)
+          .slice(0, 6)
+          .map((x) => String(x.h).padStart(2, "0") + ":00");
+        setSugHoras(top);
+      })
+      .catch(() => { if (alive) setSugHoras([]); });
+    return () => { alive = false; };
+  }, [f.canal, f.perfil, zernioAccounts]);
 
   if (!pm) return null;
   if (pm.mode === "edit" && !existing) return null;
@@ -513,10 +545,26 @@ export function PostModal() {
               <input
                 className="field-edit"
                 id="pmHora"
+                list="pmHorasList"
                 value={f.hora}
                 placeholder="hh:mm"
                 onChange={(e) => upd({ hora: e.target.value })}
               />
+              <datalist id="pmHorasList">
+                {sugHoras.map((h) => (
+                  <option key={h} value={h} />
+                ))}
+              </datalist>
+              {sugHoras.length > 0 && (
+                <div className="pm-hint" style={{ marginTop: 5 }}>
+                  Melhores horários ({f.canal}):{" "}
+                  {sugHoras.map((h) => (
+                    <button key={h} type="button" onClick={() => upd({ hora: h })} style={{ border: 0, background: "transparent", color: "var(--cyan)", cursor: "pointer", fontWeight: 700, padding: "0 4px" }}>
+                      {h}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <label className="field-lbl">Título</label>
