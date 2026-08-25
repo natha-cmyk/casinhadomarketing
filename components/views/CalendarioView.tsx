@@ -221,12 +221,15 @@ export function CalendarioView() {
     const ico = iconeCanal(p.canal);
     const nc = (p.contas || []).length;
     const acc = nc ? ` → ${nc} ${nc === 1 ? "canal" : "canais"}` : "";
+    // norteador (hover): canal · pilar · funil · título completo
+    const norteador = [p.canal, p.pilar, p.funil].filter(Boolean).join(" · ");
+    const fBadge = p.funil ? p.funil[0].toUpperCase() : ""; // T/M/F
     return (
       <button
         key={p.id}
         className={`post-chip st-${p.status}`}
         data-post={p.id}
-        title={`${p.canal} · ${p.perfil} · ${st.label}${acc}`}
+        title={`${p.titulo || "(sem título)"}\n${norteador} · ${st.label}${acc}`}
         onClick={(e) => {
           e.stopPropagation();
           set({ postModal: { mode: "edit", id: p.id, y: p.y, m: p.m, d: p.d } });
@@ -238,7 +241,8 @@ export function CalendarioView() {
           <span className="pc-dot" style={{ background: c }} />
         )}
         <span className="pc-h">{p.hora || ""}</span>
-        <span className="pc-t">{p.titulo}</span>
+        {fBadge && <span className={`pc-funil pc-funil-${fBadge}`} title={`Funil: ${p.funil}`}>{fBadge}</span>}
+        <span className="pc-t">{p.titulo || "(sem título)"}</span>
         {p.status === "publicado" && (
           <span className="pc-check" title={`Publicado ${p.hora || ""}`}>
             ✓
@@ -744,12 +748,16 @@ export function CalendarioView() {
                       <div className="ap-diaview">
                         <div className="ap-dia-nav">
                           <button aria-label="Dia anterior" disabled={diaIdx <= 0} onClick={() => setApDia((i) => Math.max(0, i - 1))}>‹</button>
-                          <span>
-                            {diaCur.d} de {MONTHS_FULL[month]} · {WD_FULL[diaCur.dow]} · {diaCur.posts.length} {diaCur.posts.length === 1 ? "publicação" : "publicações"}
-                          </span>
+                          <select className="ap-dia-sel" value={diaIdx} onChange={(e) => setApDia(Number(e.target.value))} aria-label="Escolher dia">
+                            {diasGrade.map((x, i) => (
+                              <option key={x.d} value={i}>
+                                {String(x.d).padStart(2, "0")} · {WD_FULL[x.dow]} · {x.posts.length} {x.posts.length === 1 ? "post" : "posts"}
+                              </option>
+                            ))}
+                          </select>
                           <button aria-label="Próximo dia" disabled={diaIdx >= diasGrade.length - 1} onClick={() => setApDia((i) => Math.min(diasGrade.length - 1, i + 1))}>›</button>
                         </div>
-                        <div className="ap-cards ap-cards-big">
+                        <div className="ap-dia-cards">
                           {diaCur.posts.length ? diaCur.posts.map(renderCard) : <div className="ap-empty">Nenhuma publicação neste dia.</div>}
                         </div>
                       </div>

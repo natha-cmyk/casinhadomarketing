@@ -527,6 +527,18 @@ export function PostModal() {
             placeholder="Título do post"
             onChange={(e) => upd({ titulo: e.target.value })}
           />
+          {(f.pilar || f.funil) && (
+            <button
+              type="button"
+              onClick={() => {
+                const pref = `[${[f.pilar, f.funil].filter(Boolean).join(" · ")}] `;
+                if (!f.titulo.startsWith("[")) upd({ titulo: pref + f.titulo });
+              }}
+              style={{ marginTop: 5, border: 0, background: "transparent", color: "var(--cyan)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }}
+            >
+              ➤ Prefixo automático ({[f.pilar, f.funil].filter(Boolean).join(" · ")})
+            </button>
+          )}
           <div className="pm-row">
             <div>
               <label className="field-lbl">Canal</label>
