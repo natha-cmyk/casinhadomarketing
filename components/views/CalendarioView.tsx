@@ -417,6 +417,7 @@ export function CalendarioView() {
         <select
           className="tb-select"
           id="ccCanal"
+          style={{ flex: "0 0 auto", width: "auto", maxWidth: 190 }}
           value={calCanal}
           onChange={(e) => set({ calCanal: e.target.value })}
         >
@@ -429,6 +430,7 @@ export function CalendarioView() {
           <select
             className="tb-select"
             id="ccPerfil"
+            style={{ flex: "0 0 auto", width: "auto", maxWidth: 190 }}
             value={calPerfil}
             onChange={(e) => set({ calPerfil: e.target.value })}
           >
@@ -481,6 +483,28 @@ export function CalendarioView() {
                   <span className="cc-add">+</span>
                 </div>
                 <div className="cc-posts">{dp.map(postChip)}</div>
+                {dp.length > 0 && (
+                  <div className="cc-daypop" onClick={(e) => e.stopPropagation()}>
+                    <div className="cc-daypop-h">{String(d).padStart(2, "0")} · {WD_FULL[dow]} · {dp.length} {dp.length === 1 ? "post" : "posts"}</div>
+                    {dp.map((p) => {
+                      const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
+                      const marca = corMarca(p.canal, canalCor(p.canal));
+                      const ic = iconeCanal(p.canal);
+                      return (
+                        <button
+                          key={p.id}
+                          className="cc-daypop-row"
+                          onClick={(e) => { e.stopPropagation(); set({ postModal: { mode: "edit", id: p.id, y: p.y, m: p.m, d: p.d } }); }}
+                        >
+                          <span className="cc-dp-st" style={{ background: st.cor }} title={st.label} />
+                          {ic ? <span className="pc-ic" style={{ color: marca }}><Ic name={ic} /></span> : <span className="pc-dot" style={{ background: marca }} />}
+                          {p.pilar && <span className="pc-pilar">{p.pilar}</span>}
+                          <span className="cc-dp-t">{p.titulo || "(sem título)"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
