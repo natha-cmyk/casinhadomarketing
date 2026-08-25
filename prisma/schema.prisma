@@ -227,6 +227,7 @@ enum PostStatus {
   agendado
   publicado
   falhou
+  cancelado
 }
 
 model Post {

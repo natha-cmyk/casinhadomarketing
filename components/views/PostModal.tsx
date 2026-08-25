@@ -114,8 +114,9 @@ function perfisDoCanal(accounts: ZAccount[], canalLabel: string): string[] {
 const POST_STATUS: Record<string, { label: string; cor: string }> = {
   rascunho: { label: "Rascunho", cor: "#8E8E93" },
   agendado: { label: "Agendado", cor: "#00BBC5" },
-  publicado: { label: "Publicado", cor: "#2FB457" },
-  falhou: { label: "Falhou", cor: "#FF001E" },
+  publicado: { label: "Publicado", cor: "#2FB457" }, // verde = saiu OK
+  falhou: { label: "Erro ao publicar", cor: "#FF9F0A" }, // amarelo = deu erro
+  cancelado: { label: "Cancelado / impedido", cor: "#FF001E" }, // vermelho = não vai sair
 };
 
 interface Fields {
@@ -313,8 +314,8 @@ export function PostModal() {
       canal,
       perfil: p.includes(prev.perfil) ? prev.perfil : def && p.includes(def) ? def : p[0] ?? "",
       formato: fmt.includes(prev.formato) ? prev.formato : fmt[0] ?? "",
-      // canal manual não tem publicação automática → nunca marca canal de publicação
-      contas: isManual ? [] : rid && !prev.contas.includes(rid) ? [...prev.contas, rid] : prev.contas,
+      // marca SÓ o canal escolhido (manual = nenhum). Se quiser mais canais, marca à mão depois.
+      contas: isManual ? [] : rid ? [rid] : [],
     }));
   };
 
@@ -553,10 +554,10 @@ export function PostModal() {
               {sugHoras.length > 0 && (
                 <select
                   className="field-edit"
-                  style={{ marginTop: 5, fontSize: 12.5 }}
+                  style={{ marginTop: 5, fontSize: 12.5, borderRadius: 10 }}
                   value=""
                   onChange={(e) => { if (e.target.value) upd({ hora: e.target.value }); }}
-                  title={`Melhores horários pra postar no ${f.canal}, calculados pelo engajamento histórico das suas publicações nesse canal (Zernio). Ordenados por horário.`}
+                  title={`Melhores horários pra postar no ${f.canal}, calculados pelo engajamento histórico das suas publicações nesse canal. Ordenados por horário.`}
                 >
                   <option value="">★ Melhores horários…</option>
                   {sugHoras.map((h) => (
@@ -574,18 +575,6 @@ export function PostModal() {
             placeholder="Título do post"
             onChange={(e) => upd({ titulo: e.target.value })}
           />
-          {(f.pilar || f.funil) && (
-            <button
-              type="button"
-              onClick={() => {
-                const pref = `[${[f.pilar, f.funil].filter(Boolean).join(" · ")}] `;
-                if (!f.titulo.startsWith("[")) upd({ titulo: pref + f.titulo });
-              }}
-              style={{ marginTop: 5, border: 0, background: "transparent", color: "var(--cyan)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }}
-            >
-              ➤ Prefixo automático ({[f.pilar, f.funil].filter(Boolean).join(" · ")})
-            </button>
-          )}
           <div className="pm-row">
             <div>
               <label className="field-lbl">Canal</label>

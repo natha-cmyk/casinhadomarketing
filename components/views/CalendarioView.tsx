@@ -114,8 +114,9 @@ function perfisDoCanal(accounts: ZAccount[], canalNome: string): string[] {
 const POST_STATUS: Record<string, { label: string; cor: string }> = {
   rascunho: { label: "Rascunho", cor: "#8E8E93" },
   agendado: { label: "Agendado", cor: "#00BBC5" },
-  publicado: { label: "Publicado", cor: "#2FB457" },
-  falhou: { label: "Falhou", cor: "#FF001E" },
+  publicado: { label: "Publicado", cor: "#2FB457" }, // verde = saiu OK
+  falhou: { label: "Erro ao publicar", cor: "#FF9F0A" }, // amarelo = deu erro
+  cancelado: { label: "Cancelado / impedido", cor: "#FF001E" }, // vermelho = não vai sair
 };
 
 const calKey = (y: number, m: number, d: number) => y + "-" + (m + 1) + "-" + d;
@@ -509,6 +510,7 @@ export function CalendarioView() {
               const dd = String(p.d).padStart(2, "0") + "/" + String(p.m + 1).padStart(2, "0");
               return (
                 <li className="fila-row" key={p.id}>
+                  <span className="fila-st" title={(POST_STATUS[p.status] || POST_STATUS.rascunho).label} style={{ background: (POST_STATUS[p.status] || POST_STATUS.rascunho).cor }} />
                   <span className="fila-when">
                     {dd} · {p.hora || "--:--"}
                   </span>
@@ -518,16 +520,15 @@ export function CalendarioView() {
                       (p.contas || []).map((id) => {
                         const r = REDES.find((x) => x.id === id);
                         return r ? (
-                          <span className="conta-dot" style={{ background: r.cor }} title={r.label} key={id} />
+                          <span className="conta-dot" style={{ background: corMarca(r.label, r.cor) }} title={r.label} key={id} />
                         ) : null;
                       })
                     ) : (
-                      <span className="fila-none">sem canal</span>
+                      <span className="fila-none" title="Sem canal conectado — não sai automático">sem publicação automática</span>
                     )}
                   </span>
-                  {/* TODO(zernio): "Publicar agora" simula o disparo mudando o status. */}
                   <button className="fila-pub" data-pubnow={p.id} onClick={() => updatePost(p.id, { status: "publicado" })}>
-                    Publicar agora
+                    Marcar publicado
                   </button>
                 </li>
               );
