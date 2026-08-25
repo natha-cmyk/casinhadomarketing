@@ -3,7 +3,7 @@
 // Modal de criação/edição de post do calendário de conteúdo.
 import { useRef, useState } from "react";
 import { useStore, newId, type PostItem, type PostMedia, type PostOverride } from "@/lib/store";
-import { savePosts } from "@/lib/api";
+import { savePosts, deletePostApi } from "@/lib/api";
 import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
 import {
   CANAL_POST_COLORS,
@@ -437,7 +437,11 @@ export function PostModal() {
   };
 
   const doDelete = () => {
-    if (pm.id) deletePost(pm.id);
+    if (pm.id) {
+      const id = pm.id;
+      deletePost(id);
+      void deletePostApi(id); // remoção explícita no banco (salvar é só upsert)
+    }
     close();
   };
 

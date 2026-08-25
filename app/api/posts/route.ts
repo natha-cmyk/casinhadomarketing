@@ -44,9 +44,8 @@ export async function PUT(req: Request) {
     if (!ws) return NextResponse.json({ error: "unauth" }, { status: 401 });
     const b = await req.json();
     const posts: PostIn[] = Array.isArray(b.posts) ? b.posts : [];
-    const ids = posts.map((p) => p.id);
-    // remove só os posts DESTE workspace que sumiram
-    await prisma.post.deleteMany({ where: { workspaceId: ws, id: { notIn: ids.length ? ids : ["__none__"] } } });
+    // IMPORTANTE: salvar é APENAS upsert. NUNCA apagamos aqui — um carregamento vazio
+    // (falha transitória do GET) não pode mais destruir posts. Exclusão só via DELETE explícito.
     for (const p of posts) {
       const fields = {
         data: toDate(p.y, p.m, p.d), hora: p.hora, titulo: p.titulo, canal: p.canal, perfil: p.perfil,
@@ -62,6 +61,20 @@ export async function PUT(req: Request) {
         update: fields,
       });
     }
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: "db" }, { status: 503 });
+  }
+}
+
+// DELETE /api/posts?id=... — exclusão EXPLÍCITA de um post (única forma de remover do banco).
+export async function DELETE(req: Request) {
+  try {
+    const ws = await getActiveWorkspaceId();
+    if (!ws) return NextResponse.json({ error: "unauth" }, { status: 401 });
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id ausente" }, { status: 400 });
+    await prisma.post.deleteMany({ where: { id, workspaceId: ws } });
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "db" }, { status: 503 });

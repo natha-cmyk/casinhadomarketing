@@ -59,6 +59,10 @@ export function saveOkr(s: UIState) {
 export function savePosts(s: UIState) {
   return putJSON("/api/posts", { posts: s.posts });
 }
+// exclusão EXPLÍCITA de um post no banco (o único jeito de remover — salvar é só upsert).
+export function deletePostApi(id: string) {
+  return fetch(`/api/posts?id=${encodeURIComponent(id)}`, { method: "DELETE" }).then((r) => r.ok);
+}
 export function savePersonas(s: UIState) {
   return putJSON("/api/personas", { personas: s.personas });
 }
