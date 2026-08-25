@@ -191,6 +191,7 @@ model EnvConfig {
   customInd   Json      @default("{}") // { painel: [ {id,label,metric,...} ] } — indicadores criados pelo perfil
   calManuais  Json      @default("[]") // ["WhatsApp (grupos)", ...] — canais MANUAIS do calendário (só registro, sem publicação síncrona)
   calDefaults Json      @default("{}") // { redeId: "nome do perfil" } — perfil padrão por canal (multiconta)
+  calOpcoes   Json      @default("{}") // { pilares?: string[], formatos?: string[] } — opções custom criadas na hora
   agentsConfig Json     @default("{}") // { agentKey: { enabled, panels:[]|null, promptExtra } } — personalização dos agentes
   widgetLayout Json     @default("{}") // { painel: { order:[], size:{id:"sm"|"lg"}, hidden:[] } } — layout arrastável/redimensionável dos widgets
   updatedAt   DateTime  @updatedAt

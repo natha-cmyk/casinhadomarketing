@@ -159,6 +159,8 @@ export function PostModal() {
   const calPerfil = useStore((st) => st.calPerfil);
   const calDefaults = useStore((st) => st.calDefaults);
   const setCalDefault = useStore((st) => st.setCalDefault);
+  const calOpcoes = useStore((st) => st.calOpcoes);
+  const addCalOpcao = useStore((st) => st.addCalOpcao);
   const set = useStore((st) => st.set);
   const addPost = useStore((st) => st.addPost);
   const updatePost = useStore((st) => st.updatePost);
@@ -454,8 +456,20 @@ export function PostModal() {
     f.canal && !canais.some((c) => c.nome === f.canal)
       ? [f.canal, ...canais.map((c) => c.nome)]
       : canais.map((c) => c.nome);
-  const formatoOptions = f.formato && !formatos.includes(f.formato) ? [f.formato, ...formatos] : formatos;
+  const dedupe = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
+  const formatoOptions = dedupe([...(f.formato ? [f.formato] : []), ...formatos, ...calOpcoes.formatos]);
+  const pilarOptions = dedupe([...(f.pilar ? [f.pilar] : []), ...PILARES_POST, ...calOpcoes.pilares]);
   const perfilOptions = f.perfil && !perfis.includes(f.perfil) ? [f.perfil, ...perfis] : perfis;
+
+  // seletor com opção "➕ Novo…" que cria e já fixa a opção (persistida no config)
+  const onPick = (tipo: "pilares" | "formatos", v: string, setter: (x: string) => void) => {
+    if (v === "__novo__") {
+      const nome = (window.prompt(tipo === "pilares" ? "Novo pilar de conteúdo:" : "Novo formato:") || "").trim();
+      if (nome) { addCalOpcao(tipo, nome); setter(nome); }
+      return;
+    }
+    setter(v);
+  };
 
   const sel = (id: string, arr: string[], val: string, onChange: (v: string) => void) => (
     <select className="field-edit" id={id} value={val} onChange={(e) => onChange(e.target.value)}>
@@ -525,7 +539,10 @@ export function PostModal() {
             </div>
             <div>
               <label className="field-lbl">Formato</label>
-              {sel("pmFormato", formatoOptions, f.formato, (v) => upd({ formato: v }))}
+              <select className="field-edit" id="pmFormato" value={f.formato} onChange={(e) => onPick("formatos", e.target.value, (v) => upd({ formato: v }))}>
+                {formatoOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                <option value="__novo__">➕ Novo formato…</option>
+              </select>
             </div>
           </div>
           <div className="pm-row">
@@ -578,7 +595,10 @@ export function PostModal() {
           <div className="pm-row">
             <div>
               <label className="field-lbl">Pilar / categoria</label>
-              {sel("pmPilar", PILARES_POST, f.pilar, (v) => upd({ pilar: v }))}
+              <select className="field-edit" id="pmPilar" value={f.pilar} onChange={(e) => onPick("pilares", e.target.value, (v) => upd({ pilar: v }))}>
+                {pilarOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                <option value="__novo__">➕ Novo pilar…</option>
+              </select>
             </div>
             <div>
               <label className="field-lbl">Funil</label>

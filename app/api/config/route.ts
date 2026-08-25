@@ -29,6 +29,7 @@ export async function PUT(req: Request) {
       customInd: b.customInd ?? {},
       calManuais: Array.isArray(b.calManuais) ? b.calManuais : [],
       calDefaults: b.calDefaults && typeof b.calDefaults === "object" ? b.calDefaults : {},
+      calOpcoes: b.calOpcoes && typeof b.calOpcoes === "object" ? b.calOpcoes : {},
       agentsConfig: b.agentsConfig && typeof b.agentsConfig === "object" ? b.agentsConfig : {},
       widgetLayout: b.widgetLayout && typeof b.widgetLayout === "object" ? b.widgetLayout : {},
     };
