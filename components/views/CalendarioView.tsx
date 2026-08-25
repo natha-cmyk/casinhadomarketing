@@ -591,6 +591,10 @@ export function CalendarioView() {
             if (dp.length) dias.push({ d, dow: new Date(year, month, d).getDay(), posts: dp });
           }
           const totalPosts = dias.reduce((n, x) => n + x.posts.length, 0);
+          // canais COM ativação nesta janela (independe do que está oculto) → topo preenchido; resto cinza
+          const canaisAtivos = new Set<string>();
+          for (let d = win[0]; d <= win[1]; d++)
+            for (const p of posts) if (p.y === year && p.m === month && p.d === d) canaisAtivos.add(p.canal);
           return (
             <div className="ap-back" role="dialog" aria-modal="true">
               <div className="ap-shell">
@@ -644,10 +648,13 @@ export function CalendarioView() {
                   <div className="ap-chips">
                     {canais.map((c) => {
                       const on = !apHidden.has(c.nome);
+                      const ativo = canaisAtivos.has(c.nome); // tem publicação nesta janela?
+                      const cor = ativo ? corMarca(c.nome, c.cor) : "var(--label-3)";
                       return (
                         <button
                           key={c.nome}
-                          className={`ap-chip${on ? " on" : ""}`}
+                          className={`ap-chip${on ? " on" : ""}${ativo ? "" : " ap-chip-off"}`}
+                          title={ativo ? "" : "Sem publicação nesta semana"}
                           onClick={() =>
                             setApHidden((prev) => {
                               const nx = new Set(prev);
@@ -658,9 +665,9 @@ export function CalendarioView() {
                           }
                         >
                           {iconeCanal(c.nome) ? (
-                            <span className="ap-canal-ic" style={{ color: corMarca(c.nome, c.cor) }}><Ic name={iconeCanal(c.nome)} /></span>
+                            <span className="ap-canal-ic" style={{ color: cor }}><Ic name={iconeCanal(c.nome)} /></span>
                           ) : (
-                            <span className="ap-chip-dot" style={{ background: corMarca(c.nome, c.cor) }} />
+                            <span className="ap-chip-dot" style={{ background: cor }} />
                           )}
                           {c.nome}
                         </button>
@@ -701,6 +708,8 @@ export function CalendarioView() {
                                     {p.canal}
                                   </span>
                                   {p.formato && <span className="ap-card-fmt">{p.formato}</span>}
+                                  {p.pilar && <span className="ap-card-tag ap-tag-pilar">{p.pilar}</span>}
+                                  {p.funil && <span className="ap-card-tag ap-tag-funil">{p.funil}</span>}
                                   <span className="ap-card-st" style={{ color: st.cor, background: st.cor + "1f" }}>
                                     {p.status === "publicado" ? "publicado ✓" : st.label}
                                   </span>
