@@ -208,7 +208,7 @@ function sparkline(values: number[], color: string): string {
 // gravada; ids novos/desconhecidos vão pro fim, mantendo a ordem padrão (ordem de construção).
 // rótulos amigáveis dos cards (usados na barra "Organizar" do WidgetBoard)
 const SI_CARD_LABELS: Record<string, string> = {
-  mix: "Mix de conteúdo", seguidores: "Seguidores", engajamento: "Engajamento",
+  producao: "Produção de conteúdo", mix: "Mix de conteúdo", seguidores: "Seguidores", engajamento: "Engajamento",
   organico: "Orgânico vs impulsionado", atividade: "Atividade", conversas: "Conversas",
   top: "Top conteúdos", recentes: "Últimas publicações", horarios: "Melhores horários", audiencia: "Audiência",
 };
@@ -231,6 +231,22 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [inbox, setInbox] = useState<InboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // leads do CRM atribuídos a ESTE canal (match por nome do canal na saúde do CRM)
+  const [crmCanal, setCrmCanal] = useState<{ total: number; ganho: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/crm/leads", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        const ch: { canal?: string; total?: number; ganho?: number }[] = Array.isArray(d?.channelHealth) ? d.channelHealth : [];
+        const ll = label.toLowerCase();
+        const row = ch.find((c) => { const cn = String(c.canal || "").toLowerCase(); return cn && (cn.includes(ll) || ll.includes(cn)); });
+        setCrmCanal(row ? { total: row.total || 0, ganho: row.ganho || 0 } : null);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [label]);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
   // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras)
@@ -558,6 +574,34 @@ export function SocialInsights({ rede }: { rede: string }) {
   // padrão (só os visíveis). A ordem salva por workspace é aplicada; ids novos vão pro fim.
   type CardDef = { id: string; node: ReactElement<HTMLAttributes<HTMLDivElement>>; full?: boolean };
   const cards: CardDef[] = [];
+
+  // Produção de conteúdo & leads deste canal (calendário + CRM + DMs)
+  {
+    const cur = dateRange(s);
+    const dSince = new Date(cur.since), dUntil = new Date(cur.until);
+    const canalPosts = s.posts.filter((p) => p.canal === label && (() => { const d = new Date(p.y, p.m, p.d); return d >= dSince && d <= dUntil; })());
+    const porFormato: Record<string, number> = {};
+    for (const p of canalPosts) { const f = (p.formato || "—").trim() || "—"; porFormato[f] = (porFormato[f] || 0) + 1; }
+    const fmts = Object.entries(porFormato).sort((a, b) => b[1] - a[1]);
+    const mxF = Math.max(1, ...fmts.map(([, n]) => n));
+    const dmLeads = inbox?.volume ? inbox.volume.summary.uniqueConversations : null;
+    cards.push({ id: "producao", node: (
+      <div className="card pad-lg">
+        <div className="card-head"><div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div></div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginTop: 6 }}>
+          <MiniStat l="Conteúdos" n={String(canalPosts.length)} />
+          <MiniStat l="Leads (CRM)" n={crmCanal ? fmt(crmCanal.total) : "—"} />
+          <MiniStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} />
+        </div>
+        {fmts.length > 0 && (
+          <div className="si-dim" style={{ marginTop: 12 }}>
+            <h5>Por formato</h5>
+            {fmts.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)}
+          </div>
+        )}
+      </div>
+    ) });
+  }
 
   if (showMix && content) cards.push({ id: "mix", node: (
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
