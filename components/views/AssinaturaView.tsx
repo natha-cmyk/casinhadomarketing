@@ -2,7 +2,7 @@
 // Assinatura — dados reais (persistidos). Plano, mensalidade, próxima cobrança, meses abonados
 // e histórico de faturas. Billing ainda sem provider (a cobrança automática entra depois).
 // Indicações vivem em aba própria (/indicacoes).
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { PageHead, KpiCard } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { money } from "@/lib/format";
@@ -10,7 +10,8 @@ import { money } from "@/lib/format";
 interface Sub { plano: string; valorMensal: number; valorAnualMes: number; proximaCobranca: string | null; status: string; stripeSubscriptionId?: string | null; trialEnd?: string | null }
 interface Inv { id: string; competencia: string; valor: number; status: "paga" | "abonada" | "aberta"; vencimento: string | null }
 
-const PLANO_LBL: Record<string, string> = { mensal: "Mensal", anual_parcelado: "Anual (parcelado)", anual_avista: "Anual (à vista)", anual: "Anual" };
+// selo redondo (pill) pras tags de plano
+const pill = (bg: string): CSSProperties => ({ background: bg, color: "#fff", borderRadius: 999, padding: "3px 11px", fontSize: 11, fontWeight: 700, letterSpacing: ".02em", whiteSpace: "nowrap" });
 const STATUS_ASSIN: Record<string, { lbl: string; cor: string }> = {
   ativa: { lbl: "Ativa", cor: "var(--excelente)" },
   trial: { lbl: "Em teste grátis", cor: "var(--cyan)" },
@@ -73,7 +74,13 @@ export default function AssinaturaView() {
   const mensal = sub?.valorMensal ?? 500;
   const anualMes = sub?.valorAnualMes ?? 420;
   const abonadas = invoices.filter((f) => f.status === "abonada").length;
-  const proxima = invoices.find((f) => f.status === "aberta");
+
+  const isAnual = ["anual", "anual_parcelado", "anual_avista"].includes(sub?.plano ?? "");
+  const modalidade = sub?.plano === "anual_avista" ? "À vista" : "Parcelado";
+  const statusLbl = STATUS_ASSIN[sub?.status ?? ""]?.lbl ?? "—";
+  // próxima cobrança: usa a data real da assinatura; fallback = 30 dias após a última fatura (competência)
+  const ultimaInv = invoices[0]?.vencimento ? new Date(invoices[0].vencimento) : null;
+  const proxDate = sub?.proximaCobranca ? new Date(sub.proximaCobranca) : ultimaInv ? new Date(ultimaInv.getTime() + 30 * 86400000) : null;
 
   return (
     <>
@@ -85,9 +92,9 @@ export default function AssinaturaView() {
             <div className="pm-hint" style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, background: "color-mix(in srgb, var(--cyan) 8%, #fff)", border: "1px solid color-mix(in srgb, var(--cyan) 22%, transparent)", color: "var(--label)" }}>{banner}</div>
           )}
           <div className="grid kpis" style={{ marginBottom: 16 }}>
-            <KpiCard lbl="Plano" val={PLANO_LBL[sub?.plano ?? "mensal"] ?? "Mensal"} foot={STATUS_ASSIN[sub?.status ?? ""]?.lbl ?? "Casinha"} />
+            <KpiCard lbl="Plano" val={isAnual ? "Anual" : "Mensal"} foot={isAnual ? `Modalidade · ${modalidade}` : statusLbl} />
             <KpiCard lbl="Mensalidade" val={money(sub?.plano === "anual_avista" ? 399 : sub?.plano === "anual_parcelado" || sub?.plano === "anual" ? anualMes : mensal)} foot="equivalente por mês" />
-            <KpiCard lbl="Próxima cobrança" val={proxima ? dt(proxima.vencimento) : (sub?.proximaCobranca ? dt(sub.proximaCobranca) : "—")} foot={proxima?.competencia ?? "em dia"} />
+            <KpiCard lbl="Próxima cobrança" val={proxDate ? proxDate.toLocaleDateString("pt-BR") : "—"} foot={statusLbl} />
             <KpiCard lbl="Meses abonados" val={String(abonadas)} foot="por indicação" tone="pos" />
           </div>
 
@@ -151,10 +158,10 @@ export default function AssinaturaView() {
 function PlanoCard({ nome, preco, sub, atual, destaque, onAssinar, busy }: { nome: string; preco: string; sub: string; atual?: boolean; destaque?: boolean; onAssinar?: () => void; busy?: boolean }) {
   return (
     <div className="card" style={{ padding: "18px 20px", border: destaque ? "1.5px solid var(--cyan)" : undefined, display: "flex", flexDirection: "column", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
         <b style={{ fontSize: 15 }}>{nome}</b>
-        {atual && <span className="badge" style={{ background: "var(--excelente)", color: "#fff" }}>plano atual</span>}
-        {destaque && !atual && <span className="badge" style={{ background: "var(--cyan)", color: "#fff" }}>economize</span>}
+        {atual && <span style={pill("var(--excelente)")}>plano atual</span>}
+        {destaque && !atual && <span style={pill("var(--cyan)")}>melhor escolha</span>}
       </div>
       <div className="tnum" style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-1px" }}>{preco}</div>
       <div style={{ fontSize: 12.5, color: "var(--label-2)" }}>{sub}</div>

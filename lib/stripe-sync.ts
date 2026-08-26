@@ -16,9 +16,13 @@ const STATUS_MAP: Record<string, string> = {
 
 export async function syncSubscription(sub: Stripe.Subscription): Promise<void> {
   const workspaceId = (sub.metadata?.workspaceId as string) || "";
-  const priceId = sub.items.data[0]?.price?.id || null;
+  const item = sub.items.data[0];
+  const priceId = item?.price?.id || null;
   const plano = planoFromPrice(priceId);
-  const periodEnd = (sub as unknown as { current_period_end?: number }).current_period_end;
+  // API nova (2026-02-25) moveu current_period_end pro ITEM da assinatura; caímos no nível sub por compat.
+  const periodEnd =
+    (item as unknown as { current_period_end?: number })?.current_period_end ||
+    (sub as unknown as { current_period_end?: number }).current_period_end;
   const data = {
     stripeSubscriptionId: sub.id,
     stripePriceId: priceId,
