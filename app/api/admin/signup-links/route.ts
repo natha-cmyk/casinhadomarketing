@@ -14,7 +14,7 @@ export async function GET() {
   if (!admin) return NextResponse.json({ ok: false }, { status: 403 });
   const rows = await prisma.signupLink.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
   const items = rows.map((r) => ({
-    id: r.id, token: r.token, plano: r.plano, planoLabel: PLANO_LABEL[r.plano as Plano] || r.plano,
+    id: r.id, token: r.token, nomeAcao: r.nomeAcao, plano: r.plano, planoLabel: PLANO_LABEL[r.plano as Plano] || r.plano,
     trialDays: r.trialDays, url: `${APP_URL}/cadastro?c=${r.token}`,
     usadoPorEmail: r.usadoPorEmail, usadoEm: r.usadoEm, createdAt: r.createdAt,
   }));
@@ -27,8 +27,9 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   const plano = PLANOS.includes(b?.plano) ? (b.plano as Plano) : "mensal";
   const trialDays = [0, 7, 90].includes(Number(b?.trialDays)) ? Number(b.trialDays) : 0;
+  const nomeAcao = String(b?.nomeAcao || "").trim().slice(0, 120);
   const token = rndToken();
-  await prisma.signupLink.create({ data: { token, plano, trialDays, criadoPor: admin.email || "" } });
+  await prisma.signupLink.create({ data: { token, nomeAcao, plano, trialDays, criadoPor: admin.email || "" } });
   return NextResponse.json({ ok: true, token, url: `${APP_URL}/cadastro?c=${token}` });
 }
 

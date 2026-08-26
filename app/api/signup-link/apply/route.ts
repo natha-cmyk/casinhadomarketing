@@ -17,6 +17,8 @@ export async function POST(req: Request) {
 
   const link = await prisma.signupLink.findUnique({ where: { token } });
   if (!link) return NextResponse.json({ ok: false, error: "link inválido" }, { status: 404 });
+  // rastreio de origem: marca a campanha na conta (mesmo que o link já tenha sido usado antes)
+  if (link.nomeAcao) await prisma.workspace.update({ where: { id: ws.id }, data: { origem: link.nomeAcao } }).catch(() => {});
   if (link.usadoEm) return NextResponse.json({ ok: true, already: true }); // já usado
 
   // não recria se o workspace já tem assinatura no Stripe

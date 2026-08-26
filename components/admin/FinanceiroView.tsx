@@ -10,7 +10,7 @@ import { money } from "@/lib/format";
 interface Sub { plano: string; valorMensal: number; valorAnualMes: number; proximaCobranca: string | null; status: string }
 interface Inv { id: string; competencia: string; valor: number; status: string; vencimento: string | null }
 interface Ref { id: string; cliente: string; status: string; abonouMes: string | null; createdAt: string }
-interface WS { id: string; nome: string; subscription: Sub | null; invoices: Inv[]; referrals: Ref[] }
+interface WS { id: string; nome: string; origem?: string | null; subscription: Sub | null; invoices: Inv[]; referrals: Ref[] }
 
 const post = (body: unknown) => fetch("/api/admin/billing", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
 const dt = (s: string | null) => (s ? new Date(s).toLocaleDateString("pt-BR") : "—");
@@ -39,7 +39,7 @@ export default function FinanceiroView() {
             return (
               <details key={w.id} className="card" style={{ padding: 0 }} open={open === w.id} onToggle={(e) => { if ((e.target as HTMLDetailsElement).open) setOpen(w.id); }}>
                 <summary style={{ listStyle: "none", padding: "14px 18px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                  <b style={{ flex: "1 1 180px" }}>{w.nome}</b>
+                  <b style={{ flex: "1 1 180px" }}>{w.nome}{w.origem ? <span style={{ marginLeft: 8, background: "var(--cyan)", color: "#fff", borderRadius: 999, padding: "1px 9px", fontSize: 11, fontWeight: 700 }} title="Origem (campanha)">{w.origem}</span> : null}</b>
                   <span className="badge">{sub?.plano === "anual" ? "Anual" : "Mensal"} · {money(sub?.plano === "anual" ? (sub?.valorAnualMes ?? 420) : (sub?.valorMensal ?? 500))}/mês</span>
                   <span style={{ fontSize: 12, color: "var(--label-3)" }}>{w.invoices.length} fatura(s) · {abonadas} abonada(s)</span>
                   <span style={{ fontSize: 12, color: "var(--label-3)" }}>{w.referrals.length} indicação(ões) · {conv} convertida(s)</span>

@@ -29,6 +29,7 @@ model Workspace {
   nome            String
   zernioProfileId String? // profile da Zernio (contas conectadas deste workspace)
   onboarded       Boolean       @default(false) // já passou pelo onboarding de 1º acesso?
+  origem          String? // campanha/ação de onde o cliente veio (rastreio via link de cadastro)
   createdAt       DateTime      @default(now())
   memberships     Membership[]
   envConfig       EnvConfig?
@@ -72,6 +73,7 @@ model Invite {
 model SignupLink {
   id            String    @id @default(cuid())
   token         String    @unique
+  nomeAcao      String    @default("") // nome da campanha/ação (rastreio de origem)
   plano         String    @default("mensal") // mensal | anual_parcelado | anual_avista
   trialDays     Int       @default(0) // 0 | 7 | 90
   criadoPor     String    @default("") // e-mail do admin que gerou
