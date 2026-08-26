@@ -118,6 +118,8 @@ export interface UIState {
   calDefaults: Record<string, string>;
   // opções CUSTOM do calendário criadas na hora (pilar/formato). Persistido no config.
   calOpcoes: { pilares: string[]; formatos: string[] };
+  // indicadores MANUAIS por canal (ex.: Stories IG que a API não expõe). Persistido no config.
+  manualStats: Record<string, { stories?: number }>;
   // personalização dos agentes por workspace: { agentKey: {enabled, panels, promptExtra} }. Persistido no config.
   agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
   // layout dos widgets por painel. grid = coordenadas livres {x,y,w,h} por widget (tipo ClickUp);
@@ -129,7 +131,7 @@ export interface UIState {
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; calDefaults?: Record<string, string>; calOpcoes?: { pilares?: string[]; formatos?: string[] }; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, unknown> } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; calDefaults?: Record<string, string>; calOpcoes?: { pilares?: string[]; formatos?: string[] }; manualStats?: Record<string, { stories?: number }>; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, unknown> } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -158,6 +160,7 @@ export interface UIState {
   removeCalManual: (nome: string) => void;
   setCalDefault: (redeId: string, perfil: string) => void;
   addCalOpcao: (tipo: "pilares" | "formatos", valor: string) => void;
+  setManualStat: (rede: string, patch: { stories?: number }) => void;
   setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
   setWidgetLayout: (panel: string, layout: UIState["widgetLayout"][string]) => void;
   toggleWidgetEdit: (panel: string) => void;
@@ -228,6 +231,7 @@ export const useStore = create<UIState>((set) => ({
   calManuais: [],
   calDefaults: {},
   calOpcoes: { pilares: [], formatos: [] },
+  manualStats: {},
   agentsConfig: {},
   widgetLayout: {},
   widgetEdit: null,
@@ -267,6 +271,8 @@ export const useStore = create<UIState>((set) => ({
       if (!v || cur.some((x) => x.toLowerCase() === v.toLowerCase())) return {};
       return { calOpcoes: { ...s.calOpcoes, [tipo]: [...cur, v] } };
     }),
+  setManualStat: (rede, patch) =>
+    set((s) => ({ manualStats: { ...s.manualStats, [rede]: { ...(s.manualStats[rede] || {}), ...patch } } })),
   setAgentConfig: (key, patch) =>
     set((s) => {
       const cur = s.agentsConfig[key] ?? { enabled: true, panels: null, promptExtra: "" };
@@ -326,6 +332,7 @@ export const useStore = create<UIState>((set) => ({
           const o = d.config.calOpcoes as { pilares?: string[]; formatos?: string[] };
           patch.calOpcoes = { pilares: Array.isArray(o.pilares) ? o.pilares : [], formatos: Array.isArray(o.formatos) ? o.formatos : [] };
         }
+        if (d.config.manualStats && typeof d.config.manualStats === "object") patch.manualStats = d.config.manualStats as Record<string, { stories?: number }>;
         if (d.config.agentsConfig && typeof d.config.agentsConfig === "object") patch.agentsConfig = d.config.agentsConfig;
         if (d.config.widgetLayout && typeof d.config.widgetLayout === "object") patch.widgetLayout = d.config.widgetLayout as UIState["widgetLayout"];
       }

@@ -226,13 +226,17 @@ function FlowBoard({ panel, byId, order, visible, hiddenList, hidden, layout, se
   return (
     <div>
       {header}
-      <div ref={gridRef} className="wb-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gap: GAP, marginBottom: 16, alignItems: "start" }}>
+      <div ref={gridRef} className="wb-grid" style={editing
+        ? { display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gap: GAP, marginBottom: 16, alignItems: "start" }
+        : { columns: "360px", columnGap: GAP, marginBottom: 16 }}>
         {visible.map((id: string) => {
           const w = byId.get(id)!; const span = spanOf(id);
           const isDropL = editing && drop?.id === id && !drop.after && dragId !== id;
           const isDropR = editing && drop?.id === id && drop.after && dragId !== id;
           return (
-            <div key={id} data-wid={id} style={{ gridColumn: `span ${span}`, position: "relative", opacity: dragId === id ? 0.4 : 1 }}>
+            <div key={id} data-wid={id} style={editing
+              ? { gridColumn: `span ${span}`, position: "relative", opacity: dragId === id ? 0.4 : 1 }
+              : { breakInside: "avoid", marginBottom: GAP, position: "relative" }}>
               {isDropL && <span style={{ position: "absolute", top: 24, bottom: 0, left: -9, width: 4, borderRadius: 999, background: "var(--cyan)", zIndex: 3 }} />}
               {isDropR && <span style={{ position: "absolute", top: 24, bottom: 0, right: -9, width: 4, borderRadius: 999, background: "var(--cyan)", zIndex: 3 }} />}
               {editing && (

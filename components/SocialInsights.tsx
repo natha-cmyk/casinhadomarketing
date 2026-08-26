@@ -213,6 +213,26 @@ const SI_CARD_LABELS: Record<string, string> = {
   top: "Top conteúdos", recentes: "Últimas publicações", horarios: "Melhores horários", audiencia: "Audiência",
 };
 
+// Stories do Instagram — a API não expõe a contagem; entra como indicador MANUAL (editável, persistido).
+function ManualStories({ rede }: { rede: string }) {
+  const val = useStore((s) => s.manualStats[rede]?.stories);
+  const setStat = useStore((s) => s.setManualStat);
+  return (
+    <div style={{ background: "var(--surface)", borderRadius: 10, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: "var(--label-3)", marginBottom: 2 }}>Stories (manual)</div>
+      <input
+        type="number"
+        min={0}
+        value={val ?? ""}
+        placeholder="—"
+        onChange={(e) => setStat(rede, { stories: e.target.value === "" ? undefined : Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+        title="A API não traz Stories; informe a contagem manualmente."
+        style={{ border: 0, background: "transparent", fontSize: 20, fontWeight: 800, width: "100%", padding: 0, color: "var(--label)", outline: "none" }}
+      />
+    </div>
+  );
+}
+
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -573,10 +593,8 @@ export function SocialInsights({ rede }: { rede: string }) {
   // Cada card renderizável ganha um id estável e entra numa lista única, construída na ordem
   // padrão (só os visíveis). A ordem salva por workspace é aplicada; ids novos vão pro fim.
   type CardDef = { id: string; node: ReactElement<HTMLAttributes<HTMLDivElement>>; full?: boolean };
-  const cards: CardDef[] = [];
-
-  // Produção de conteúdo & leads deste canal (calendário + CRM + DMs)
-  {
+  // Produção de conteúdo & leads deste canal (calendário + CRM + DMs) — fica ACIMA do "Desempenho no tempo"
+  const producaoNode = (() => {
     const cur = dateRange(s);
     const dSince = new Date(cur.since), dUntil = new Date(cur.until);
     const canalPosts = s.posts.filter((p) => p.canal === label && (() => { const d = new Date(p.y, p.m, p.d); return d >= dSince && d <= dUntil; })());
@@ -585,11 +603,12 @@ export function SocialInsights({ rede }: { rede: string }) {
     const fmts = Object.entries(porFormato).sort((a, b) => b[1] - a[1]);
     const mxF = Math.max(1, ...fmts.map(([, n]) => n));
     const dmLeads = inbox?.volume ? inbox.volume.summary.uniqueConversations : null;
-    cards.push({ id: "producao", node: (
-      <div className="card pad-lg">
+    return (
+      <div className="card pad-lg" style={{ marginBottom: 16 }}>
         <div className="card-head"><div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginTop: 6 }}>
           <MiniStat l="Conteúdos" n={String(canalPosts.length)} />
+          {platform === "instagram" && <ManualStories rede={rede} />}
           <MiniStat l="Leads (CRM)" n={crmCanal ? fmt(crmCanal.total) : "—"} />
           <MiniStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} />
         </div>
@@ -600,8 +619,10 @@ export function SocialInsights({ rede }: { rede: string }) {
           </div>
         )}
       </div>
-    ) });
-  }
+    );
+  })();
+
+  const cards: CardDef[] = [];
 
   if (showMix && content) cards.push({ id: "mix", node: (
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
@@ -1003,6 +1024,9 @@ export function SocialInsights({ rede }: { rede: string }) {
               </KpiCard>
             ))}
           </div>
+
+          {/* Produção de conteúdo — logo abaixo dos KPIs e acima do "Desempenho no tempo" */}
+          {producaoNode}
 
           {isLimited && (
             <div className="card" style={{ marginBottom: 16, fontSize: 13, color: "var(--label-2)" }}>
