@@ -208,10 +208,46 @@ function sparkline(values: number[], color: string): string {
 // gravada; ids novos/desconhecidos vão pro fim, mantendo a ordem padrão (ordem de construção).
 // rótulos amigáveis dos cards (usados na barra "Organizar" do WidgetBoard)
 const SI_CARD_LABELS: Record<string, string> = {
-  mix: "Mix de conteúdo", seguidores: "Seguidores", engajamento: "Engajamento",
+  producao: "Produção de conteúdo", mix: "Mix de conteúdo", seguidores: "Seguidores", engajamento: "Engajamento",
   organico: "Orgânico vs impulsionado", atividade: "Atividade", conversas: "Conversas",
   top: "Top conteúdos", recentes: "Últimas publicações", horarios: "Melhores horários", audiencia: "Audiência",
 };
+
+// Stories do Instagram — a API não expõe a contagem; entra como indicador MANUAL (editável, persistido).
+function ManualStories({ rede }: { rede: string }) {
+  const val = useStore((s) => s.manualStats[rede]?.stories);
+  const setStat = useStore((s) => s.setManualStat);
+  return (
+    <div style={{ background: "var(--surface)", borderRadius: 10, padding: "10px 12px" }}>
+      <div style={{ fontSize: 11, color: "var(--label-3)", marginBottom: 2 }}>Stories (manual)</div>
+      <input
+        type="number"
+        min={0}
+        value={val ?? ""}
+        placeholder="—"
+        onChange={(e) => setStat(rede, { stories: e.target.value === "" ? undefined : Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+        title="A API não traz Stories; informe a contagem manualmente."
+        style={{ border: 0, background: "transparent", fontSize: 20, fontWeight: 800, width: "100%", padding: 0, color: "var(--label)", outline: "none" }}
+      />
+    </div>
+  );
+}
+
+// Vínculo do canal social → canal do CRM (pra atribuir os leads certos). Some se não há CRM.
+function VincularCrm({ rede, opcoes, atual }: { rede: string; opcoes: { canal?: string }[]; atual?: string }) {
+  const setStat = useStore((s) => s.setManualStat);
+  const nomes = Array.from(new Set(opcoes.map((o) => String(o.canal || "").trim()).filter(Boolean)));
+  if (!nomes.length) return null;
+  return (
+    <div style={{ minWidth: 220 }}>
+      <div style={{ fontSize: 11, color: "var(--label-3)", marginBottom: 2 }}>Vincular leads ao canal do CRM</div>
+      <select className="field-edit" style={{ fontSize: 12.5 }} value={atual ?? ""} onChange={(e) => setStat(rede, { crmCanal: e.target.value || undefined })} title="Escolha qual canal do seu CRM representa esta rede (pra somar os leads certos aqui).">
+        <option value="">— automático (por nome) —</option>
+        {nomes.map((n) => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </div>
+  );
+}
 
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
@@ -231,6 +267,17 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [inbox, setInbox] = useState<InboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // saúde do CRM por canal (lista completa) — o match com este canal é feito no render,
+  // preferindo o VÍNCULO manual (manualStats[rede].crmCanal) e caindo no nome como heurística.
+  const [crmHealth, setCrmHealth] = useState<{ canal?: string; total?: number; ganho?: number }[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/crm/leads", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (alive) setCrmHealth(Array.isArray(d?.channelHealth) ? d.channelHealth : []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
   // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras)
@@ -557,6 +604,48 @@ export function SocialInsights({ rede }: { rede: string }) {
   // Cada card renderizável ganha um id estável e entra numa lista única, construída na ordem
   // padrão (só os visíveis). A ordem salva por workspace é aplicada; ids novos vão pro fim.
   type CardDef = { id: string; node: ReactElement<HTMLAttributes<HTMLDivElement>>; full?: boolean };
+  // Produção de conteúdo & leads deste canal (calendário + CRM + DMs) — fica ACIMA do "Desempenho no tempo"
+  const producaoNode = (() => {
+    const cur = dateRange(s);
+    const dSince = new Date(cur.since + "T00:00:00"), dUntil = new Date(cur.until + "T23:59:59");
+    const ll = label.trim().toLowerCase();
+    const canalPosts = s.posts.filter((p) => String(p.canal || "").trim().toLowerCase() === ll && (() => { const d = new Date(p.y, p.m, p.d); return d >= dSince && d <= dUntil; })());
+    const porTipo: Record<string, number> = {};
+    for (const p of canalPosts) { const f = (p.formato || "Outro").trim() || "Outro"; porTipo[f] = (porTipo[f] || 0) + 1; }
+    const stories = platform === "instagram" ? (s.manualStats[rede]?.stories ?? 0) : 0;
+    if (stories > 0) porTipo["Stories"] = (porTipo["Stories"] || 0) + stories;
+    const tipos = Object.entries(porTipo).sort((a, b) => b[1] - a[1]);
+    const mxF = Math.max(1, ...tipos.map(([, n]) => n));
+    const totalConteudos = canalPosts.length + stories;
+    const dmLeads = inbox?.volume ? inbox.volume.summary.uniqueConversations : null;
+    // CRM: vínculo manual (manualStats[rede].crmCanal) > heurística por nome
+    const vinc = s.manualStats[rede]?.crmCanal;
+    const crmRow = vinc
+      ? crmHealth.find((c) => String(c.canal || "") === vinc)
+      : crmHealth.find((c) => { const cn = String(c.canal || "").toLowerCase(); return cn && (cn.includes(ll) || ll.includes(cn)); });
+    const crmLeads = crmRow?.total ?? null;
+    return (
+      <div className="card pad-lg" style={{ marginBottom: 16 }}>
+        <div className="card-head"><div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div></div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginTop: 6 }}>
+          <MiniStat l="Conteúdos" n={fmt(totalConteudos)} />
+          <MiniStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} />
+          <MiniStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} />
+        </div>
+        <div className="si-dim" style={{ marginTop: 12 }}>
+          <h5>Por tipo de conteúdo</h5>
+          {tipos.length > 0
+            ? tipos.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)
+            : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Nenhum conteúdo programado neste período para {label}. (Os conteúdos vêm do calendário — canal &quot;{label}&quot;.)</div>}
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--hairline)" }}>
+          {platform === "instagram" && <ManualStories rede={rede} />}
+          <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
+        </div>
+      </div>
+    );
+  })();
+
   const cards: CardDef[] = [];
 
   if (showMix && content) cards.push({ id: "mix", node: (
@@ -852,7 +941,9 @@ export function SocialInsights({ rede }: { rede: string }) {
       </div>
       <div className="si-demo">
         {demoDims.map(({ dim, items }) => {
-          const tops = [...items].sort((a, b) => b.value - a.value).slice(0, 6);
+          // GÊNERO: tira "não informado" (U/unknown) — os não declarados distorcem o % de M/F
+          const base = dim === "gender" ? items.filter((t) => !["u", "unknown", "não informado", "nao informado"].includes(String(t.dimension).toLowerCase())) : items;
+          const tops = [...base].sort((a, b) => b.value - a.value).slice(0, 6);
           const mx = Math.max(1, ...tops.map((t) => t.value));
           return (
             <div key={dim} className="si-dim">
@@ -957,6 +1048,9 @@ export function SocialInsights({ rede }: { rede: string }) {
               </KpiCard>
             ))}
           </div>
+
+          {/* Produção de conteúdo — logo abaixo dos KPIs e acima do "Desempenho no tempo" */}
+          {producaoNode}
 
           {isLimited && (
             <div className="card" style={{ marginBottom: 16, fontSize: 13, color: "var(--label-2)" }}>

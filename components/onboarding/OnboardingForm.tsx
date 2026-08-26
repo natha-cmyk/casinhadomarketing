@@ -16,7 +16,7 @@ const PROVIDERS = [
   { v: "openai", label: "OpenAI", url: "https://platform.openai.com/api-keys" },
   { v: "gemini", label: "Gemini (Google)", url: "https://aistudio.google.com/apikey" },
 ];
-const TOTAL = 6;
+const TOTAL = 8;
 
 interface Initial { empresa: string; telefone: string; emailContato: string; ramo: string; cidade: string; estado: string; site: string }
 
@@ -78,6 +78,14 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
     } catch { setBusy(false); setErr("Erro de rede."); }
   };
 
+  // Persona (opcional) — 1ª persona básica
+  const [pNome, setPNome] = useState("");
+  const [pRepresenta, setPRepresenta] = useState("");
+  const [pDores, setPDores] = useState("");
+  // Concorrência (opcional) — nomes
+  const [concs, setConcs] = useState<string[]>([]);
+  const [concInput, setConcInput] = useState("");
+  const addConc = () => { const v = concInput.trim(); if (v && !concs.includes(v)) { setConcs((a) => [...a, v]); setConcInput(""); } };
   // Produtos (opcional) — chips
   const [produtos, setProdutos] = useState<string[]>([]);
   const [prodInput, setProdInput] = useState("");
@@ -95,13 +103,34 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
       if (r.ok && j?.ok) { setLlmConnected(true); setKey(""); } else setErr(j?.error || "Falha ao conectar a LLM.");
     } catch { setBusy(false); setErr("Erro de rede."); }
   };
+  // cria a 1ª persona/concorrentes do onboarding (best-effort; não bloqueia a entrada).
+  const salvarPersonaEConc = async () => {
+    try {
+      if (pNome.trim()) {
+        const cur = await fetch("/api/personas").then((r) => r.json()).catch(() => null);
+        const existentes = Array.isArray(cur?.personas) ? cur.personas : [];
+        const nova = {
+          id: `persona_${Date.now()}`, tag: "Persona", handle: "@" + pNome.trim().toLowerCase().replace(/\s+/g, ""), emoji: "🎯", cover: "", nome: pNome.trim(),
+          representa: pRepresenta.trim(), comunica: "", dores: pDores.trim() ? pDores.split(/[\n,;]/).map((x) => x.trim()).filter(Boolean) : [],
+          canais: "", gatilho: "", stats: [], ordem: existentes.length,
+        };
+        await fetch("/api/personas", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ personas: [...existentes, nova] }) });
+      }
+      if (concs.length) {
+        const cur = await fetch("/api/concorrentes").then((r) => r.json()).catch(() => null);
+        const existentes = Array.isArray(cur?.concorrentes) ? cur.concorrentes : [];
+        const novos = concs.map((nome, i) => ({ id: `conc_${Date.now()}_${i}`, nome, ig: "", linkedin: false, youtube: false, dominio: null, categoria: "marca", iconOverride: null, ordem: existentes.length + i }));
+        await fetch("/api/concorrentes", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ concorrentes: [...existentes, ...novos] }) });
+      }
+    } catch { /* não bloqueia a entrada */ }
+  };
   const finish = async () => {
     if (busy) return;
     setBusy(true); setErr(null);
     try {
       const r = await fetch("/api/onboarding", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...f, produtos }) });
       const j = await r.json().catch(() => null);
-      if (r.ok && j?.ok) { window.location.href = "/"; return; }
+      if (r.ok && j?.ok) { await salvarPersonaEConc(); window.location.href = "/"; return; }
       setErr(j?.error || "Não foi possível concluir."); setBusy(false);
     } catch { setErr("Erro de rede."); setBusy(false); }
   };
@@ -245,6 +274,42 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
                   {produtos.map((p) => (
                     <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, padding: "5px 10px", borderRadius: 999, background: "var(--surface)", border: "1px solid var(--hairline)" }}>
                       {p}<button onClick={() => setProdutos((arr) => arr.filter((x) => x !== p))} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 12 }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <Nav onBack={back} onNext={next} nextLabel="Continuar →" />
+            </div>
+          </div>
+        )}
+
+        {/* 6 — PERSONA (opcional) */}
+        {step === 6 && (
+          <Card title="Sua persona principal" sub="Um esboço de quem você quer atingir (aprofunda depois em Persona & Público). Opcional.">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Nome da persona"><input style={inp} value={pNome} onChange={(e) => setPNome(e.target.value)} placeholder="Ex.: Empreendedor solo" /></Field>
+              <Field label="Quem representa"><input style={inp} value={pRepresenta} onChange={(e) => setPRepresenta(e.target.value)} placeholder="Ex.: freelancer que precisa de endereço fiscal" /></Field>
+              <Field label="Principais dores"><textarea style={{ ...inp, minHeight: 64, resize: "vertical" }} value={pDores} onChange={(e) => setPDores(e.target.value)} placeholder="Ex.: falta de sala de reunião, quer networking" /></Field>
+            </div>
+            <Nav onBack={back} onNext={next} nextLabel="Continuar →" />
+          </Card>
+        )}
+
+        {/* 7 — CONCORRÊNCIA (opcional) → finaliza */}
+        {step === 7 && (
+          <div style={{ textAlign: "center" }}>
+            <div className="card" style={{ padding: "22px 24px", textAlign: "left" }}>
+              <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Concorrentes</div>
+              <div style={{ fontSize: 13, color: "var(--label-2)", marginBottom: 16, lineHeight: 1.5 }}>Adicione nomes de concorrentes que você acompanha (aprofunda depois em Concorrência). Opcional.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={inp} value={concInput} onChange={(e) => setConcInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addConc())} placeholder="Ex.: WeWork" />
+                <button onClick={addConc} disabled={!concInput.trim()} style={btn(!!concInput.trim())}>Adicionar</button>
+              </div>
+              {concs.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                  {concs.map((c) => (
+                    <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, padding: "5px 10px", borderRadius: 999, background: "var(--surface)", border: "1px solid var(--hairline)" }}>
+                      {c}<button onClick={() => setConcs((arr) => arr.filter((x) => x !== c))} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 12 }}>✕</button>
                     </span>
                   ))}
                 </div>

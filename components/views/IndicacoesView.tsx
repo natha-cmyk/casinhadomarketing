@@ -9,10 +9,9 @@ import { useStore } from "@/lib/store";
 
 const WHATS_COMERCIAL = "5584981352287"; // WhatsApp comercial oficial (E.164, sem +)
 
-interface Ref { id: string; cliente: string; status: "convertido" | "negociando" | "convidado"; abonouMes: string | null; createdAt: string }
+interface Ref { id: string; cliente: string; status: "convertido" | "convidado"; abonouMes: string | null; createdAt: string }
 const STATUS_META: Record<string, { lbl: string; cor: string }> = {
   convertido: { lbl: "Convertido", cor: "var(--excelente)" },
-  negociando: { lbl: "Em negociação", cor: "var(--atencao)" },
   convidado: { lbl: "Convidado", cor: "var(--label-3)" },
 };
 const dt = (s: string) => new Date(s).toLocaleDateString("pt-BR");
@@ -35,7 +34,7 @@ export default function IndicacoesView() {
   }, []);
 
   const convertidos = refs.filter((i) => i.status === "convertido").length;
-  const negociando = refs.filter((i) => i.status === "negociando").length;
+  const convidados = refs.filter((i) => i.status === "convidado").length;
   const abonados = refs.filter((i) => i.abonouMes).length;
 
   const link = useMemo(() => {
@@ -52,7 +51,7 @@ export default function IndicacoesView() {
 
       <div className="grid kpis" style={{ marginBottom: 16 }}>
         <KpiCard lbl="Indicações" val={String(refs.length)} foot="no total" />
-        <KpiCard lbl="Em negociação" val={String(negociando)} foot="no funil comercial" />
+        <KpiCard lbl="Convidadas" val={String(convidados)} foot="aguardando conversão" />
         <KpiCard lbl="Convertidas" val={String(convertidos)} foot="viraram cliente" tone="pos" />
         <KpiCard lbl="Meses abonados" val={String(abonados)} foot="mensalidades zeradas" tone="pos" />
       </div>

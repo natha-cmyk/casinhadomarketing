@@ -888,7 +888,7 @@ function Dashboard({ data }: { data: LeadsData }) {
           { id: "funil", label: "Por funil / etapa", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
           { id: "status", label: "Por status", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
           ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, defaultH: 9, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
-          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Saúde por canal", defaultSpan: 6, defaultH: 9, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
+          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Performance por canal", defaultSpan: 6, defaultH: 9, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
           // gráficos criados pelo usuário (chart builder)
           ...custom.map((cw) => ({
             id: `c-${cw.id}`,
@@ -986,14 +986,14 @@ function StatGroup({ title, items }: { title: string; items: { l: string; n: str
   );
 }
 
-// ── Saúde por canal: conversão (ganho/total) por canal, ordenado. Alterna barras/pizza ──
+// ── Performance por canal: conversão (ganho/total) por canal, ordenado. Alterna barras/pizza ──
 function ChannelHealthCard({ rows }: { rows: NonNullable<LeadsData["channelHealth"]> }) {
   const [viz, setViz] = useState<"list" | "pizza">("list");
   const top = rows.slice(0, 8);
   return (
     <div className="card">
       <div className="card-head">
-        <div className="t">Saúde por canal</div>
+        <div className="t">Performance por canal</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div className="seg" style={{ transform: "scale(.86)", transformOrigin: "right center" }}>
             <button className={viz === "list" ? "on" : ""} onClick={() => setViz("list")} type="button" title="Barras">☰</button>
