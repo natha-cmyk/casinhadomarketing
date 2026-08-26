@@ -233,6 +233,22 @@ function ManualStories({ rede }: { rede: string }) {
   );
 }
 
+// Vínculo do canal social → canal do CRM (pra atribuir os leads certos). Some se não há CRM.
+function VincularCrm({ rede, opcoes, atual }: { rede: string; opcoes: { canal?: string }[]; atual?: string }) {
+  const setStat = useStore((s) => s.setManualStat);
+  const nomes = Array.from(new Set(opcoes.map((o) => String(o.canal || "").trim()).filter(Boolean)));
+  if (!nomes.length) return null;
+  return (
+    <div style={{ minWidth: 220 }}>
+      <div style={{ fontSize: 11, color: "var(--label-3)", marginBottom: 2 }}>Vincular leads ao canal do CRM</div>
+      <select className="field-edit" style={{ fontSize: 12.5 }} value={atual ?? ""} onChange={(e) => setStat(rede, { crmCanal: e.target.value || undefined })} title="Escolha qual canal do seu CRM representa esta rede (pra somar os leads certos aqui).">
+        <option value="">— automático (por nome) —</option>
+        {nomes.map((n) => <option key={n} value={n}>{n}</option>)}
+      </select>
+    </div>
+  );
+}
+
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -251,22 +267,17 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [inbox, setInbox] = useState<InboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // leads do CRM atribuídos a ESTE canal (match por nome do canal na saúde do CRM)
-  const [crmCanal, setCrmCanal] = useState<{ total: number; ganho: number } | null>(null);
+  // saúde do CRM por canal (lista completa) — o match com este canal é feito no render,
+  // preferindo o VÍNCULO manual (manualStats[rede].crmCanal) e caindo no nome como heurística.
+  const [crmHealth, setCrmHealth] = useState<{ canal?: string; total?: number; ganho?: number }[]>([]);
   useEffect(() => {
     let alive = true;
     fetch("/api/crm/leads", { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => {
-        if (!alive) return;
-        const ch: { canal?: string; total?: number; ganho?: number }[] = Array.isArray(d?.channelHealth) ? d.channelHealth : [];
-        const ll = label.toLowerCase();
-        const row = ch.find((c) => { const cn = String(c.canal || "").toLowerCase(); return cn && (cn.includes(ll) || ll.includes(cn)); });
-        setCrmCanal(row ? { total: row.total || 0, ganho: row.ganho || 0 } : null);
-      })
+      .then((d) => { if (alive) setCrmHealth(Array.isArray(d?.channelHealth) ? d.channelHealth : []); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [label]);
+  }, []);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
   // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras)
@@ -596,28 +607,41 @@ export function SocialInsights({ rede }: { rede: string }) {
   // Produção de conteúdo & leads deste canal (calendário + CRM + DMs) — fica ACIMA do "Desempenho no tempo"
   const producaoNode = (() => {
     const cur = dateRange(s);
-    const dSince = new Date(cur.since), dUntil = new Date(cur.until);
-    const canalPosts = s.posts.filter((p) => p.canal === label && (() => { const d = new Date(p.y, p.m, p.d); return d >= dSince && d <= dUntil; })());
-    const porFormato: Record<string, number> = {};
-    for (const p of canalPosts) { const f = (p.formato || "—").trim() || "—"; porFormato[f] = (porFormato[f] || 0) + 1; }
-    const fmts = Object.entries(porFormato).sort((a, b) => b[1] - a[1]);
-    const mxF = Math.max(1, ...fmts.map(([, n]) => n));
+    const dSince = new Date(cur.since + "T00:00:00"), dUntil = new Date(cur.until + "T23:59:59");
+    const ll = label.trim().toLowerCase();
+    const canalPosts = s.posts.filter((p) => String(p.canal || "").trim().toLowerCase() === ll && (() => { const d = new Date(p.y, p.m, p.d); return d >= dSince && d <= dUntil; })());
+    const porTipo: Record<string, number> = {};
+    for (const p of canalPosts) { const f = (p.formato || "Outro").trim() || "Outro"; porTipo[f] = (porTipo[f] || 0) + 1; }
+    const stories = platform === "instagram" ? (s.manualStats[rede]?.stories ?? 0) : 0;
+    if (stories > 0) porTipo["Stories"] = (porTipo["Stories"] || 0) + stories;
+    const tipos = Object.entries(porTipo).sort((a, b) => b[1] - a[1]);
+    const mxF = Math.max(1, ...tipos.map(([, n]) => n));
+    const totalConteudos = canalPosts.length + stories;
     const dmLeads = inbox?.volume ? inbox.volume.summary.uniqueConversations : null;
+    // CRM: vínculo manual (manualStats[rede].crmCanal) > heurística por nome
+    const vinc = s.manualStats[rede]?.crmCanal;
+    const crmRow = vinc
+      ? crmHealth.find((c) => String(c.canal || "") === vinc)
+      : crmHealth.find((c) => { const cn = String(c.canal || "").toLowerCase(); return cn && (cn.includes(ll) || ll.includes(cn)); });
+    const crmLeads = crmRow?.total ?? null;
     return (
       <div className="card pad-lg" style={{ marginBottom: 16 }}>
         <div className="card-head"><div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginTop: 6 }}>
-          <MiniStat l="Conteúdos" n={String(canalPosts.length)} />
-          {platform === "instagram" && <ManualStories rede={rede} />}
-          <MiniStat l="Leads (CRM)" n={crmCanal ? fmt(crmCanal.total) : "—"} />
+          <MiniStat l="Conteúdos" n={fmt(totalConteudos)} />
+          <MiniStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} />
           <MiniStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} />
         </div>
-        {fmts.length > 0 && (
-          <div className="si-dim" style={{ marginTop: 12 }}>
-            <h5>Por formato</h5>
-            {fmts.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)}
-          </div>
-        )}
+        <div className="si-dim" style={{ marginTop: 12 }}>
+          <h5>Por tipo de conteúdo</h5>
+          {tipos.length > 0
+            ? tipos.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)
+            : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Nenhum conteúdo programado neste período para {label}. (Os conteúdos vêm do calendário — canal &quot;{label}&quot;.)</div>}
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--hairline)" }}>
+          {platform === "instagram" && <ManualStories rede={rede} />}
+          <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
+        </div>
       </div>
     );
   })();
