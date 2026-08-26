@@ -331,10 +331,10 @@ function AdAccountPanel({ a, open, onToggle }: { a: AdAccountData; open: boolean
     <div className={`card pad-lg${open ? " open" : ""}`} style={{ marginBottom: 12 }}>
       <div className="card-head" style={{ marginBottom: open ? 14 : 0, cursor: "pointer" }} onClick={onToggle}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
-          <span className="cc-conx-ico" style={{ background: "#1877F2" }}><Ic name="facebook" /></span>
+          <span className="cc-conx-ico" style={{ background: a.platform === "googleads" ? "#4285F4" : "#1877F2" }}><Ic name={a.platform === "googleads" ? "googlebusiness" : "facebook"} /></span>
           <div style={{ minWidth: 0 }}>
             <div className="t" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</div>
-            <div className="sub">Meta Ads · {a.currency} · {money(t.spend)} · {fmt(t.leads)} leads</div>
+            <div className="sub">{a.platform === "googleads" ? "Google Ads" : "Meta Ads"} · {a.currency} · {money(t.spend)} · {fmt(t.leads)} leads</div>
           </div>
         </div>
         <span className="badge">{a.campaigns.length} camp.</span>

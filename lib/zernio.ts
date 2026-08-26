@@ -189,6 +189,13 @@ export function adsInsights(
   return zernio<{ objectId: string; data: AdInsightRow[]; paging?: unknown }>(`/ads/insights?${q.toString()}`);
 }
 
+// Google Ads: passthrough de GAQL. GET /ads/insights?accountId=<zernio googleads>&objectId=<customerId>&query=<GAQL>
+// A resposta é o passthrough do Google (results/rows) — o parsing é defensivo na rota.
+export function googleAdsInsights(accountId: string, objectId: string, query: string) {
+  const q = new URLSearchParams({ accountId, objectId, query });
+  return zernio<Record<string, unknown>>(`/ads/insights?${q.toString()}`);
+}
+
 // ── YouTube (canal) ────────────────────────────────────────────
 // channel-insights: totais de views / tempo de exibição / inscritos (SEM série diária de canal).
 // A API limita o intervalo a 88 dias — clampamos o `since` pra caber.
