@@ -75,11 +75,17 @@ model Subscription {
   id              String    @id @default(cuid())
   workspaceId     String    @unique
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  plano           String    @default("mensal") // mensal | anual
+  plano           String    @default("mensal") // mensal | anual_parcelado | anual_avista
   valorMensal     Int       @default(500) // R$/mês no mensal
-  valorAnualMes   Int       @default(420) // R$/mês equivalente no anual
+  valorAnualMes   Int       @default(420) // R$/mês equivalente no anual parcelado
   proximaCobranca DateTime?
-  status          String    @default("ativa")
+  status          String    @default("ativa") // ativa | trial | inadimplente | cancelada | pausada
+  // Stripe (env-gated; nulo = ainda sem assinatura real, cai no controle manual)
+  stripeCustomerId     String?
+  stripeSubscriptionId String? @unique
+  stripePriceId        String?
+  currentPeriodEnd     DateTime?
+  trialEnd             DateTime?
   updatedAt       DateTime  @updatedAt
 }
 
@@ -190,6 +196,8 @@ model EnvConfig {
   adConfig    Json      @default("{}") // { manualChannels: [...], adAccounts: {…} } — mídia paga
   customInd   Json      @default("{}") // { painel: [ {id,label,metric,...} ] } — indicadores criados pelo perfil
   calManuais  Json      @default("[]") // ["WhatsApp (grupos)", ...] — canais MANUAIS do calendário (só registro, sem publicação síncrona)
+  calDefaults Json      @default("{}") // { redeId: "nome do perfil" } — perfil padrão por canal (multiconta)
+  calOpcoes   Json      @default("{}") // { pilares?: string[], formatos?: string[] } — opções custom criadas na hora
   agentsConfig Json     @default("{}") // { agentKey: { enabled, panels:[]|null, promptExtra } } — personalização dos agentes
   widgetLayout Json     @default("{}") // { painel: { order:[], size:{id:"sm"|"lg"}, hidden:[] } } — layout arrastável/redimensionável dos widgets
   updatedAt   DateTime  @updatedAt
@@ -225,6 +233,7 @@ enum PostStatus {
   agendado
   publicado
   falhou
+  cancelado
 }
 
 model Post {
@@ -244,16 +253,23 @@ model Post {
   cta          String     @default("")
   hashtags     String     @default("")
   arquivo      String     @default("")
+  notas        String     @default("") // anotações internas de produção
+  linkRef      String     @default("") // link de referência (inspiração/briefing)
+  roteiro      String     @default("") // link do doc do roteiro
+  // ajustes por canal na publicação: { redeId: { caption? } } — legenda específica por rede (Zernio customContent)
+  overrides    Json       @default("{}")
   // mídia enviada (presign Zernio): [{ type, url, filename, mimeType, size? }]
   media        Json       @default("[]")
   status       PostStatus @default(rascunho)
   contas       String[]   @default([])
   zernioPostId String?
+  deletedAt    DateTime?  // lixeira: soft-delete restaurável por 7 dias, depois purga automática
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@index([workspaceId, data])
   @@index([status])
+  @@index([deletedAt])
 }
 
 // ─────────────────────────────────────────────────────────────

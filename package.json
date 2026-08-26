@@ -13,7 +13,7 @@
     "db:verify": "tsx scripts/verify-seed.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && prisma migrate deploy && next build"
+    "vercel-build": "prisma generate && node scripts/db-preflight.mjs && prisma migrate deploy && next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",
@@ -26,6 +26,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "recharts": "^3.10.1",
+    "stripe": "^22.5.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

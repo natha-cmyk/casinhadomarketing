@@ -4,9 +4,11 @@
 // 2 LLM (OBRIGATÓRIO, 4 provedores) · 3 redes (conectar de verdade / pular) · 4 CRM (pular)
 // 5 produtos/canais (pular) → botão central animado "Entrar na plataforma".
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { UFS, RAMOS, maskPhone } from "@/lib/perfil-fields";
+import { createClient } from "@/lib/supabase/client";
 
 const PROVIDERS = [
   { v: "openrouter", label: "OpenRouter (recomendado)", url: "https://openrouter.ai/keys" },
@@ -22,7 +24,13 @@ const inp: React.CSSProperties = { width: "100%", border: "1px solid var(--hairl
 const lbl: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, color: "var(--label-2)", textTransform: "uppercase", letterSpacing: ".4px", display: "block", marginBottom: 5 };
 
 export function OnboardingForm({ initial, redes }: { initial: Initial; redes: string[] }) {
+  const router = useRouter();
   const [step, setStep] = useState(0);
+  const sair = async () => {
+    try { await createClient().auth.signOut(); } catch { /* segue pro login mesmo assim */ }
+    router.push("/login");
+    router.refresh();
+  };
   const ramoInicialCustom = initial.ramo && !RAMOS.includes(initial.ramo);
   const [f, setF] = useState<Initial>({ ...initial, telefone: maskPhone(initial.telefone) });
   const [ramoSel, setRamoSel] = useState(ramoInicialCustom ? "__outro__" : initial.ramo);
@@ -103,6 +111,9 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
   return (
     <div style={{ minHeight: "100dvh", overflowY: "auto", background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
       <style>{`@keyframes obUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes obPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}@keyframes obPop{0%{opacity:0;transform:scale(.85)}60%{transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}`}</style>
+      <div style={{ position: "fixed", top: 16, right: 18, zIndex: 10 }}>
+        <button onClick={sair} type="button" style={{ border: "1px solid var(--hairline)", background: "#fff", borderRadius: 999, padding: "6px 14px", fontSize: 12.5, fontWeight: 600, color: "var(--label-2)", cursor: "pointer" }}>Sair</button>
+      </div>
       <div key={step} style={{ width: "100%", maxWidth: 560, margin: "auto", animation: "obUp .45s cubic-bezier(.22,.61,.36,1)" }}>
         {step > 0 && (
           <div style={{ display: "flex", gap: 6, marginBottom: 22 }}>
@@ -161,9 +172,9 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
           </Card>
         )}
 
-        {/* 2 — LLM (OBRIGATÓRIO) */}
+        {/* 2 — LLM (recomendado, mas pode configurar depois) */}
         {step === 2 && (
-          <Card title="Conecte sua LLM" sub="Obrigatório: é a inteligência que roda os assistentes (Athena, Apollo, Poseidon, Dionísio). Sem ela, eles não analisam seus dados.">
+          <Card title="Conecte sua LLM" sub="É a inteligência que roda os assistentes (Athena, Apollo, Poseidon, Dionísio). Sem ela, eles não analisam seus dados — mas você pode configurar depois na Personalização.">
             {llmConnected ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10, background: "color-mix(in srgb, var(--excelente,#2FB457) 10%, #fff)", border: "1px solid color-mix(in srgb, var(--excelente,#2FB457) 30%, transparent)", fontSize: 13, fontWeight: 600 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--excelente,#2FB457)" }} /> LLM conectada. Pode seguir.
@@ -184,7 +195,7 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
               </div>
             )}
             {err && <div style={{ color: "var(--red)", fontSize: 12.5, marginTop: 12 }}>{err}</div>}
-            <Nav onBack={back} onNext={next} nextDisabled={!llmConnected} nextLabel="Continuar →" />
+            <Nav onBack={back} onNext={next} nextLabel={llmConnected ? "Continuar →" : "Configurar depois →"} />
           </Card>
         )}
 

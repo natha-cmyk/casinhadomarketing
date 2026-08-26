@@ -1,9 +1,10 @@
 "use client";
 // Porta renderPostModal (blueprint 1475-1504) + savePost (1505-1515).
 // Modal de criação/edição de post do calendário de conteúdo.
-import { useRef, useState } from "react";
-import { useStore, newId, type PostItem, type PostMedia } from "@/lib/store";
-import { savePosts } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { useStore, newId, type PostItem, type PostMedia, type PostOverride } from "@/lib/store";
+import { savePosts, deletePostApi } from "@/lib/api";
+import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -17,6 +18,7 @@ const PLAT_REV: Record<string, string> = { twitter: "x" };
 // Canais manuais de conteúdo agora vêm do store (store.calManuais). Só registro, sem publicação síncrona.
 
 type ZAccount = {
+  _id?: string;
   platform: string;
   displayName?: string;
   username?: string;
@@ -65,11 +67,56 @@ function perfisConectados(accounts: ZAccount[]): string[] {
   return out;
 }
 
+// id da rede (Casinha) → plataforma Zernio (x → twitter).
+const platOfRede = (id: string) => (id === "x" ? "twitter" : id);
+
+// Formatos válidos por canal (rótulo da rede). Canal manual / desconhecido → lista completa.
+const FORMATS_BY_CANAL: Record<string, string[]> = {
+  Instagram: ["Reels", "Carrossel", "Post único", "Story"],
+  Facebook: ["Reels", "Carrossel", "Post único", "Story"],
+  TikTok: ["Vídeo", "Story"],
+  YouTube: ["Short", "Vídeo"],
+  LinkedIn: ["Post único", "Carrossel", "Vídeo", "Artigo"],
+  X: ["Post único", "Thread", "Vídeo"],
+  Threads: ["Post único", "Carrossel", "Vídeo"],
+};
+function formatosDoCanal(canalLabel: string): string[] {
+  return FORMATS_BY_CANAL[canalLabel] || FORMATOS_POST;
+}
+
+// Sugestão automática de etapa do funil pelo formato + CTA. Manual continua mandando.
+// CTA de ação forte → Fundo (conversão); alcance (reels/story/short) → Topo; educação → Meio.
+function sugestaoFunil(formato: string, cta: string): string {
+  const c = (cta || "").toLowerCase();
+  if (/agend|visit|contrat|assin|compr|whats|fale|inscrev|garant|vaga|or[çc]ament|link na bio/.test(c)) return "Fundo";
+  if (/reels|story|short|v[íi]deo/i.test(formato)) return "Topo";
+  if (/carrossel|post|artigo|thread|blog/i.test(formato)) return "Meio";
+  return "Topo";
+}
+
+// Perfis conectados FILTRADOS pela plataforma do canal escolhido. Canal manual/sem rede → todos.
+function perfisDoCanal(accounts: ZAccount[], canalLabel: string): string[] {
+  const rede = REDES.find((r) => r.label === canalLabel);
+  if (!rede) return []; // canal manual → sem perfil social forçado
+  const plat = platOfRede(rede.id);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const a of contasSociais(accounts)) {
+    if (a.platform !== plat) continue;
+    const nome = (a.displayName || a.username || rede.label || a.platform || "").trim();
+    if (!nome || seen.has(nome)) continue;
+    seen.add(nome);
+    out.push(nome);
+  }
+  return out;
+}
+
 const POST_STATUS: Record<string, { label: string; cor: string }> = {
   rascunho: { label: "Rascunho", cor: "#8E8E93" },
   agendado: { label: "Agendado", cor: "#00BBC5" },
-  publicado: { label: "Publicado", cor: "#2FB457" },
-  falhou: { label: "Falhou", cor: "#FF001E" },
+  publicado: { label: "Publicado", cor: "#2FB457" }, // verde = saiu OK
+  falhou: { label: "Erro ao publicar", cor: "#FF9F0A" }, // amarelo = deu erro
+  cancelado: { label: "Cancelado / impedido", cor: "#FF001E" }, // vermelho = não vai sair
 };
 
 interface Fields {
@@ -87,6 +134,10 @@ interface Fields {
   legenda: string;
   cta: string;
   hashtags: string;
+  notas: string;
+  linkRef: string;
+  roteiro: string;
+  overrides: Record<string, PostOverride>;
   status: string;
   contas: string[];
 }
@@ -106,6 +157,12 @@ export function PostModal() {
   const calManuais = useStore((st) => st.calManuais);
   const calMonth = useStore((st) => st.calMonth);
   const calYear = useStore((st) => st.calYear);
+  const calCanal = useStore((st) => st.calCanal);
+  const calPerfil = useStore((st) => st.calPerfil);
+  const calDefaults = useStore((st) => st.calDefaults);
+  const setCalDefault = useStore((st) => st.setCalDefault);
+  const calOpcoes = useStore((st) => st.calOpcoes);
+  const addCalOpcao = useStore((st) => st.addCalOpcao);
   const set = useStore((st) => st.set);
   const addPost = useStore((st) => st.addPost);
   const updatePost = useStore((st) => st.updatePost);
@@ -113,7 +170,7 @@ export function PostModal() {
 
   // Fonte única (auto-sincroniza quando novas contas conectam) + manuais do usuário:
   const canais = canaisConectados(zernioAccounts, calManuais);
-  const perfis = perfisConectados(zernioAccounts);
+  const perfisAll = perfisConectados(zernioAccounts);
 
   const existing = pm && pm.mode === "edit" ? posts.find((x) => x.id === pm.id) : undefined;
 
@@ -123,6 +180,9 @@ export function PostModal() {
   // Upload de mídia (presign Zernio → PUT direto no storage)
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // guarda o File local por url (pra recorte sem taint de CORS) + alvo do editor de recorte
+  const filesByUrl = useRef<Map<string, File>>(new Map());
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
 
   // Estado seed: post existente (edição) ou defaults do blueprint (novo).
   const [f, setF] = useState<Fields>(() => {
@@ -147,6 +207,10 @@ export function PostModal() {
         legenda: existing.legenda,
         cta: existing.cta,
         hashtags: existing.hashtags,
+        notas: existing.notas ?? "",
+        linkRef: existing.linkRef ?? "",
+        roteiro: existing.roteiro ?? "",
+        overrides: existing.overrides ? { ...existing.overrides } : {},
         status: existing.status,
         contas: [...(existing.contas || [])],
       };
@@ -154,13 +218,24 @@ export function PostModal() {
     const y = pm?.y ?? calYear;
     const m = pm?.m ?? calMonth;
     const d = pm?.d ?? 1;
+    // herda o canal/perfil da visualização atual do calendário (se filtrada)
+    const canalPre = calCanal !== "todos" && canais.some((c) => c.nome === calCanal) ? calCanal : canais[0]?.nome ?? "Instagram";
+    const perfisPre = perfisDoCanal(zernioAccounts, canalPre);
+    const redePre = REDES.find((r) => r.label === canalPre);
+    const ridPre = redePre && redesConectadas(zernioAccounts).some((r) => r.id === redePre.id) ? redePre.id : null;
+    // perfil inicial: filtro da visualização > perfil PADRÃO do canal > 1º perfil do canal
+    const defPre = ridPre ? calDefaults[ridPre] : undefined;
+    const perfilPre =
+      calPerfil !== "todos" && perfisPre.includes(calPerfil) ? calPerfil
+      : defPre && perfisPre.includes(defPre) ? defPre
+      : perfisPre[0] ?? "";
     return {
       data: String(d).padStart(2, "0") + "/" + String(m + 1).padStart(2, "0") + "/" + y,
       hora: "09:00",
       titulo: "",
-      canal: canais[0]?.nome ?? "Instagram",
-      formato: "Reels",
-      perfil: perfis[0] ?? "",
+      canal: canalPre,
+      formato: formatosDoCanal(canalPre)[0] ?? "Reels",
+      perfil: perfilPre,
       colab: "",
       pilar: "Espaços",
       funil: "Topo",
@@ -169,15 +244,80 @@ export function PostModal() {
       legenda: "",
       cta: "",
       hashtags: "",
+      notas: "",
+      linkRef: "",
+      roteiro: "",
+      overrides: {},
       status: "rascunho",
-      contas: [],
+      contas: ridPre ? [ridPre] : [],
     };
   });
+
+  // horários SUGERIDOS (melhores horários da conta, via Zernio best-time) pro canal/perfil atual
+  const [sugHoras, setSugHoras] = useState<string[]>([]);
+  useEffect(() => {
+    const rede = REDES.find((r) => r.label === f.canal);
+    const plat = rede ? platOfRede(rede.id) : null;
+    const acc = plat
+      ? (zernioAccounts as ZAccount[]).find((a) => a.platform === plat && (a.displayName || a.username) === f.perfil)
+      : null;
+    if (!acc?._id || !plat) { setSugHoras([]); return; }
+    let alive = true;
+    fetch(`/api/zernio/besttime?accountId=${encodeURIComponent(acc._id)}&platform=${encodeURIComponent(plat)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        const slots: { hour: number; avg_engagement: number }[] = Array.isArray(d?.slots) ? d.slots : [];
+        const byHour = new Map<number, { sum: number; n: number }>();
+        for (const s of slots) {
+          const e = byHour.get(s.hour) || { sum: 0, n: 0 };
+          e.sum += s.avg_engagement || 0; e.n += 1; byHour.set(s.hour, e);
+        }
+        const top = [...byHour.entries()]
+          .map(([h, v]) => ({ h, avg: v.sum / (v.n || 1) }))
+          .sort((a, b) => b.avg - a.avg) // pega as 6 horas de MAIOR engajamento
+          .slice(0, 6)
+          .sort((a, b) => a.h - b.h) // …mas exibe em ORDEM cronológica
+          .map((x) => String(x.h).padStart(2, "0") + ":00");
+        setSugHoras(top);
+      })
+      .catch(() => { if (alive) setSugHoras([]); });
+    return () => { alive = false; };
+  }, [f.canal, f.perfil, zernioAccounts]);
 
   if (!pm) return null;
   if (pm.mode === "edit" && !existing) return null;
 
   const upd = (patch: Partial<Fields>) => setF((prev) => ({ ...prev, ...patch }));
+
+  // perfis e formatos VÁLIDOS pro canal escolhido (produtora: canal filtra perfis + formatos)
+  const perfis = perfisDoCanal(zernioAccounts, f.canal);
+  const formatos = formatosDoCanal(f.canal);
+
+  // id da rede CONECTADA correspondente ao rótulo do canal (null se manual/não conectada)
+  const redeIdDoCanal = (canalLabel: string): string | null => {
+    const rede = REDES.find((r) => r.label === canalLabel);
+    if (!rede) return null;
+    return redesConectadas(zernioAccounts).some((r) => r.id === rede.id) ? rede.id : null;
+  };
+
+  // trocar de canal reseta perfil e formato pros válidos daquele canal (evita "IG com perfil do TikTok")
+  // e já MARCA o checkbox de "Publicar em" da rede correspondente.
+  const onCanalChange = (canal: string) => {
+    const p = perfisDoCanal(zernioAccounts, canal);
+    const fmt = formatosDoCanal(canal);
+    const rid = redeIdDoCanal(canal);
+    const def = rid ? calDefaults[rid] : undefined;
+    const isManual = calManuais.includes(canal);
+    setF((prev) => ({
+      ...prev,
+      canal,
+      perfil: p.includes(prev.perfil) ? prev.perfil : def && p.includes(def) ? def : p[0] ?? "",
+      formato: fmt.includes(prev.formato) ? prev.formato : fmt[0] ?? "",
+      // marca SÓ o canal escolhido (manual = nenhum). Se quiser mais canais, marca à mão depois.
+      contas: isManual ? [] : rid ? [rid] : [],
+    }));
+  };
 
   // Upload real: presign na nossa API → PUT do arquivo DIRETO no storage (não passa
   // pelo servidor → sem limite de 4.5MB) → guarda publicUrl como MediaItem.
@@ -196,6 +336,7 @@ export function PostModal() {
       const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
       if (!put.ok) throw new Error(`upload falhou (${put.status})`);
       const item: PostMedia = { type: mimeToType(file.type), url: pj.publicUrl, filename: file.name, mimeType: file.type, size: file.size };
+      filesByUrl.current.set(pj.publicUrl, file); // guarda p/ recorte sem CORS
       setF((prev) => ({ ...prev, media: [...prev.media, item], arquivo: prev.arquivo || file.name }));
       setMsg({ kind: "ok", text: `“${file.name}” enviado ✓` });
     } catch (e) {
@@ -205,7 +346,41 @@ export function PostModal() {
       if (fileRef.current) fileRef.current.value = "";
     }
   };
+  // Vários arquivos de uma vez (carrossel): envia em sequência, cada um vira 1 mídia do MESMO post.
+  const onPickFiles = async (files: FileList) => {
+    const arr = Array.from(files);
+    for (const file of arr) {
+      // eslint-disable-next-line no-await-in-loop
+      await onPickFile(file);
+    }
+    if (arr.length > 1) setMsg({ kind: "ok", text: `${arr.length} arquivos enviados ✓ (viram um carrossel no mesmo post)` });
+  };
   const removeMedia = (url: string) => setF((prev) => ({ ...prev, media: prev.media.filter((m) => m.url !== url) }));
+
+  // upload de um Blob (usado pelo recorte) → publicUrl
+  const uploadBlob = async (blob: Blob, filename: string, contentType: string): Promise<string> => {
+    const pres = await fetch("/api/posts/presign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename, contentType, size: blob.size }) });
+    const pj = await pres.json().catch(() => null);
+    if (!pres.ok || !pj?.uploadUrl) throw new Error(pj?.error || "não foi possível preparar o upload");
+    const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": contentType }, body: blob });
+    if (!put.ok) throw new Error(`upload falhou (${put.status})`);
+    return pj.publicUrl as string;
+  };
+  // salva o recorte: sobe a imagem recortada e troca a mídia original por ela
+  const onCropSave = async (blob: Blob) => {
+    if (!cropTarget) return;
+    const oldUrl = cropTarget.url;
+    const baseName = (cropTarget.filename || "recorte").replace(/\.[^.]+$/, "");
+    const filename = `${baseName}-crop.jpg`;
+    const newUrl = await uploadBlob(blob, filename, "image/jpeg");
+    filesByUrl.current.set(newUrl, new File([blob], filename, { type: "image/jpeg" }));
+    setF((prev) => ({
+      ...prev,
+      media: prev.media.map((m) => (m.url === oldUrl ? { type: "image", url: newUrl, filename, mimeType: "image/jpeg", size: blob.size } : m)),
+    }));
+    setCropTarget(null);
+    setMsg({ kind: "ok", text: "Imagem recortada aplicada ✓" });
+  };
 
   const close = () => set({ postModal: null });
 
@@ -229,6 +404,10 @@ export function PostModal() {
       legenda: f.legenda,
       cta: f.cta,
       hashtags: f.hashtags,
+      notas: f.notas,
+      linkRef: f.linkRef,
+      roteiro: f.roteiro,
+      overrides: f.overrides,
       status: forceStatus ?? f.status,
       contas: f.contas,
       y,
@@ -275,7 +454,8 @@ export function PostModal() {
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) {
         setBusy(false);
-        setMsg({ kind: "err", text: j?.error || "Falha ao agendar. Tente novamente." });
+        if (j?.detail) console.error("[publish] detalhe:", j.detail);
+        setMsg({ kind: "err", text: (j?.error || "Falha ao agendar. Tente novamente.") + (j?.detail ? ` — ${String(j.detail).slice(0, 160)}` : "") });
         return;
       }
       updatePost(id, { status: j.status || (publishNow ? "publicado" : "agendado") });
@@ -293,7 +473,11 @@ export function PostModal() {
   };
 
   const doDelete = () => {
-    if (pm.id) deletePost(pm.id);
+    if (pm.id) {
+      const id = pm.id;
+      deletePost(id);
+      void deletePostApi(id); // remoção explícita no banco (salvar é só upsert)
+    }
     close();
   };
 
@@ -306,8 +490,20 @@ export function PostModal() {
     f.canal && !canais.some((c) => c.nome === f.canal)
       ? [f.canal, ...canais.map((c) => c.nome)]
       : canais.map((c) => c.nome);
+  const dedupe = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
+  const formatoOptions = dedupe([...(f.formato ? [f.formato] : []), ...formatos, ...calOpcoes.formatos]);
+  const pilarOptions = dedupe([...(f.pilar ? [f.pilar] : []), ...PILARES_POST, ...calOpcoes.pilares]);
   const perfilOptions = f.perfil && !perfis.includes(f.perfil) ? [f.perfil, ...perfis] : perfis;
-  const colabOptions = f.colab && !perfis.includes(f.colab) ? [f.colab, ...perfis] : perfis;
+
+  // seletor com opção "➕ Novo…" que cria e já fixa a opção (persistida no config)
+  const onPick = (tipo: "pilares" | "formatos", v: string, setter: (x: string) => void) => {
+    if (v === "__novo__") {
+      const nome = (window.prompt(tipo === "pilares" ? "Novo pilar de conteúdo:" : "Novo formato:") || "").trim();
+      if (nome) { addCalOpcao(tipo, nome); setter(nome); }
+      return;
+    }
+    setter(v);
+  };
 
   const sel = (id: string, arr: string[], val: string, onChange: (v: string) => void) => (
     <select className="field-edit" id={id} value={val} onChange={(e) => onChange(e.target.value)}>
@@ -318,6 +514,8 @@ export function PostModal() {
   );
 
   return (
+    <>
+    {cropTarget && <MediaCropModal target={cropTarget} onCancel={() => setCropTarget(null)} onSave={onCropSave} />}
     <div
       className="pm-back"
       id="pmBack"
@@ -353,6 +551,20 @@ export function PostModal() {
                 placeholder="hh:mm"
                 onChange={(e) => upd({ hora: e.target.value })}
               />
+              {sugHoras.length > 0 && (
+                <select
+                  className="field-edit"
+                  style={{ marginTop: 5, fontSize: 12.5, borderRadius: 10 }}
+                  value=""
+                  onChange={(e) => { if (e.target.value) upd({ hora: e.target.value }); }}
+                  title={`Melhores horários pra postar no ${f.canal}, calculados pelo engajamento histórico das suas publicações nesse canal. Ordenados por horário.`}
+                >
+                  <option value="">★ Melhores horários…</option>
+                  {sugHoras.map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
           <label className="field-lbl">Título</label>
@@ -366,7 +578,7 @@ export function PostModal() {
           <div className="pm-row">
             <div>
               <label className="field-lbl">Canal</label>
-              {sel("pmCanal", canalOptions, f.canal, (v) => upd({ canal: v }))}
+              {sel("pmCanal", canalOptions, f.canal, onCanalChange)}
               {calManuais.includes(f.canal) && (
                 <div className="pm-hint" style={{ marginTop: 6 }}>
                   Canal manual — só registro de conteúdo. Não há publicação automática por aqui.
@@ -375,7 +587,10 @@ export function PostModal() {
             </div>
             <div>
               <label className="field-lbl">Formato</label>
-              {sel("pmFormato", FORMATOS_POST, f.formato, (v) => upd({ formato: v }))}
+              <select className="field-edit" id="pmFormato" value={f.formato} onChange={(e) => onPick("formatos", e.target.value, (v) => upd({ formato: v }))}>
+                {formatoOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                <option value="__novo__">➕ Novo formato…</option>
+              </select>
             </div>
           </div>
           <div className="pm-row">
@@ -392,30 +607,61 @@ export function PostModal() {
                   <option key={o}>{o}</option>
                 ))}
               </select>
+              {(() => {
+                const rid = redeIdDoCanal(f.canal);
+                if (!rid || perfis.length < 2 || !f.perfil) return null;
+                const isDef = calDefaults[rid] === f.perfil;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setCalDefault(rid, isDef ? "" : f.perfil)}
+                    style={{ marginTop: 5, border: 0, background: "transparent", color: isDef ? "var(--cyan)" : "var(--label-3)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }}
+                    title="Perfil que já vem selecionado quando você escolher este canal"
+                  >
+                    {isDef ? "★ perfil padrão deste canal" : "☆ tornar perfil padrão deste canal"}
+                  </button>
+                );
+              })()}
             </div>
             <div>
               <label className="field-lbl">Perfil colaborador</label>
-              <select
+              <input
                 className="field-edit"
                 id="pmColab"
+                list="pmColabList"
                 value={f.colab}
+                placeholder="@qualquer perfil (colab)"
                 onChange={(e) => upd({ colab: e.target.value })}
-              >
-                <option value="">— nenhum —</option>
-                {colabOptions.map((x) => (
-                  <option key={x}>{x}</option>
+              />
+              <datalist id="pmColabList">
+                {perfisAll.map((x) => (
+                  <option key={x} value={x} />
                 ))}
-              </select>
+              </datalist>
             </div>
           </div>
           <div className="pm-row">
             <div>
               <label className="field-lbl">Pilar / categoria</label>
-              {sel("pmPilar", PILARES_POST, f.pilar, (v) => upd({ pilar: v }))}
+              <select className="field-edit" id="pmPilar" value={f.pilar} onChange={(e) => onPick("pilares", e.target.value, (v) => upd({ pilar: v }))}>
+                {pilarOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                <option value="__novo__">➕ Novo pilar…</option>
+              </select>
             </div>
             <div>
               <label className="field-lbl">Funil</label>
               {sel("pmFunil", FUNIL_POST, f.funil, (v) => upd({ funil: v }))}
+              {(() => {
+                const sug = sugestaoFunil(f.formato, f.cta);
+                return sug !== f.funil ? (
+                  <div className="pm-hint" style={{ marginTop: 6 }}>
+                    Sugerido: <b>{sug}</b>{" "}
+                    <button type="button" onClick={() => upd({ funil: sug })} style={{ border: 0, background: "transparent", color: "var(--cyan)", cursor: "pointer", fontWeight: 700, padding: 0 }}>
+                      aplicar
+                    </button>
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
           <label className="field-lbl">Mídia (imagem, vídeo, gif ou pdf)</label>
@@ -423,9 +669,10 @@ export function PostModal() {
             ref={fileRef}
             type="file"
             id="pmArquivo"
+            multiple
             accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,application/pdf"
             style={{ display: "none" }}
-            onChange={(e) => { const file = e.target.files?.[0]; if (file) onPickFile(file); }}
+            onChange={(e) => { const files = e.target.files; if (files?.length) onPickFiles(files); }}
           />
           <button
             type="button"
@@ -449,6 +696,9 @@ export function PostModal() {
                     </span>
                   )}
                   <span style={{ flex: 1, fontSize: 12.5, color: "var(--label)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.filename || m.url}</span>
+                  {m.type === "image" && (
+                    <button type="button" onClick={() => setCropTarget({ url: m.url, file: filesByUrl.current.get(m.url), filename: m.filename })} style={{ border: 0, background: "transparent", color: "var(--cyan)", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Ajustar</button>
+                  )}
                   <button type="button" onClick={() => removeMedia(m.url)} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 13 }} aria-label="Remover">✕</button>
                 </div>
               ))}
@@ -485,6 +735,37 @@ export function PostModal() {
               />
             </div>
           </div>
+          <label className="field-lbl">Notas de produção</label>
+          <textarea
+            className="field-edit"
+            id="pmNotas"
+            rows={2}
+            placeholder="Anotações internas (não vão na publicação)"
+            value={f.notas}
+            onChange={(e) => upd({ notas: e.target.value })}
+          />
+          <div className="pm-row">
+            <div>
+              <label className="field-lbl">Link de referência</label>
+              <input
+                className="field-edit"
+                id="pmLinkRef"
+                value={f.linkRef}
+                placeholder="https://… (inspiração/briefing)"
+                onChange={(e) => upd({ linkRef: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-lbl">Roteiro (link do doc)</label>
+              <input
+                className="field-edit"
+                id="pmRoteiro"
+                value={f.roteiro}
+                placeholder="https://docs… do roteiro"
+                onChange={(e) => upd({ roteiro: e.target.value })}
+              />
+            </div>
+          </div>
           <div className="pm-sched">
             <div className="pm-sched-h">
               Agendamento &amp; publicação
@@ -496,27 +777,72 @@ export function PostModal() {
               )}
             </div>
             <label className="field-lbl">Publicar em (canais conectados)</label>
-            {conn.length ? (
-              <div className="pm-contas">
+            {calManuais.includes(f.canal) ? (
+              <div className="pm-hint">⚠️ Canal manual — <b>sem publicação automática sincronizada</b>. Serve só como registro no calendário; a publicação é feita manualmente por você na plataforma do canal.</div>
+            ) : conn.length ? (
+              <div className="pm-contas" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
                 {conn.map((r) => {
                   const chk = f.contas.includes(r.id);
                   return (
-                    <label className="pm-conta" key={r.id}>
-                      <input
-                        type="checkbox"
-                        data-pmconta={r.id}
-                        checked={chk}
-                        onChange={(e) =>
-                          upd({
-                            contas: e.target.checked
-                              ? [...f.contas, r.id]
-                              : f.contas.filter((x) => x !== r.id),
-                          })
-                        }
-                      />
-                      <span className="conta-dot" style={{ background: r.cor }} />
-                      {r.label}
-                    </label>
+                    <div key={r.id}>
+                      <label className="pm-conta">
+                        <input
+                          type="checkbox"
+                          data-pmconta={r.id}
+                          checked={chk}
+                          onChange={(e) =>
+                            upd({
+                              contas: e.target.checked
+                                ? [...f.contas, r.id]
+                                : f.contas.filter((x) => x !== r.id),
+                            })
+                          }
+                        />
+                        <span className="conta-dot" style={{ background: r.cor }} />
+                        {r.label}
+                      </label>
+                      {chk && (() => {
+                        const ov = f.overrides[r.id] || {};
+                        const setOv = (patch: PostOverride) => upd({ overrides: { ...f.overrides, [r.id]: { ...ov, ...patch } } });
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 5, marginLeft: 22 }}>
+                            {f.contas.length > 1 && (
+                              <input
+                                className="field-edit"
+                                style={{ fontSize: 12.5 }}
+                                value={ov.caption ?? ""}
+                                placeholder={`Legenda só do ${r.label} (vazio = legenda geral)`}
+                                onChange={(e) => setOv({ caption: e.target.value })}
+                              />
+                            )}
+                            {r.id === "youtube" && (
+                              <>
+                                <input
+                                  className="field-edit"
+                                  style={{ fontSize: 12.5 }}
+                                  maxLength={100}
+                                  value={ov.ytTitle ?? ""}
+                                  placeholder="Título do YouTube (≤100; vazio usa o título do post)"
+                                  onChange={(e) => setOv({ ytTitle: e.target.value })}
+                                />
+                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                  <select className="field-edit" style={{ fontSize: 12.5, flex: 1 }} value={ov.ytVisibility ?? "public"} onChange={(e) => setOv({ ytVisibility: e.target.value })}>
+                                    <option value="public">Público</option>
+                                    <option value="unlisted">Não listado</option>
+                                    <option value="private">Privado</option>
+                                  </select>
+                                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--label-2)", whiteSpace: "nowrap" }}>
+                                    <input type="checkbox" checked={!!ov.ytMadeForKids} onChange={(e) => setOv({ ytMadeForKids: e.target.checked })} />
+                                    infantil
+                                  </label>
+                                </div>
+                                <div className="pm-hint">Vídeo &lt;3min vira Short automaticamente. Capa custom só em vídeo ≥3min (o YouTube não permite em Short).</div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   );
                 })}
               </div>
@@ -557,16 +883,21 @@ export function PostModal() {
             <button className="btn-link" id="pmSave" onClick={() => doSave()} disabled={busy}>
               Salvar
             </button>
-            {/* Disparo real via Zernio (POST /posts) */}
-            <button className="btn-link pm-pub" id="pmPublish" onClick={() => doPublish(true)} disabled={busy || uploading}>
-              {busy ? "Enviando…" : "Publicar agora"}
-            </button>
-            <button className="btn-link ig" id="pmSchedule" onClick={() => doPublish(false)} disabled={busy || uploading}>
-              {busy ? "Agendando…" : "Agendar publicação"}
-            </button>
+            {/* Disparo real via Zernio (POST /posts) — canal manual não publica */}
+            {!calManuais.includes(f.canal) && (
+              <>
+                <button className="btn-link pm-pub" id="pmPublish" onClick={() => doPublish(true)} disabled={busy || uploading}>
+                  {busy ? "Enviando…" : "Publicar agora"}
+                </button>
+                <button className="btn-link ig" id="pmSchedule" onClick={() => doPublish(false)} disabled={busy || uploading}>
+                  {busy ? "Agendando…" : "Agendar publicação"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
     </div>
+    </>
   );
 }

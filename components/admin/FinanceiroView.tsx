@@ -46,6 +46,7 @@ export default function FinanceiroView() {
                 </summary>
                 <div style={{ borderTop: "1px solid var(--hairline)", padding: "14px 18px", display: "flex", flexDirection: "column", gap: 18 }}>
                   <SubForm ws={w.id} sub={sub} onSaved={load} />
+                  <StripeLinkBlock ws={w.id} />
                   <InvoicesBlock ws={w.id} invoices={w.invoices} onChange={load} />
                   <ReferralsBlock ws={w.id} referrals={w.referrals} onChange={load} />
                 </div>
@@ -75,6 +76,37 @@ function SubForm({ ws, sub, onSaved }: { ws: string; sub: Sub | null; onSaved: (
         <div><label className="field-lbl">Próxima cobrança</label><input className="field-edit" type="date" value={prox} onChange={(e) => setProx(e.target.value)} /></div>
         <button className="btn-link ig" type="button" onClick={salvar}>Salvar</button>
       </div>
+    </div>
+  );
+}
+
+function StripeLinkBlock({ ws }: { ws: string }) {
+  const [plano, setPlano] = useState("mensal");
+  const [trial, setTrial] = useState("0");
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const gerar = async () => {
+    setBusy(true); setErr(null); setUrl(null);
+    const d = await fetch("/api/admin/stripe/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workspaceId: ws, plano, trialDays: Number(trial) }) }).then((r) => r.json()).catch(() => null);
+    setBusy(false);
+    if (d?.url) setUrl(d.url); else setErr(d?.error || "Não foi possível gerar. Confira as chaves do Stripe na Vercel.");
+  };
+  return (
+    <div>
+      <div className="field-lbl" style={{ marginBottom: 6 }}>Link de pagamento (Stripe)</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div><label className="field-lbl">Plano</label><select className="field-edit" value={plano} onChange={(e) => setPlano(e.target.value)}><option value="mensal">Mensal</option><option value="anual_parcelado">Anual parcelado</option><option value="anual_avista">Anual à vista</option></select></div>
+        <div><label className="field-lbl">Trial grátis</label><select className="field-edit" value={trial} onChange={(e) => setTrial(e.target.value)}><option value="0">Sem trial</option><option value="7">7 dias</option><option value="90">90 dias</option></select></div>
+        <button className="btn-link ig" type="button" onClick={gerar} disabled={busy}>{busy ? "Gerando…" : "Gerar link"}</button>
+      </div>
+      {err && <div style={{ color: "var(--red)", fontSize: 12.5, marginTop: 6 }}>{err}</div>}
+      {url && (
+        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+          <input className="field-edit" readOnly value={url} onFocus={(e) => e.currentTarget.select()} style={{ flex: 1 }} />
+          <button className="btn-link" type="button" onClick={() => { navigator.clipboard?.writeText(url); }}>Copiar</button>
+        </div>
+      )}
     </div>
   );
 }
