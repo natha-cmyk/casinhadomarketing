@@ -67,6 +67,21 @@ model Invite {
   @@index([email])
 }
 
+// Link de cadastro personalizado gerado pelo admin: já carrega o plano + trial que a pessoa
+// ganha quando conclui o cadastro (a assinatura em trial é aberta no 1º acesso).
+model SignupLink {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  plano         String    @default("mensal") // mensal | anual_parcelado | anual_avista
+  trialDays     Int       @default(0) // 0 | 7 | 90
+  criadoPor     String    @default("") // e-mail do admin que gerou
+  usadoPorEmail String? // e-mail de quem usou (nulo = ainda não usado)
+  usadoEm       DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([token])
+}
+
 // ─────────────────────────────────────────────────────────────
 // Conta: assinatura + faturas + indicações (billing sem provider ainda — dados reais,
 // editáveis; a cobrança automática entra quando ligarmos o meio de pagamento).
