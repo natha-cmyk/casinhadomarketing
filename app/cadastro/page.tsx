@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -12,6 +12,12 @@ export default function CadastroPage() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // guarda o token do link de cadastro personalizado (?c=) pra ativar o trial após o 1º acesso
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get("c");
+    if (c) { try { localStorage.setItem("signupToken", c); } catch { /* ignore */ } }
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
