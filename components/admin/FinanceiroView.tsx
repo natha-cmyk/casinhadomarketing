@@ -155,7 +155,7 @@ function ReferralsBlock({ ws, referrals, onChange }: { ws: string; referrals: Re
       ))}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginTop: 8 }}>
         <div style={{ flex: "1 1 160px" }}><label className="field-lbl">Cliente indicado</label><input className="field-edit" value={cliente} onChange={(e) => setCliente(e.target.value)} /></div>
-        <div><label className="field-lbl">Status</label><select className="field-edit" value={status} onChange={(e) => setStatus(e.target.value)}><option value="convidado">Convidado</option><option value="negociando">Em negociação</option><option value="convertido">Convertido</option></select></div>
+        <div><label className="field-lbl">Status</label><select className="field-edit" value={status} onChange={(e) => setStatus(e.target.value)}><option value="convidado">Convidado</option><option value="convertido">Convertido</option></select></div>
         {status === "convertido" && <div><label className="field-lbl">Mês abonado</label><input className="field-edit" value={mes} onChange={(e) => setMes(e.target.value)} placeholder="Set/2026" style={{ width: 100 }} /></div>}
         <button className="btn-link" type="button" onClick={add}>+ Indicação</button>
       </div>

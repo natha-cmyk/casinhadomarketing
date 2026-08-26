@@ -852,7 +852,9 @@ export function SocialInsights({ rede }: { rede: string }) {
       </div>
       <div className="si-demo">
         {demoDims.map(({ dim, items }) => {
-          const tops = [...items].sort((a, b) => b.value - a.value).slice(0, 6);
+          // GÊNERO: tira "não informado" (U/unknown) — os não declarados distorcem o % de M/F
+          const base = dim === "gender" ? items.filter((t) => !["u", "unknown", "não informado", "nao informado"].includes(String(t.dimension).toLowerCase())) : items;
+          const tops = [...base].sort((a, b) => b.value - a.value).slice(0, 6);
           const mx = Math.max(1, ...tops.map((t) => t.value));
           return (
             <div key={dim} className="si-dim">
