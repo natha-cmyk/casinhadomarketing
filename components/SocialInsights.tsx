@@ -227,44 +227,88 @@ function VincularCrm({ rede, opcoes, atual }: { rede: string; opcoes: { canal?: 
   );
 }
 
-// linha "Stories" editável no bloco "Por tipo de conteúdo": a API não expõe Stories, então
-// o registro é manual POR PERÍODO (semana/mês/…). Trava períodos futuros (só registra o que já ocorreu).
-function StoriesEditableRow({ rede, periodKey, value, max, color, locked, lockMsg }: {
-  rede: string; periodKey: string; value: number; max: number; color: string; locked: boolean; lockMsg: string;
+// linha "Stories" editável no bloco "Por tipo de conteúdo". A API não expõe Stories, então o
+// registro é manual, com a SEMANA como unidade. Mês = soma das 4 semanas (editor abre por semana,
+// cada uma já preenchida). Semana = edita só aquela semana (reflete no total do mês). Trimestre/ano
+// só mostram o agregado. Trava semana futura (só registra o que já começou).
+function StoriesEditableRow({ rede, scope, value, max, color }: {
+  rede: string;
+  scope: { period: string; year: number; month: number; week: number; quarter: number };
+  value: number; max: number; color: string;
 }) {
   const setSP = useStore((s) => s.setStoriesForPeriod);
+  const byP = useStore((s) => s.manualStats[rede]?.storiesByPeriod) || {};
   const [editing, setEditing] = useState(false);
-  const [v, setV] = useState(String(value || ""));
-  useEffect(() => { setV(String(value || "")); }, [value, periodKey]);
-  const save = () => {
-    const n = Math.max(0, Math.round(Number(v) || 0));
-    setSP(rede, periodKey, n === 0 ? undefined : n);
+  const { period, year, month, week } = scope;
+  const weekKey = (w: number) => `${year}-${month}-w${w}`;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const weekStart = (w: number) => new Date(year, month, w * 7 + 1);
+  const weekFuture = (w: number) => weekStart(w) > hoje;
+  const SEM = ["Semana 1", "Semana 2", "Semana 3", "Semana 4"];
+
+  const editable = period === "semana" || period === "mes";
+  const semanaBloqueada = period === "semana" && weekFuture(week);
+
+  // rascunho por semana enquanto edita (mês = 4 campos; semana = 1 campo)
+  const semanasAlvo = period === "mes" ? [0, 1, 2, 3] : [week];
+  const [draft, setDraft] = useState<Record<number, string>>({});
+  const abrir = () => {
+    const d: Record<number, string> = {};
+    for (const w of semanasAlvo) d[w] = String(byP[weekKey(w)] || "");
+    setDraft(d);
+    setEditing(true);
+  };
+  const salvar = () => {
+    for (const w of semanasAlvo) {
+      if (weekFuture(w)) continue; // não grava semana futura
+      const n = Math.max(0, Math.round(Number(draft[w]) || 0));
+      setSP(rede, weekKey(w), n === 0 ? undefined : n);
+    }
     setEditing(false);
   };
+
   return (
-    <div className="bar-row">
-      <div className="k" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        Stories
-        {locked ? (
-          <span title={lockMsg} style={{ fontSize: 11, color: "var(--label-3)", cursor: "help" }}>🔒</span>
-        ) : (
-          <button type="button" onClick={() => setEditing((e) => !e)} title="Registrar Stories deste período" aria-label="Editar Stories"
-            style={{ border: 0, background: "transparent", cursor: "pointer", color: "var(--cyan)", padding: 0, fontSize: 13, lineHeight: 1 }}>✎</button>
-        )}
-      </div>
-      {editing ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-          <input type="number" min={0} autoFocus value={v} onChange={(e) => setV(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-            className="field-edit" style={{ width: 90, fontSize: 13, padding: "4px 8px" }} />
-          <button type="button" className="btn-link ig" onClick={save} style={{ fontSize: 12 }}>Salvar</button>
-          <button type="button" className="btn-link" onClick={() => setEditing(false)} style={{ fontSize: 12 }}>Cancelar</button>
+    <div style={{ borderBottom: editing ? "1px solid var(--hairline)" : undefined, paddingBottom: editing ? 8 : 0 }}>
+      <div className="bar-row">
+        <div className="k" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          Stories
+          {editable ? (
+            semanaBloqueada ? (
+              <span title="Semana ainda não começou — só dá pra registrar semanas já iniciadas." style={{ fontSize: 11, color: "var(--label-3)", cursor: "help" }}>🔒</span>
+            ) : (
+              <button type="button" onClick={() => (editing ? setEditing(false) : abrir())} title={period === "mes" ? "Registrar Stories por semana" : "Registrar Stories desta semana"} aria-label="Editar Stories"
+                style={{ border: 0, background: "transparent", cursor: "pointer", color: "var(--cyan)", padding: 0, fontSize: 13, lineHeight: 1 }}>✎</button>
+            )
+          ) : (
+            <span title="Registre Stories no filtro Semana ou Mês (soma automática)." style={{ fontSize: 11, color: "var(--label-3)", cursor: "help" }}>Σ</span>
+          )}
         </div>
-      ) : (
-        <>
-          <div className="bar-track"><div className="bar-fill" style={{ width: `${(value / max) * 100 || 0}%`, background: color }} /></div>
-          <div className="v tnum">{value}</div>
-        </>
+        <div className="bar-track"><div className="bar-fill" style={{ width: `${(value / max) * 100 || 0}%`, background: color }} /></div>
+        <div className="v tnum">{value}</div>
+      </div>
+
+      {editing && (
+        <div style={{ padding: "4px 0 2px", display: "flex", flexDirection: "column", gap: 6 }}>
+          {semanasAlvo.map((w) => {
+            const fut = weekFuture(w);
+            return (
+              <div key={w} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 11.5, color: "var(--label-2)", width: 72 }}>{period === "mes" ? SEM[w] : SEM[w]}</span>
+                <input type="number" min={0} disabled={fut} value={fut ? "" : (draft[w] ?? "")}
+                  placeholder={fut ? "—" : "0"}
+                  onChange={(e) => setDraft((p) => ({ ...p, [w]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") salvar(); if (e.key === "Escape") setEditing(false); }}
+                  className="field-edit" style={{ width: 90, fontSize: 13, padding: "4px 8px", opacity: fut ? 0.5 : 1 }}
+                  title={fut ? "Semana futura — ainda não dá pra registrar." : undefined} />
+                {fut && <span style={{ fontSize: 10.5, color: "var(--label-3)" }}>semana futura</span>}
+              </div>
+            );
+          })}
+          <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+            <button type="button" className="btn-link ig" onClick={salvar} style={{ fontSize: 12 }}>Salvar</button>
+            <button type="button" className="btn-link" onClick={() => setEditing(false)} style={{ fontSize: 12 }}>Cancelar</button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -405,7 +449,17 @@ export function SocialInsights({ rede }: { rede: string }) {
     const fVals = data?.followers?.metrics?.follower_count?.values || [];
     const segs = fVals.length ? fVals[fVals.length - 1].value : (acct.followersCount ?? null);
     const lt = data?.linkTaps || null;
-    const periodKey = `${cur.since}_${cur.until}`;
+    // stories manuais no escopo (soma das semanas do período)
+    const byP = s.manualStats[rede]?.storiesByPeriod || {};
+    const wk = (y: number, mo: number, w: number) => byP[`${y}-${mo}-w${w}`] || 0;
+    const mSum = (y: number, mo: number) => wk(y, mo, 0) + wk(y, mo, 1) + wk(y, mo, 2) + wk(y, mo, 3);
+    let storiesManual: number | null = null;
+    if (platform === "instagram") {
+      if (s.period === "semana") storiesManual = wk(s.year, s.month, s.week);
+      else if (s.period === "mes") storiesManual = mSum(s.year, s.month);
+      else if (s.period === "trimestre") storiesManual = mSum(s.year, s.quarter * 3) + mSum(s.year, s.quarter * 3 + 1) + mSum(s.year, s.quarter * 3 + 2);
+      else storiesManual = Array.from({ length: 12 }, (_, mo) => mSum(s.year, mo)).reduce((a, b) => a + b, 0);
+    }
     s.setPanelSnapshot({
       view: rede,
       label: `${cur.since} a ${cur.until}`,
@@ -418,7 +472,7 @@ export function SocialInsights({ rede }: { rede: string }) {
         visitasSiteLink: lt && Object.keys(lt).length ? Object.values(lt).reduce((a, b) => a + b, 0) : null,
         conteudos: data?.content?.total ?? null,
         conteudosPorTipo: data?.content?.byType ?? null,
-        storiesManual: platform === "instagram" ? (s.manualStats[rede]?.storiesByPeriod?.[periodKey] ?? null) : null,
+        storiesManual,
         leadsViaDM: inbox?.volume?.summary.uniqueConversations ?? null,
       },
     });
@@ -674,13 +728,18 @@ export function SocialInsights({ rede }: { rede: string }) {
   // Produção de conteúdo & leads deste canal (calendário + CRM + DMs) — fica ACIMA do "Desempenho no tempo"
   const producaoNode = (() => {
     const ll = label.trim().toLowerCase();
-    // Stories = registro manual POR PERÍODO (a API não expõe). Chave = janela do período atual.
-    const periodKey = `${range.since}_${range.until}`;
-    const periodStart = new Date(range.since + "T00:00:00");
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-    const periodoFuturo = periodStart > hoje; // não dá pra registrar Stories de período que ainda não começou
+    // Stories = registro manual (a API não expõe). Unidade atômica = SEMANA (W1–W4 do mês).
+    // Mês = soma das 4 semanas; trimestre/ano = soma dos meses. Semana = a semana em si.
     const storiesByP = s.manualStats[rede]?.storiesByPeriod || {};
-    const stories = platform === "instagram" ? (storiesByP[periodKey] ?? 0) : 0;
+    const weekKey = (y: number, m: number, w: number) => `${y}-${m}-w${w}`;
+    const monthWeeksSum = (y: number, m: number) => [0, 1, 2, 3].reduce((a, w) => a + (storiesByP[weekKey(y, m, w)] || 0), 0);
+    let stories = 0;
+    if (platform === "instagram") {
+      if (s.period === "semana") stories = storiesByP[weekKey(s.year, s.month, s.week)] || 0;
+      else if (s.period === "mes") stories = monthWeeksSum(s.year, s.month);
+      else if (s.period === "trimestre") stories = [0, 1, 2].reduce((a, i) => a + monthWeeksSum(s.year, s.quarter * 3 + i), 0);
+      else stories = Array.from({ length: 12 }, (_, m) => monthWeeksSum(s.year, m)).reduce((a, b) => a + b, 0);
+    }
 
     // Contagem de conteúdo vem da API (content.total / content.byType = publicações reais no período).
     // Stories entram à parte porque a API não os expõe no mix (indicador manual).
@@ -724,25 +783,26 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div>
           <span className="badge">{totalDisplay} conteúdos</span>
         </div>
-        {/* metade: "por tipo" · metade: indicadores em widgets separados */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 16, alignItems: "start" }}>
+        {/* metade: "por tipo" · metade: indicadores em widgets separados. alignItems stretch +
+            cards com height:100% pra NÃO sobrar espaço em branco entre as colunas. */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 16, alignItems: "stretch" }}>
           {/* ESQUERDA — por tipo de conteúdo */}
-          <div className="card pad-lg">
+          <div className="card pad-lg" style={{ height: "100%" }}>
             <div className="card-head" style={{ marginBottom: 8 }}><div className="t" style={{ fontSize: 14 }}>Por tipo de conteúdo</div></div>
             {temTipo
               ? tipos.map(([f, n]) => (f === "Stories" && platform === "instagram"
-                  ? <StoriesEditableRow key={f} rede={rede} periodKey={periodKey} value={n} max={mxF} color={cor} locked={periodoFuturo} lockMsg="Período ainda não começou — só dá pra registrar semanas/meses já iniciados." />
+                  ? <StoriesEditableRow key={f} rede={rede} scope={{ period: s.period, year: s.year, month: s.month, week: s.week, quarter: s.quarter }} value={n} max={mxF} color={cor} />
                   : <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />))
               : <div style={{ fontSize: 12, color: "var(--label-3)" }}>{temApi
                   ? `Nenhuma publicação no período para ${label}.`
                   : "Aguardando dados da API deste canal (contagem vem das publicações reais, não do calendário)."}</div>}
             {platform === "instagram" && temTipo && (
-              <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 8 }}>Stories não vem da API — clique no ✎ ao lado de &quot;Stories&quot; pra registrar quantos foram feitos neste período.</div>
+              <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 8 }}>Stories não vem da API — clique no ✎ ao lado de &quot;Stories&quot; pra registrar por semana. No filtro <b>Mês</b>, o ✎ abre as 4 semanas e soma no total; no filtro <b>Semana</b>, edita só aquela semana.</div>
             )}
           </div>
 
-          {/* DIREITA — indicadores (widgets) + configuração */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* DIREITA — indicadores (widgets) + vínculo (preenche a altura, sem vazio) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <ProdStat l="Conteúdos" n={totalDisplay} accent={cor} />
               <ProdStat l="Visitas ao site/link" n={siteVisits != null ? fmt(siteVisits) : "—"} />
@@ -752,16 +812,22 @@ export function SocialInsights({ rede }: { rede: string }) {
             {crmLeads != null && crmGanho != null && (
               <div className="insight">{fmt(crmGanho)} de {fmt(crmLeads)} leads do canal vinculado viraram cliente.</div>
             )}
-            {/* vínculo do canal ao CRM (com instrução) */}
-            {crmHealth.some((c) => c.canal) && (
-              <div className="card pad-lg">
-                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--label-1)", marginBottom: 4 }}>Vincular ao canal do CRM</div>
-                <div style={{ fontSize: 11.5, color: "var(--label-3)", marginBottom: 8, lineHeight: 1.45 }}>
-                  Seu CRM classifica os leads por canal (ex.: &quot;Redes sociais&quot;, &quot;Site&quot;). Escolha qual desses representa <b>{label}</b> pra somar os leads certos neste widget.
+            {/* vínculo do canal ao CRM — SEMPRE visível (flex:1 preenche o resto da coluna) */}
+            <div className="card pad-lg" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--label-1)", marginBottom: 4 }}>Vincular ao canal do CRM</div>
+              {crmHealth.some((c) => c.canal) ? (
+                <>
+                  <div style={{ fontSize: 11.5, color: "var(--label-3)", marginBottom: 8, lineHeight: 1.45 }}>
+                    Seu CRM classifica os leads por canal (ex.: &quot;Redes sociais&quot;, &quot;Site&quot;). Escolha qual desses representa <b>{label}</b> pra somar os leads certos neste widget.
+                  </div>
+                  <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
+                </>
+              ) : (
+                <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.45 }}>
+                  Nenhum canal de CRM detectado ainda. Conecte e sincronize seu CRM em <b>Geração por Canais</b> — depois volte aqui pra escolher qual canal representa <b>{label}</b>.
                 </div>
-                <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

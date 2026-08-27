@@ -108,7 +108,9 @@ export function AdsView() {
   const zernioAccounts = useStore((st) => st.zernioAccounts);
   const manualAds = useStore((st) => st.manualAds);
 
-  const hasAdsConn = zernioAccounts.some((a) => a.adsStatus === "connected" || a.adsStatus === "active");
+  // Google Ads é conta standalone (sem adsStatus) — detecta pela plataforma; Meta usa adsStatus.
+  const isGoogleAds = (p?: string) => { const s = String(p || "").toLowerCase(); return s.includes("google") && s.includes("ads"); };
+  const hasAdsConn = zernioAccounts.some((a) => a.adsStatus === "connected" || a.adsStatus === "active" || isGoogleAds(a.platform));
   const range = useMemo(() => dateRange(s), [s.period, s.year, s.month, s.quarter, s.week]); // eslint-disable-line react-hooks/exhaustive-deps
   const scopeMonths = useMemo(() => monthsInScope(s), [s.period, s.year, s.month, s.quarter, s.week]); // eslint-disable-line react-hooks/exhaustive-deps
 

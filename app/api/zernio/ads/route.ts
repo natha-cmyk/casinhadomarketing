@@ -113,10 +113,12 @@ export async function GET(req: Request) {
 
     // diagnóstico: por que Google Ads (ou Meta) não aparece? Lista status por conexão.
     if (debug) {
-      const gAccts = accounts.filter((a) => a.platform === "googleads");
+      const isG = (p: string) => { const s = p.toLowerCase(); return s.includes("google") && s.includes("ads"); };
+      const gAccts = accounts.filter((a) => isG(String(a.platform || "")));
       const gDetail = await Promise.all(gAccts.map(async (a) => {
-        const status = (a as { adsStatus?: string }).adsStatus;
-        const conectado = status === "connected" || status === "active";
+        const status = (a as { adsStatus?: string; status?: string }).adsStatus ?? (a as { status?: string }).status;
+        const st = String(status ?? "").toLowerCase();
+        const conectado = st !== "disconnected" && st !== "revoked" && st !== "error" && st !== "expired";
         let customers: unknown = "não consultado (status não conectado)";
         let gaqlSample: unknown = null;
         if (conectado && since && until) {
@@ -193,7 +195,15 @@ export async function GET(req: Request) {
     );
 
     // ── Google Ads (googleads) — caminho próprio via GAQL ──
-    const gConnected = accounts.filter((a) => a.platform === "googleads" && ((a as { adsStatus?: string }).adsStatus === "connected" || (a as { adsStatus?: string }).adsStatus === "active"));
+    // Google Ads é conta STANDALONE (não add-on de posting como o Meta), então normalmente NÃO
+    // tem `adsStatus`. Basta ela existir na lista de contas conectadas — a menos que o status
+    // diga explicitamente que caiu. Tolerante a variações de nome (googleads/google_ads/google-ads).
+    const isGoogleAds = (p: string) => { const s = p.toLowerCase(); return s.includes("google") && s.includes("ads"); };
+    const gConnected = accounts.filter((a) => {
+      if (!isGoogleAds(String(a.platform || ""))) return false;
+      const st = String((a as { adsStatus?: string; status?: string }).adsStatus ?? (a as { status?: string }).status ?? "").toLowerCase();
+      return st !== "disconnected" && st !== "revoked" && st !== "error" && st !== "expired";
+    });
     const gseen = new Set<string>();
     const gConns = gConnected.filter((a) => (gseen.has(a._id) ? false : (gseen.add(a._id), true)));
     const gPer = (since && until) ? await Promise.all(gConns.map(async (conn) => {

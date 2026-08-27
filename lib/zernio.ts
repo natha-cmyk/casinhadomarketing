@@ -354,6 +354,12 @@ export async function profileLinkTaps(accountId: string, opts?: { since?: string
   );
   const out: Record<string, number> = {};
   for (const b of r.metrics?.profile_links_taps?.breakdowns || []) out[b.dimension] = b.value;
+  // fallback: muitas contas não retornam o breakdown por tipo de botão, mas trazem o TOTAL.
+  // Sem isso, "Visitas ao site/link" ficava zerado mesmo havendo toques.
+  if (!Object.keys(out).length) {
+    const total = r.metrics?.profile_links_taps?.total;
+    if (total != null && Number(total) > 0) out.TOTAL = Number(total);
+  }
   return out;
 }
 
