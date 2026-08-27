@@ -390,7 +390,19 @@ export function SocialInsights({ rede }: { rede: string }) {
     let alive = true;
     fetch("/api/crm/leads", { cache: "no-store" })
       .then((r) => r.json())
-      .then((d) => { if (alive) setCrmHealth(Array.isArray(d?.channelHealth) ? d.channelHealth : []); })
+      .then((d) => {
+        if (!alive) return;
+        // a rota devolve channelHealth com { key, total, won, ... } — mapeia pro shape que este painel usa
+        // ({ canal, total, ganho }). Sem isso o select de vínculo ficava vazio e os leads nunca carregavam.
+        const rows = Array.isArray(d?.channelHealth) ? d.channelHealth : [];
+        setCrmHealth(rows
+          .map((c: { key?: string; canal?: string; total?: number; won?: number; ganho?: number }) => ({
+            canal: (c.canal ?? c.key ?? "").trim(),
+            total: c.total ?? 0,
+            ganho: c.ganho ?? c.won ?? 0,
+          }))
+          .filter((c: { canal: string }) => c.canal));
+      })
       .catch(() => {});
     return () => { alive = false; };
   }, []);
