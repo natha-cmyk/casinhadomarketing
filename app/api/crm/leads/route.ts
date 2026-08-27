@@ -33,7 +33,7 @@ function toRows(map: Map<string, Bucket>) {
 interface Parsed {
   channel?: string | null; category?: string | null; product?: string | null;
   qualification?: string | null; stage?: string | null; status?: string | null;
-  lossReason?: string | null; outcome?: Outcome | null;
+  lossReason?: string | null; campaign?: string | null; outcome?: Outcome | null;
 }
 // extrai o task ClickUp cru de Lead.raw (sem o _parsed). null se não houver custom_fields.
 function rawTaskOf(raw: unknown): ClickUpTask | null {
@@ -79,6 +79,7 @@ export async function GET(req: Request) {
     const byQualification = new Map<string, Bucket>();
     const byStage = new Map<string, Bucket>();
     const byStatus = new Map<string, Bucket>();
+    const byCampaign = new Map<string, Bucket>();
     const lossReasons = new Map<string, Bucket>();
     const sourceTally: Record<string, Map<string, number>> = {}; // dim → {campo: contagem} p/ transparência
     const fieldSeen = new Map<string, { type: string; sample: string | null; filled: number }>(); // campos ClickUp vistos
@@ -98,7 +99,7 @@ export async function GET(req: Request) {
       const p = parsedOf(l.raw);
 
       // interpretação AO VIVO quando há task cru; senão usa o gravado (webhook/colunas).
-      let it: Pick<Interpreted, "channel" | "category" | "product" | "qualification" | "stage" | "status" | "lossReason" | "value" | "hasValue" | "outcome"> & { sources?: Interpreted["sources"] };
+      let it: Pick<Interpreted, "channel" | "category" | "product" | "qualification" | "stage" | "status" | "lossReason" | "campaign" | "value" | "hasValue" | "outcome"> & { sources?: Interpreted["sources"] };
       if (task) {
         it = interpretTask(task, fm);
         // acumula as fontes (qual campo alimentou cada dimensão)
@@ -130,6 +131,7 @@ export async function GET(req: Request) {
           stage: l.stage ?? p.stage ?? null,
           status: l.status ?? p.status ?? null,
           lossReason: l.lossReason ?? null,
+          campaign: p.campaign ?? null,
           value: l.value || 0,
           hasValue: (l.value || 0) > 0,
           outcome: p.outcome ?? null,
@@ -144,6 +146,7 @@ export async function GET(req: Request) {
       tally(byQualification, it.qualification, v);
       tally(byStage, it.stage, v);
       tally(byStatus, it.status, v);
+      tally(byCampaign, it.campaign, v);
 
       const outcome: Outcome = it.outcome ?? outcomeOf(it.status, it.stage, it.lossReason);
       if (outcome === "won") { won += 1; wonValue += v; }
@@ -161,7 +164,7 @@ export async function GET(req: Request) {
 
     // fonte "vencedora" por dimensão (campo mais usado) — pro painel "como esta leitura funciona"
     const mapping: Record<string, string | null> = {};
-    for (const dim of ["channel", "category", "product", "qualification", "stage", "status", "value", "lossReason"]) {
+    for (const dim of ["channel", "category", "product", "qualification", "stage", "status", "value", "lossReason", "campaign"]) {
       const m = sourceTally[dim];
       mapping[dim] = m ? [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null : null;
     }
@@ -182,6 +185,7 @@ export async function GET(req: Request) {
       byQualification: toRows(byQualification),
       byStage: toRows(byStage),
       byStatus: toRows(byStatus),
+      byCampaign: toRows(byCampaign),
       lossReasons: toRows(lossReasons),
       channelHealth: [...chan.entries()]
         .map(([key, c]) => ({ key, ...c, conv: c.total ? c.won / c.total : 0 }))

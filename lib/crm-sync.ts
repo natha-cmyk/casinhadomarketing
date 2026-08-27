@@ -6,10 +6,11 @@ interface ClickUpOption { id: string; name?: string; label?: string; orderindex?
 interface ClickUpCustomField { id: string; name: string; type: string; value?: unknown; type_config?: { options?: ClickUpOption[] } }
 interface ClickUpTask { id: string; name?: string; status?: { status?: string; type?: string }; date_created?: string; custom_fields?: ClickUpCustomField[] }
 
-type Dim = "channel" | "category" | "product" | "qualification" | "stage" | "status" | "value" | "lossReason";
-const DIMS: Dim[] = ["channel", "category", "product", "qualification", "stage", "status", "value", "lossReason"];
+type Dim = "channel" | "category" | "product" | "qualification" | "stage" | "status" | "value" | "lossReason" | "campaign";
+const DIMS: Dim[] = ["channel", "category", "product", "qualification", "stage", "status", "value", "lossReason", "campaign"];
 const SYNONYMS: Record<Dim, string[]> = {
   channel: ["canal", "origem", "source", "fonte"],
+  campaign: ["campanha", "campaign", "campanha de marketing", "acao de marketing", "ação de marketing", "nome da acao", "nome da ação"],
   category: ["categoria de produto", "categoria", "linha de produto", "linha", "servico", "serviço", "segmento de produto", "segmento"],
   product: ["tipo de produto", "produto"],
   qualification: ["qualificacao", "qualificação", "classificacao", "classificação", "lead score", "rating", "estrelas", "estrela"],
@@ -130,7 +131,7 @@ function resolveDims(task: ClickUpTask, fm: Record<string, string>): { out: Reco
 export interface Interpreted {
   channel: string | null; category: string | null; product: string | null;
   qualification: string | null; stage: string | null; status: string | null;
-  lossReason: string | null; value: number; hasValue: boolean;
+  lossReason: string | null; campaign: string | null; value: number; hasValue: boolean;
   outcome: "won" | "lost" | "open" | null;
   sources: Record<Dim, string | null>;
 }
@@ -147,6 +148,7 @@ export function interpretTask(t: ClickUpTask, fm: Record<string, string>): Inter
     stage,
     status,
     lossReason: dims.lossReason,
+    campaign: dims.campaign,
     value: parseMoney(dims.value) ?? 0,
     hasValue: dims.value != null,
     outcome: resolveOutcome(t, status),
@@ -198,7 +200,7 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
     const createdAt = t.date_created ? new Date(Number(t.date_created)) : new Date();
     const parsed = {
       channel: it.channel, category: it.category, product: it.product, qualification: it.qualification,
-      stage: it.stage, status: it.status, value: it.hasValue ? it.value : null, lossReason: it.lossReason, outcome: it.outcome,
+      stage: it.stage, status: it.status, value: it.hasValue ? it.value : null, lossReason: it.lossReason, campaign: it.campaign, outcome: it.outcome,
     };
     const data = {
       source: "clickup", title: t.name ?? null, channel: it.channel, product: it.product, status: it.status, stage: it.stage, value: it.value, lossReason: it.lossReason,

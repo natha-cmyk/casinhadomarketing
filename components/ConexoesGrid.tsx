@@ -62,9 +62,41 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
   const socialConnected = new Set(socialCount.keys());
   // ads conectado = existe conta DEDICADA de anúncio (platform = id do quadrado, ex. "metaads").
   // não usa o token social (LinkedIn/Facebook social herdam adsStatus mas não são ads).
+  const isGoogleAds = (p?: string) => { const t = String(p || "").toLowerCase(); return t.includes("google") && t.includes("ads"); };
   const adsConnected = new Set(
     accounts.filter((a) => a.adsStatus === "connected" || a.adsStatus === "active").map((a) => a.platform)
   );
+  // Google Ads é conta standalone (sem adsStatus) — marca o quadrado "googleads" conectado se existir.
+  if (accounts.some((a) => isGoogleAds(a.platform))) adsConnected.add("googleads");
+
+  // contas-alvo de um quadrado (pra desconectar). Social: contas da plataforma com posting.
+  // Ads: conta dedicada de anúncio (google standalone, ou a plataforma base do Meta com adsStatus).
+  function acctsFor(r: Rede) {
+    if (r.grupo === "ads") {
+      if (r.id === "googleads") return accounts.filter((a) => isGoogleAds(a.platform));
+      const plat = AD_CONNECT[r.id];
+      return accounts.filter((a) => a.platform === plat && (a.adsStatus === "connected" || a.adsStatus === "active"));
+    }
+    return accounts.filter((a) => a.platform === zplat(r.id) && a.enabled === true);
+  }
+
+  async function disconnect(r: Rede) {
+    const ids = acctsFor(r).map((a) => a._id);
+    if (!ids.length) return;
+    if (!window.confirm(`Desconectar ${r.label}? Você vai precisar reconectar depois pra voltar a puxar os dados.`)) return;
+    setErro(null);
+    setBusy(r.id);
+    try {
+      for (const id of ids) {
+        await fetch("/api/zernio/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accountId: id }) });
+      }
+      await refresh();
+    } catch (e) {
+      setErro(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
@@ -153,9 +185,17 @@ export function ConexoesGrid({ grupos }: { grupos: Rede["grupo"][] }) {
                         >
                           {busy === r.id ? "…" : "+ conta"}
                         </button>
+                        <button className="conx-sq-off" onClick={() => disconnect(r)} disabled={busy === r.id} type="button" title="Desconectar esta rede">
+                          desconectar
+                        </button>
                       </div>
                     ) : on ? (
-                      <span className="conx-sq-cta on">conectado</span>
+                      <div className="conx-sq-conn">
+                        <span className="conx-sq-cta on">conectado</span>
+                        <button className="conx-sq-off" onClick={() => disconnect(r)} disabled={busy === r.id} type="button" title="Desconectar">
+                          {busy === r.id ? "…" : "desconectar"}
+                        </button>
+                      </div>
                     ) : r.grupo === "ads" && !AD_CONNECT[r.id] ? (
                       <span className="conx-sq-cta" style={{ opacity: 0.55, cursor: "default", color: "var(--label-3)" }} title="Conexão via API não suportada por esta plataforma">
                         em breve
