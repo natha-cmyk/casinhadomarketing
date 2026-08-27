@@ -784,3 +784,6 @@ svg.chartI{cursor:crosshair}
 .conx-sq-add{border:0;background:transparent;font-size:11px;font-weight:650;color:var(--cyan);cursor:pointer;padding:2px 9px;border-radius:6px;transition:.12s}
 .conx-sq-add:hover{background:rgba(0,187,197,.12)}
 .conx-sq-add:disabled{color:var(--label-3);cursor:default}
+.conx-sq-off{border:0;background:transparent;font-size:10.5px;font-weight:600;color:var(--label-3);cursor:pointer;padding:2px 9px;border-radius:6px;transition:.12s}
+.conx-sq-off:hover{background:rgba(255,0,30,.10);color:var(--red)}
+.conx-sq-off:disabled{opacity:.5;cursor:default}

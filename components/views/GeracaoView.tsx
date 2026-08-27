@@ -62,6 +62,7 @@ interface LeadsData {
   byQualification: Row[];
   byStage: Row[];
   byStatus: Row[];
+  byCampaign: Row[];
   lossReasons: Row[];
   leads: LeadRow[];
   mapping?: Record<string, string | null>; // dimensão → campo do ClickUp que alimentou (transparência)
@@ -90,6 +91,7 @@ function dateRange(scope: { period: Period; year: number; month: number; quarter
 // dimensões que o sync sabe interpretar (mesmas chaves do fieldMap no backend).
 const FIELD_KEYS: { k: string; lbl: string; hint: string }[] = [
   { k: "channel", lbl: "Canal / origem", hint: "de onde veio o lead" },
+  { k: "campaign", lbl: "Campanha", hint: "ação / campanha de marketing" },
   { k: "category", lbl: "Categoria de produto", hint: "família / linha" },
   { k: "product", lbl: "Tipo de produto", hint: "produto específico" },
   { k: "qualification", lbl: "Qualificação", hint: "estrelas / lead score" },
@@ -242,6 +244,7 @@ export function GeracaoView() {
           porCategoria: (data.byCategory || []).slice(0, 12).map((r) => ({ nome: r.key, leads: r.count })),
           porQualificacao: (data.byQualification || []).slice(0, 12).map((r) => ({ nome: r.key, leads: r.count })),
           porEtapa: (data.byStage || []).slice(0, 12).map((r) => ({ nome: r.key, leads: r.count })),
+          porCampanha: (data.byCampaign || []).slice(0, 20).map((r) => ({ nome: r.key, leads: r.count })),
           motivosPerda: (data.lossReasons || []).slice(0, 8).map((r) => ({ motivo: r.key, qtd: r.count })),
         },
       },
@@ -909,6 +912,7 @@ function Dashboard({ data }: { data: LeadsData }) {
           { id: "qualificacao", label: "Por qualificação", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
           { id: "funil", label: "Por funil / etapa", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
           { id: "status", label: "Por status", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
+          { id: "campanha", label: "Performance por campanha", defaultSpan: 6, defaultH: 12, node: <GroupCard title="Performance por campanha" rows={data.byCampaign || []} color={cycle} empty="Sem campanha informada. Mapeie o campo 'Campanha' do ClickUp em Reconfigurar (ou nomeie o campo personalizado como 'Campanha')." defaultViz="list" showValue={false} /> },
           ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, defaultH: 9, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
           ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Performance por canal", defaultSpan: 6, defaultH: 9, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
           // gráficos criados pelo usuário (chart builder)

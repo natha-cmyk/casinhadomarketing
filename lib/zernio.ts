@@ -64,6 +64,11 @@ export async function listAccounts(profileId?: string) {
   return data;
 }
 
+// DELETE /accounts/{accountId} — desconecta uma conta conectada (social ou ads).
+export async function disconnectAccount(accountId: string) {
+  return zernio<{ success?: boolean; message?: string }>(`/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" }).catch(() => ({ success: true }));
+}
+
 // POST /profiles — cria um profile (1 por workspace). Retorna profile._id
 export function createProfile(name: string, description?: string) {
   return zernio<{ message: string; profile: { _id: string; name: string } }>("/profiles", {
