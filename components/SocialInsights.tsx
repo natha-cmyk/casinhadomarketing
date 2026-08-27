@@ -395,6 +395,37 @@ export function SocialInsights({ rede }: { rede: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acct?._id, platform, s.period, s.year, s.month, s.quarter, s.week]);
 
+  // publica o que ESTE painel mostra pro agente (números ao vivo do canal + produção).
+  // Fica ANTES de qualquer return condicional (regra dos hooks). Deriva tudo de `data`.
+  useEffect(() => {
+    if (!acct) { s.setPanelSnapshot(null); return; }
+    const cur = dateRange(s);
+    const m = data?.insights?.metrics || {};
+    const g = (k: string) => (m[k]?.total ?? null);
+    const fVals = data?.followers?.metrics?.follower_count?.values || [];
+    const segs = fVals.length ? fVals[fVals.length - 1].value : (acct.followersCount ?? null);
+    const lt = data?.linkTaps || null;
+    const periodKey = `${cur.since}_${cur.until}`;
+    s.setPanelSnapshot({
+      view: rede,
+      label: `${cur.since} a ${cur.until}`,
+      data: {
+        canal: label,
+        conta: acct.username ? "@" + acct.username : acct.displayName,
+        seguidores: segs,
+        alcance: g("reach"), impressoes: g("views") ?? g("impressions"), interacoes: g("total_interactions"),
+        visitasPerfil: g("profile_views"),
+        visitasSiteLink: lt && Object.keys(lt).length ? Object.values(lt).reduce((a, b) => a + b, 0) : null,
+        conteudos: data?.content?.total ?? null,
+        conteudosPorTipo: data?.content?.byType ?? null,
+        storiesManual: platform === "instagram" ? (s.manualStats[rede]?.storiesByPeriod?.[periodKey] ?? null) : null,
+        leadsViaDM: inbox?.volume?.summary.uniqueConversations ?? null,
+      },
+    });
+    return () => s.setPanelSnapshot(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rede, acct?._id, data, inbox, s.period, s.year, s.month, s.quarter, s.week]);
+
   if (!acct) {
     return (
       <>
@@ -736,29 +767,6 @@ export function SocialInsights({ rede }: { rede: string }) {
       </div>
     );
   })();
-
-  // publica o que ESTE painel mostra pro agente (números ao vivo do canal + produção)
-  useEffect(() => {
-    const g = (k: string) => (metrics[k]?.total ?? null);
-    s.setPanelSnapshot({
-      view: rede,
-      label: `${range.since} a ${range.until}`,
-      data: {
-        canal: label,
-        conta: acct ? (acct.username ? "@" + acct.username : acct.displayName) : null,
-        seguidores: curFollLast,
-        alcance: g("reach"), impressoes: g("views") ?? g("impressions"), interacoes: g("total_interactions"),
-        visitasPerfil: g("profile_views"),
-        visitasSiteLink: linkTaps && Object.keys(linkTaps).length ? Object.values(linkTaps).reduce((a, b) => a + b, 0) : null,
-        conteudos: content?.total ?? null,
-        conteudosPorTipo: content?.byType ?? null,
-        storiesManual: platform === "instagram" ? (s.manualStats[rede]?.stories ?? null) : null,
-        leadsViaDM: inbox?.volume?.summary.uniqueConversations ?? null,
-      },
-    });
-    return () => s.setPanelSnapshot(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rede, acct?._id, range.since, range.until, data, inbox]);
 
   const cards: CardDef[] = [];
 
