@@ -9,21 +9,35 @@ function apiKey(): string {
   return k;
 }
 
+// timeout por chamada: upstream travado falha rápido em vez de segurar a função serverless
+// até a Vercel derrubar (o que zerava TODAS as métricas do painel de uma vez).
+const ZERNIO_TIMEOUT_MS = 20_000;
+
 async function zernio<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + path, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Zernio ${res.status}: ${body.slice(0, 300)}`);
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ZERNIO_TIMEOUT_MS);
+  try {
+    const res = await fetch(BASE + path, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${apiKey()}`,
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      },
+      cache: "no-store",
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Zernio ${res.status}: ${body.slice(0, 300)}`);
+    }
+    return res.json() as Promise<T>;
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") throw new Error(`Zernio timeout apos ${ZERNIO_TIMEOUT_MS}ms: ${path}`);
+    throw e;
+  } finally {
+    clearTimeout(t);
   }
-  return res.json() as Promise<T>;
 }
 
 export interface ZernioAccount {

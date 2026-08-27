@@ -606,39 +606,29 @@ export function SocialInsights({ rede }: { rede: string }) {
   type CardDef = { id: string; node: ReactElement<HTMLAttributes<HTMLDivElement>>; full?: boolean };
   // Produção de conteúdo & leads deste canal (calendário + CRM + DMs) — fica ACIMA do "Desempenho no tempo"
   const producaoNode = (() => {
-    const cur = dateRange(s);
-    const dSince = new Date(cur.since + "T00:00:00"), dUntil = new Date(cur.until + "T23:59:59");
     const ll = label.trim().toLowerCase();
-    // match de canal robusto: igual OU um contém o outro (pega "Instagram Feed", "IG", etc.)
-    const canalPosts = s.posts.filter((p) => {
-      const cn = String(p.canal || "").trim().toLowerCase();
-      if (!cn) return false;
-      const casa = cn === ll || cn.includes(ll) || ll.includes(cn);
-      if (!casa) return false;
-      const d = new Date(p.y, p.m, p.d);
-      return d >= dSince && d <= dUntil;
-    });
     const stories = platform === "instagram" ? (s.manualStats[rede]?.stories ?? 0) : 0;
 
-    // contagem por TIPO de conteúdo. No Instagram, buckets fixos (Reels/Carrossel/Estático/Stories);
-    // nos demais canais, agrupa pelo formato bruto do calendário.
+    // Contagem de conteúdo vem da API (content.total / content.byType = publicações reais no período).
+    // Stories entram à parte porque a API não os expõe no mix (indicador manual).
+    const bt = content?.byType || {};
+    const apiTotal = content?.total ?? null;
+    const totalConteudos = (apiTotal ?? 0) + stories;
+    const temApi = apiTotal != null;
+
+    // por TIPO. Instagram: buckets fixos (Reels/Carrossel/Estático/Stories) mapeados do byType da API.
+    // Demais canais: byType da API traduzido (TYPE_PT).
     let tipos: [string, number][];
     if (platform === "instagram") {
-      const b = { Reels: 0, Carrossel: 0, Estático: 0, Stories: stories };
-      for (const p of canalPosts) {
-        const f = (p.formato || "").toLowerCase();
-        if (f.includes("reel")) b.Reels++;
-        else if (f.includes("carrossel") || f.includes("carousel")) b.Carrossel++;
-        else if (f.includes("story") || f.includes("stories")) b.Stories++;
-        else b.Estático++; // feed, post, imagem, estático…
-      }
-      tipos = [["Reels", b.Reels], ["Carrossel", b.Carrossel], ["Estático", b.Estático], ["Stories", b.Stories]];
+      tipos = [
+        ["Reels", bt.video || 0],
+        ["Carrossel", bt.carousel || 0],
+        ["Estático", (bt.image || 0) + (bt.other || 0)],
+        ["Stories", stories],
+      ];
     } else {
-      const porTipo: Record<string, number> = {};
-      for (const p of canalPosts) { const f = (p.formato || "Outro").trim() || "Outro"; porTipo[f] = (porTipo[f] || 0) + 1; }
-      tipos = Object.entries(porTipo).sort((a, b) => b[1] - a[1]);
+      tipos = Object.entries(bt).filter(([, v]) => v > 0).map(([k, v]) => [TYPE_PT[k] || k, v] as [string, number]).sort((a, b) => b[1] - a[1]);
     }
-    const totalConteudos = canalPosts.length + stories;
     const mxF = Math.max(1, ...tipos.map(([, n]) => n));
     const temTipo = tipos.some(([, n]) => n > 0);
 
@@ -652,15 +642,17 @@ export function SocialInsights({ rede }: { rede: string }) {
     const crmLeads = crmRow?.total ?? null;
     const crmGanho = crmRow?.ganho ?? null;
 
+    const totalDisplay = temApi || stories > 0 ? fmt(totalConteudos) : "—";
+
     return (
       <div className="card pad-lg" style={{ marginBottom: 16 }}>
         <div className="card-head">
           <div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div>
-          <span className="badge">{fmt(totalConteudos)} conteúdos</span>
+          <span className="badge">{totalDisplay} conteúdos</span>
         </div>
         {/* números-chave */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginTop: 6 }}>
-          <MiniStat l="Conteúdos" n={fmt(totalConteudos)} />
+          <MiniStat l="Conteúdos" n={totalDisplay} />
           <MiniStat l="Visitas ao site/link" n={siteVisits != null ? fmt(siteVisits) : "—"} />
           <MiniStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} />
           <MiniStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} />
@@ -670,7 +662,9 @@ export function SocialInsights({ rede }: { rede: string }) {
           <h5>Por tipo de conteúdo</h5>
           {temTipo
             ? tipos.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)
-            : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Nenhum conteúdo programado neste período para {label}. (Os conteúdos vêm do calendário — canal &quot;{label}&quot;.{platform === "instagram" ? " Stories entra no campo abaixo." : ""})</div>}
+            : <div style={{ fontSize: 12, color: "var(--label-3)" }}>{temApi
+                ? `Nenhuma publicação no período para ${label}.`
+                : "Aguardando dados da API deste canal (contagem vem das publicações reais, não do calendário)."}</div>}
         </div>
         {crmLeads != null && crmGanho != null && (
           <div className="insight" style={{ marginTop: 12 }}>
