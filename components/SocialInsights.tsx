@@ -214,37 +214,58 @@ const SI_CARD_LABELS: Record<string, string> = {
 };
 
 // Stories do Instagram — a API não expõe a contagem; entra como indicador MANUAL (editável, persistido).
-function ManualStories({ rede }: { rede: string }) {
-  const val = useStore((s) => s.manualStats[rede]?.stories);
-  const setStat = useStore((s) => s.setManualStat);
-  return (
-    <div style={{ background: "var(--surface)", borderRadius: 10, padding: "10px 12px" }}>
-      <div style={{ fontSize: 11, color: "var(--label-3)", marginBottom: 2 }}>Stories (manual)</div>
-      <input
-        type="number"
-        min={0}
-        value={val ?? ""}
-        placeholder="—"
-        onChange={(e) => setStat(rede, { stories: e.target.value === "" ? undefined : Math.max(0, Math.round(Number(e.target.value) || 0)) })}
-        title="A API não traz Stories; informe a contagem manualmente."
-        style={{ border: 0, background: "transparent", fontSize: 20, fontWeight: 800, width: "100%", padding: 0, color: "var(--label)", outline: "none" }}
-      />
-    </div>
-  );
-}
-
 // Vínculo do canal social → canal do CRM (pra atribuir os leads certos). Some se não há CRM.
 function VincularCrm({ rede, opcoes, atual }: { rede: string; opcoes: { canal?: string }[]; atual?: string }) {
   const setStat = useStore((s) => s.setManualStat);
   const nomes = Array.from(new Set(opcoes.map((o) => String(o.canal || "").trim()).filter(Boolean)));
   if (!nomes.length) return null;
   return (
-    <div style={{ minWidth: 220 }}>
-      <div style={{ fontSize: 11, color: "var(--label-3)", marginBottom: 2 }}>Vincular leads ao canal do CRM</div>
-      <select className="field-edit" style={{ fontSize: 12.5 }} value={atual ?? ""} onChange={(e) => setStat(rede, { crmCanal: e.target.value || undefined })} title="Escolha qual canal do seu CRM representa esta rede (pra somar os leads certos aqui).">
-        <option value="">— automático (por nome) —</option>
-        {nomes.map((n) => <option key={n} value={n}>{n}</option>)}
-      </select>
+    <select className="field-edit" style={{ fontSize: 12.5, maxWidth: 260 }} value={atual ?? ""} onChange={(e) => setStat(rede, { crmCanal: e.target.value || undefined })}>
+      <option value="">— automático (por nome) —</option>
+      {nomes.map((n) => <option key={n} value={n}>{n}</option>)}
+    </select>
+  );
+}
+
+// linha "Stories" editável no bloco "Por tipo de conteúdo": a API não expõe Stories, então
+// o registro é manual POR PERÍODO (semana/mês/…). Trava períodos futuros (só registra o que já ocorreu).
+function StoriesEditableRow({ rede, periodKey, value, max, color, locked, lockMsg }: {
+  rede: string; periodKey: string; value: number; max: number; color: string; locked: boolean; lockMsg: string;
+}) {
+  const setSP = useStore((s) => s.setStoriesForPeriod);
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(String(value || ""));
+  useEffect(() => { setV(String(value || "")); }, [value, periodKey]);
+  const save = () => {
+    const n = Math.max(0, Math.round(Number(v) || 0));
+    setSP(rede, periodKey, n === 0 ? undefined : n);
+    setEditing(false);
+  };
+  return (
+    <div className="bar-row">
+      <div className="k" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        Stories
+        {locked ? (
+          <span title={lockMsg} style={{ fontSize: 11, color: "var(--label-3)", cursor: "help" }}>🔒</span>
+        ) : (
+          <button type="button" onClick={() => setEditing((e) => !e)} title="Registrar Stories deste período" aria-label="Editar Stories"
+            style={{ border: 0, background: "transparent", cursor: "pointer", color: "var(--cyan)", padding: 0, fontSize: 13, lineHeight: 1 }}>✎</button>
+        )}
+      </div>
+      {editing ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+          <input type="number" min={0} autoFocus value={v} onChange={(e) => setV(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+            className="field-edit" style={{ width: 90, fontSize: 13, padding: "4px 8px" }} />
+          <button type="button" className="btn-link ig" onClick={save} style={{ fontSize: 12 }}>Salvar</button>
+          <button type="button" className="btn-link" onClick={() => setEditing(false)} style={{ fontSize: 12 }}>Cancelar</button>
+        </div>
+      ) : (
+        <>
+          <div className="bar-track"><div className="bar-fill" style={{ width: `${(value / max) * 100 || 0}%`, background: color }} /></div>
+          <div className="v tnum">{value}</div>
+        </>
+      )}
     </div>
   );
 }
@@ -622,7 +643,13 @@ export function SocialInsights({ rede }: { rede: string }) {
   // Produção de conteúdo & leads deste canal (calendário + CRM + DMs) — fica ACIMA do "Desempenho no tempo"
   const producaoNode = (() => {
     const ll = label.trim().toLowerCase();
-    const stories = platform === "instagram" ? (s.manualStats[rede]?.stories ?? 0) : 0;
+    // Stories = registro manual POR PERÍODO (a API não expõe). Chave = janela do período atual.
+    const periodKey = `${range.since}_${range.until}`;
+    const periodStart = new Date(range.since + "T00:00:00");
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const periodoFuturo = periodStart > hoje; // não dá pra registrar Stories de período que ainda não começou
+    const storiesByP = s.manualStats[rede]?.storiesByPeriod || {};
+    const stories = platform === "instagram" ? (storiesByP[periodKey] ?? 0) : 0;
 
     // Contagem de conteúdo vem da API (content.total / content.byType = publicações reais no período).
     // Stories entram à parte porque a API não os expõe no mix (indicador manual).
@@ -672,10 +699,15 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div className="card pad-lg">
             <div className="card-head" style={{ marginBottom: 8 }}><div className="t" style={{ fontSize: 14 }}>Por tipo de conteúdo</div></div>
             {temTipo
-              ? tipos.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)
+              ? tipos.map(([f, n]) => (f === "Stories" && platform === "instagram"
+                  ? <StoriesEditableRow key={f} rede={rede} periodKey={periodKey} value={n} max={mxF} color={cor} locked={periodoFuturo} lockMsg="Período ainda não começou — só dá pra registrar semanas/meses já iniciados." />
+                  : <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />))
               : <div style={{ fontSize: 12, color: "var(--label-3)" }}>{temApi
                   ? `Nenhuma publicação no período para ${label}.`
                   : "Aguardando dados da API deste canal (contagem vem das publicações reais, não do calendário)."}</div>}
+            {platform === "instagram" && temTipo && (
+              <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 8 }}>Stories não vem da API — clique no ✎ ao lado de &quot;Stories&quot; pra registrar quantos foram feitos neste período.</div>
+            )}
           </div>
 
           {/* DIREITA — indicadores (widgets) + configuração */}
@@ -689,10 +721,13 @@ export function SocialInsights({ rede }: { rede: string }) {
             {crmLeads != null && crmGanho != null && (
               <div className="insight">{fmt(crmGanho)} de {fmt(crmLeads)} leads do canal vinculado viraram cliente.</div>
             )}
-            {/* configuração: stories manual (IG) + vínculo do canal ao CRM */}
-            {(platform === "instagram" || crmHealth.some((c) => c.canal)) && (
-              <div className="card pad-lg" style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
-                {platform === "instagram" && <ManualStories rede={rede} />}
+            {/* vínculo do canal ao CRM (com instrução) */}
+            {crmHealth.some((c) => c.canal) && (
+              <div className="card pad-lg">
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--label-1)", marginBottom: 4 }}>Vincular ao canal do CRM</div>
+                <div style={{ fontSize: 11.5, color: "var(--label-3)", marginBottom: 8, lineHeight: 1.45 }}>
+                  Seu CRM classifica os leads por canal (ex.: &quot;Redes sociais&quot;, &quot;Site&quot;). Escolha qual desses representa <b>{label}</b> pra somar os leads certos neste widget.
+                </div>
                 <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
               </div>
             )}
@@ -701,6 +736,29 @@ export function SocialInsights({ rede }: { rede: string }) {
       </div>
     );
   })();
+
+  // publica o que ESTE painel mostra pro agente (números ao vivo do canal + produção)
+  useEffect(() => {
+    const g = (k: string) => (metrics[k]?.total ?? null);
+    s.setPanelSnapshot({
+      view: rede,
+      label: `${range.since} a ${range.until}`,
+      data: {
+        canal: label,
+        conta: acct ? (acct.username ? "@" + acct.username : acct.displayName) : null,
+        seguidores: curFollLast,
+        alcance: g("reach"), impressoes: g("views") ?? g("impressions"), interacoes: g("total_interactions"),
+        visitasPerfil: g("profile_views"),
+        visitasSiteLink: linkTaps && Object.keys(linkTaps).length ? Object.values(linkTaps).reduce((a, b) => a + b, 0) : null,
+        conteudos: content?.total ?? null,
+        conteudosPorTipo: content?.byType ?? null,
+        storiesManual: platform === "instagram" ? (s.manualStats[rede]?.stories ?? null) : null,
+        leadsViaDM: inbox?.volume?.summary.uniqueConversations ?? null,
+      },
+    });
+    return () => s.setPanelSnapshot(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rede, acct?._id, range.since, range.until, data, inbox]);
 
   const cards: CardDef[] = [];
 

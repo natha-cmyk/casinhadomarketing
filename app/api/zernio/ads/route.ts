@@ -107,8 +107,36 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams;
     const since = q.get("since") ?? undefined;
     const until = q.get("until") ?? undefined;
+    const debug = q.get("debug") === "1";
 
     const accounts = await listWorkspaceAccounts(ws); // agrega profiles (multi-conta)
+
+    // diagnóstico: por que Google Ads (ou Meta) não aparece? Lista status por conexão.
+    if (debug) {
+      const gAccts = accounts.filter((a) => a.platform === "googleads");
+      const gDetail = await Promise.all(gAccts.map(async (a) => {
+        const status = (a as { adsStatus?: string }).adsStatus;
+        const conectado = status === "connected" || status === "active";
+        let customers: unknown = "não consultado (status não conectado)";
+        let gaqlSample: unknown = null;
+        if (conectado && since && until) {
+          const custs = await listAdAccounts(a._id).then((d) => d.accounts).catch((e) => ({ erro: String(e).slice(0, 120) }));
+          customers = custs;
+          const first = Array.isArray(custs) ? custs[0] : null;
+          if (first) {
+            const gaql = `SELECT campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'`;
+            gaqlSample = await googleAdsInsights(a._id, first.id, gaql).then((r) => ({ chaves: Object.keys(r || {}), linhas: gRows(r).length, amostra: gRows(r).slice(0, 2) })).catch((e) => ({ erro: String(e).slice(0, 160) }));
+          }
+        }
+        return { _id: a._id, adsStatus: status, conectado, customers, gaqlSample };
+      }));
+      return NextResponse.json({
+        ok: true, debug: true,
+        totalContas: accounts.length,
+        plataformas: accounts.map((a) => ({ platform: a.platform, adsStatus: (a as { adsStatus?: string }).adsStatus })),
+        googleAds: gDetail,
+      });
+    }
     const adConnected = accounts.filter(
       (a) => ADS_PLATFORMS.has(a.platform) && (a.adsStatus === "connected" || a.adsStatus === "active")
     );

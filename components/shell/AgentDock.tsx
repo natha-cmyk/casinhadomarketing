@@ -246,8 +246,8 @@ export function AgentDock() {
             </div>
             <div className="ag-head-r">
               {msgs.length > 0 && (
-                <button className="ag-x" onClick={clearThread} aria-label="Limpar conversa" title="Limpar conversa" type="button">
-                  🗑
+                <button className="ag-x ag-x-txt" onClick={clearThread} aria-label="Novo chat" title="Começar uma conversa nova" type="button">
+                  ＋ Novo chat
                 </button>
               )}
               {msgs.length > 0 && (
