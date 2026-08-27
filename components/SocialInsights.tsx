@@ -244,9 +244,9 @@ const SEM_LBL = ["Semana 1", "Semana 2", "Semana 3", "Semana 4"];
 
 // editor por semana (reutilizado por Stories e Visitas). Mês = 4 campos já preenchidos; semana = 1.
 // Trava semana futura. Chama setForPeriod(rede, weekKey, n|undefined) por semana.
-function WeeklyInputs({ rede, scope, byP, setForPeriod, onDone }: {
+function WeeklyInputs({ rede, scope, byP, setForPeriod, onDone, updatedAt }: {
   rede: string; scope: Scope; byP: Record<string, number>;
-  setForPeriod: (rede: string, key: string, n: number | undefined) => void; onDone: () => void;
+  setForPeriod: (rede: string, key: string, n: number | undefined) => void; onDone: () => void; updatedAt?: string;
 }) {
   const { period, year, month, week } = scope;
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
@@ -281,9 +281,10 @@ function WeeklyInputs({ rede, scope, byP, setForPeriod, onDone }: {
           </div>
         );
       })}
-      <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 2, alignItems: "center" }}>
         <button type="button" className="btn-link ig" onClick={salvar} style={{ fontSize: 12 }}>Salvar</button>
         <button type="button" className="btn-link" onClick={onDone} style={{ fontSize: 12 }}>Cancelar</button>
+        {updatedAt && <span style={{ fontSize: 10.5, color: "var(--label-3)" }}>atualizado em {new Date(updatedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>}
       </div>
     </div>
   );
@@ -295,6 +296,7 @@ function StoriesEditableRow({ rede, scope, value, max, color }: {
 }) {
   const setSP = useStore((s) => s.setStoriesForPeriod);
   const byP = useStore((s) => s.manualStats[rede]?.storiesByPeriod) || {};
+  const updAt = useStore((s) => s.manualStats[rede]?.storiesUpdatedAt);
   const [editing, setEditing] = useState(false);
   const { period, year, month, week } = scope;
   const editable = period === "semana" || period === "mes";
@@ -318,7 +320,7 @@ function StoriesEditableRow({ rede, scope, value, max, color }: {
         <div className="bar-track"><div className="bar-fill" style={{ width: `${(value / max) * 100 || 0}%`, background: color }} /></div>
         <div className="v tnum">{value}</div>
       </div>
-      {editing && <WeeklyInputs rede={rede} scope={scope} byP={byP} setForPeriod={setSP} onDone={() => setEditing(false)} />}
+      {editing && <WeeklyInputs rede={rede} scope={scope} byP={byP} setForPeriod={setSP} onDone={() => setEditing(false)} updatedAt={updAt} />}
     </div>
   );
 }
@@ -338,6 +340,7 @@ function ProdStat({ l, n, accent }: { l: string; n: string; accent?: string }) {
 function VisitsStat({ rede, scope, apiValue }: { rede: string; scope: Scope; apiValue: number | null }) {
   const setVP = useStore((s) => s.setVisitsForPeriod);
   const byP = useStore((s) => s.manualStats[rede]?.visitsByPeriod) || {};
+  const updAt = useStore((s) => s.manualStats[rede]?.visitsUpdatedAt);
   const [editing, setEditing] = useState(false);
   const usaApi = apiValue != null && apiValue > 0;
   const val = usaApi ? apiValue! : sumByScope(byP, scope);
@@ -355,7 +358,7 @@ function VisitsStat({ rede, scope, apiValue }: { rede: string; scope: Scope; api
       {!usaApi && !editing && (
         <div style={{ fontSize: 10, color: "var(--label-3)", marginTop: 2 }}>{editable ? "manual (API não trouxe)" : "registre no filtro Semana/Mês"}</div>
       )}
-      {editing && <WeeklyInputs rede={rede} scope={scope} byP={byP} setForPeriod={setVP} onDone={() => setEditing(false)} />}
+      {editing && <WeeklyInputs rede={rede} scope={scope} byP={byP} setForPeriod={setVP} onDone={() => setEditing(false)} updatedAt={updAt} />}
     </div>
   );
 }
@@ -613,10 +616,14 @@ export function SocialInsights({ rede }: { rede: string }) {
 
   const fGained = metrics.followers_gained?.total ?? null;
   const fLost = metrics.followers_lost?.total ?? null;
-  const fUnf = metrics.follows_and_unfollows?.total ?? null;
-  const net = fUnf != null ? fUnf : (fGained != null && fLost != null ? fGained - fLost : null);
-  const novos = fGained ?? (fUnf != null && fUnf >= 0 ? fUnf : null);
-  const saida = fLost ?? (fUnf != null && fUnf < 0 ? -fUnf : null);
+  // Crescimento líquido: PREFERE a diferença real da série de follower_count (fim − início) — é o número
+  // fiel. Só cai nos metrics gained/lost quando não há série. NÃO usa mais follows_and_unfollows: aquela
+  // métrica vinha inflada (não é ganho/perda líquido) e distorcia "novos/deixaram/crescimento".
+  const netFromSeries = follVals.length >= 2 ? (follVals[follVals.length - 1].value - follVals[0].value) : null;
+  const net = netFromSeries ?? (fGained != null && fLost != null ? fGained - fLost : null);
+  // novos/saída: só quando a API entrega as métricas dedicadas; senão "—" (não inventa a partir de outra).
+  const novos = fGained;
+  const saida = fLost;
 
   const hasInbox = COM_INBOX.has(platform);
   const accountsEngaged = metrics.accounts_engaged?.total ?? null;
@@ -738,7 +745,9 @@ export function SocialInsights({ rede }: { rede: string }) {
   const engTypeSum = sum(engTypeRows.map((r) => metrics[r.key].total));
 
   // ── Rendimento orgânico (só IG/FB) ──
-  const showOrganic = COM_ORGANIC.has(platform) && shown("organico") && !!content;
+  // Só mostra "Rendimento orgânico" quando HÁ separação real orgânico×impulsionado (organicShare != null).
+  // Sem sinal de impulsionamento a API não separa — não faz sentido exibir "100% orgânico".
+  const showOrganic = COM_ORGANIC.has(platform) && shown("organico") && !!content && content.organicShare != null;
   // ── Melhores horários / posting-derived (só redes com posting) ──
   const showHorarios = COM_POSTING.has(platform);
 
