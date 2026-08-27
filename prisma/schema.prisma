@@ -115,6 +115,7 @@ model Invoice {
   status      String    @default("aberta") // paga | abonada | aberta
   vencimento  DateTime?
   createdAt   DateTime  @default(now())
+  stripeInvoiceId String? @unique // dedup: 1 fatura Stripe = 1 registro (evita duplicar em reenvio de webhook)
 
   @@index([workspaceId])
 }

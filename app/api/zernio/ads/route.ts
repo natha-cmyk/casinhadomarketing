@@ -180,7 +180,9 @@ export async function GET(req: Request) {
     const allAccts = [...perConn.flat(), ...gPer.flat()];
     const byId = new Map<string, (typeof allAccts)[number]>();
     for (const a of allAccts) {
-      if (!a.totals || (a.totals.spend <= 0 && a.totals.impressions <= 0)) continue;
+      const vazio = !a.totals || (a.totals.spend <= 0 && a.totals.impressions <= 0);
+      // Google Ads: mostra mesmo vazio (confirma que a conexão foi identificada). Meta esconde vazio.
+      if (vazio && a.platform !== "googleads") continue;
       if (!byId.has(a.id)) byId.set(a.id, a);
     }
     return NextResponse.json({ ok: true, accounts: [...byId.values()] });

@@ -609,36 +609,76 @@ export function SocialInsights({ rede }: { rede: string }) {
     const cur = dateRange(s);
     const dSince = new Date(cur.since + "T00:00:00"), dUntil = new Date(cur.until + "T23:59:59");
     const ll = label.trim().toLowerCase();
-    const canalPosts = s.posts.filter((p) => String(p.canal || "").trim().toLowerCase() === ll && (() => { const d = new Date(p.y, p.m, p.d); return d >= dSince && d <= dUntil; })());
-    const porTipo: Record<string, number> = {};
-    for (const p of canalPosts) { const f = (p.formato || "Outro").trim() || "Outro"; porTipo[f] = (porTipo[f] || 0) + 1; }
+    // match de canal robusto: igual OU um contém o outro (pega "Instagram Feed", "IG", etc.)
+    const canalPosts = s.posts.filter((p) => {
+      const cn = String(p.canal || "").trim().toLowerCase();
+      if (!cn) return false;
+      const casa = cn === ll || cn.includes(ll) || ll.includes(cn);
+      if (!casa) return false;
+      const d = new Date(p.y, p.m, p.d);
+      return d >= dSince && d <= dUntil;
+    });
     const stories = platform === "instagram" ? (s.manualStats[rede]?.stories ?? 0) : 0;
-    if (stories > 0) porTipo["Stories"] = (porTipo["Stories"] || 0) + stories;
-    const tipos = Object.entries(porTipo).sort((a, b) => b[1] - a[1]);
-    const mxF = Math.max(1, ...tipos.map(([, n]) => n));
+
+    // contagem por TIPO de conteúdo. No Instagram, buckets fixos (Reels/Carrossel/Estático/Stories);
+    // nos demais canais, agrupa pelo formato bruto do calendário.
+    let tipos: [string, number][];
+    if (platform === "instagram") {
+      const b = { Reels: 0, Carrossel: 0, Estático: 0, Stories: stories };
+      for (const p of canalPosts) {
+        const f = (p.formato || "").toLowerCase();
+        if (f.includes("reel")) b.Reels++;
+        else if (f.includes("carrossel") || f.includes("carousel")) b.Carrossel++;
+        else if (f.includes("story") || f.includes("stories")) b.Stories++;
+        else b.Estático++; // feed, post, imagem, estático…
+      }
+      tipos = [["Reels", b.Reels], ["Carrossel", b.Carrossel], ["Estático", b.Estático], ["Stories", b.Stories]];
+    } else {
+      const porTipo: Record<string, number> = {};
+      for (const p of canalPosts) { const f = (p.formato || "Outro").trim() || "Outro"; porTipo[f] = (porTipo[f] || 0) + 1; }
+      tipos = Object.entries(porTipo).sort((a, b) => b[1] - a[1]);
+    }
     const totalConteudos = canalPosts.length + stories;
+    const mxF = Math.max(1, ...tipos.map(([, n]) => n));
+    const temTipo = tipos.some(([, n]) => n > 0);
+
     const dmLeads = inbox?.volume ? inbox.volume.summary.uniqueConversations : null;
+    const siteVisits = linkTaps?.WEBSITE ?? null; // visitas ao site/link do perfil (via API)
     // CRM: vínculo manual (manualStats[rede].crmCanal) > heurística por nome
     const vinc = s.manualStats[rede]?.crmCanal;
     const crmRow = vinc
       ? crmHealth.find((c) => String(c.canal || "") === vinc)
       : crmHealth.find((c) => { const cn = String(c.canal || "").toLowerCase(); return cn && (cn.includes(ll) || ll.includes(cn)); });
     const crmLeads = crmRow?.total ?? null;
+    const crmGanho = crmRow?.ganho ?? null;
+
     return (
       <div className="card pad-lg" style={{ marginBottom: 16 }}>
-        <div className="card-head"><div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div></div>
+        <div className="card-head">
+          <div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div>
+          <span className="badge">{fmt(totalConteudos)} conteúdos</span>
+        </div>
+        {/* números-chave */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginTop: 6 }}>
           <MiniStat l="Conteúdos" n={fmt(totalConteudos)} />
+          <MiniStat l="Visitas ao site/link" n={siteVisits != null ? fmt(siteVisits) : "—"} />
           <MiniStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} />
           <MiniStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} />
         </div>
-        <div className="si-dim" style={{ marginTop: 12 }}>
+        {/* por tipo de conteúdo */}
+        <div className="si-dim" style={{ marginTop: 14 }}>
           <h5>Por tipo de conteúdo</h5>
-          {tipos.length > 0
+          {temTipo
             ? tipos.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)
-            : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Nenhum conteúdo programado neste período para {label}. (Os conteúdos vêm do calendário — canal &quot;{label}&quot;.)</div>}
+            : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Nenhum conteúdo programado neste período para {label}. (Os conteúdos vêm do calendário — canal &quot;{label}&quot;.{platform === "instagram" ? " Stories entra no campo abaixo." : ""})</div>}
         </div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--hairline)" }}>
+        {crmLeads != null && crmGanho != null && (
+          <div className="insight" style={{ marginTop: 12 }}>
+            {fmt(crmGanho)} de {fmt(crmLeads)} leads do canal vinculado viraram cliente.
+          </div>
+        )}
+        {/* config: stories manual (IG) + vínculo do canal ao CRM */}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--hairline)" }}>
           {platform === "instagram" && <ManualStories rede={rede} />}
           <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
         </div>

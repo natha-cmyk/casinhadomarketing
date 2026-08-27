@@ -42,11 +42,14 @@ export async function POST(req: Request) {
         const inv = event.data.object as Stripe.Invoice;
         const customerId = typeof inv.customer === "string" ? inv.customer : inv.customer?.id;
         const sub = customerId ? await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId } }) : null;
-        if (sub) {
+        if (sub && inv.id) {
           const dt = inv.created ? new Date(inv.created * 1000) : new Date();
           const comp = dt.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
-          await prisma.invoice.create({
-            data: { workspaceId: sub.workspaceId, competencia: comp, valor: Math.round((inv.amount_paid || 0) / 100), status: "paga", vencimento: dt },
+          // dedup por ID da fatura do Stripe: reenvio do evento nao cria fatura duplicada
+          await prisma.invoice.upsert({
+            where: { stripeInvoiceId: inv.id },
+            update: { valor: Math.round((inv.amount_paid || 0) / 100), status: "paga" },
+            create: { workspaceId: sub.workspaceId, competencia: comp, valor: Math.round((inv.amount_paid || 0) / 100), status: "paga", vencimento: dt, stripeInvoiceId: inv.id },
           });
         }
         break;
