@@ -249,6 +249,16 @@ function VincularCrm({ rede, opcoes, atual }: { rede: string; opcoes: { canal?: 
   );
 }
 
+// widget de indicador — card próprio com número grande (usado no bloco Produção)
+function ProdStat({ l, n, accent }: { l: string; n: string; accent?: string }) {
+  return (
+    <div className="card" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", justifyContent: "center", minHeight: 78 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)" }}>{l}</div>
+      <div className="tnum" style={{ fontSize: 25, fontWeight: 750, marginTop: 4, color: accent || "var(--label)", lineHeight: 1.1 }}>{n}</div>
+    </div>
+  );
+}
+
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -259,7 +269,12 @@ export function SocialInsights({ rede }: { rede: string }) {
   // multi-conta: pode haver 2+ contas da MESMA plataforma no profile (ex. Instagram
   // SeaHub + Seabox). A conta exibida é a selecionada no store; default = primeira.
   const accts = s.zernioAccounts.filter((a) => a.platform === platform);
-  const acct = accts.find((a) => a._id === s.selectedAccount[rede]) || accts[0] || null;
+  // ordem de escolha da conta: seleção da sessão > conta PADRÃO (config) > primeira da lista
+  const defaultAcctId = s.manualStats[rede]?.defaultAccount;
+  const acct =
+    accts.find((a) => a._id === s.selectedAccount[rede]) ||
+    accts.find((a) => a._id === defaultAcctId) ||
+    accts[0] || null;
   const acctLabel = (a: (typeof accts)[number]) => a.username || a.displayName || "conta";
 
   const [data, setData] = useState<Combined | null>(null);
@@ -633,7 +648,8 @@ export function SocialInsights({ rede }: { rede: string }) {
     const temTipo = tipos.some(([, n]) => n > 0);
 
     const dmLeads = inbox?.volume ? inbox.volume.summary.uniqueConversations : null;
-    const siteVisits = linkTaps?.WEBSITE ?? null; // visitas ao site/link do perfil (via API)
+    // Visitas ao site/link = total de toques nos links do perfil (soma todas as dimensões da API).
+    const siteVisits = linkTaps && Object.keys(linkTaps).length ? Object.values(linkTaps).reduce((a, b) => a + b, 0) : null;
     // CRM: vínculo manual (manualStats[rede].crmCanal) > heurística por nome
     const vinc = s.manualStats[rede]?.crmCanal;
     const crmRow = vinc
@@ -645,36 +661,42 @@ export function SocialInsights({ rede }: { rede: string }) {
     const totalDisplay = temApi || stories > 0 ? fmt(totalConteudos) : "—";
 
     return (
-      <div className="card pad-lg" style={{ marginBottom: 16 }}>
-        <div className="card-head">
+      <div style={{ marginBottom: 16 }}>
+        <div className="card-head" style={{ marginBottom: 12 }}>
           <div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div>
           <span className="badge">{totalDisplay} conteúdos</span>
         </div>
-        {/* números-chave */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginTop: 6 }}>
-          <MiniStat l="Conteúdos" n={totalDisplay} />
-          <MiniStat l="Visitas ao site/link" n={siteVisits != null ? fmt(siteVisits) : "—"} />
-          <MiniStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} />
-          <MiniStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} />
-        </div>
-        {/* por tipo de conteúdo */}
-        <div className="si-dim" style={{ marginTop: 14 }}>
-          <h5>Por tipo de conteúdo</h5>
-          {temTipo
-            ? tipos.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)
-            : <div style={{ fontSize: 12, color: "var(--label-3)" }}>{temApi
-                ? `Nenhuma publicação no período para ${label}.`
-                : "Aguardando dados da API deste canal (contagem vem das publicações reais, não do calendário)."}</div>}
-        </div>
-        {crmLeads != null && crmGanho != null && (
-          <div className="insight" style={{ marginTop: 12 }}>
-            {fmt(crmGanho)} de {fmt(crmLeads)} leads do canal vinculado viraram cliente.
+        {/* metade: "por tipo" · metade: indicadores em widgets separados */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 16, alignItems: "start" }}>
+          {/* ESQUERDA — por tipo de conteúdo */}
+          <div className="card pad-lg">
+            <div className="card-head" style={{ marginBottom: 8 }}><div className="t" style={{ fontSize: 14 }}>Por tipo de conteúdo</div></div>
+            {temTipo
+              ? tipos.map(([f, n]) => <BarRow key={f} k={f} v={n} max={mxF} color={cor} formatted={String(n)} />)
+              : <div style={{ fontSize: 12, color: "var(--label-3)" }}>{temApi
+                  ? `Nenhuma publicação no período para ${label}.`
+                  : "Aguardando dados da API deste canal (contagem vem das publicações reais, não do calendário)."}</div>}
           </div>
-        )}
-        {/* config: stories manual (IG) + vínculo do canal ao CRM */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--hairline)" }}>
-          {platform === "instagram" && <ManualStories rede={rede} />}
-          <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
+
+          {/* DIREITA — indicadores (widgets) + configuração */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <ProdStat l="Conteúdos" n={totalDisplay} accent={cor} />
+              <ProdStat l="Visitas ao site/link" n={siteVisits != null ? fmt(siteVisits) : "—"} />
+              <ProdStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} accent="var(--excelente)" />
+              <ProdStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} accent="var(--cyan)" />
+            </div>
+            {crmLeads != null && crmGanho != null && (
+              <div className="insight">{fmt(crmGanho)} de {fmt(crmLeads)} leads do canal vinculado viraram cliente.</div>
+            )}
+            {/* configuração: stories manual (IG) + vínculo do canal ao CRM */}
+            {(platform === "instagram" || crmHealth.some((c) => c.canal)) && (
+              <div className="card pad-lg" style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
+                {platform === "instagram" && <ManualStories rede={rede} />}
+                <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1032,31 +1054,43 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {accts.map((a) => {
               const on = acct?._id === a._id;
+              const isDefault = defaultAcctId === a._id;
               const nm = a.username ? "@" + a.username : acctLabel(a);
               return (
-                <button
-                  key={a._id}
-                  type="button"
-                  aria-pressed={on}
-                  title={a.displayName || a.username || "conta"}
-                  onClick={() => s.setSelectedAccount(rede, a._id)}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 7,
-                    padding: "6px 12px", borderRadius: 999, cursor: "pointer",
-                    border: on ? `1.5px solid ${cor}` : "1.5px solid transparent",
-                    background: on ? "#fff" : "rgba(0,0,0,0.04)",
-                    color: on ? "var(--label)" : "var(--label-2)",
-                    fontWeight: on ? 700 : 500, fontSize: 13,
-                    boxShadow: on ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
-                  }}
-                >
-                  {a.profilePicture ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={a.profilePicture} alt="" style={{ width: 22, height: 22, borderRadius: 999, objectFit: "cover", display: "block" }} />
-                  ) : null}
-                  <span>{nm}</span>
-                  {on && <span aria-hidden="true" style={{ fontSize: 10, color: cor }}>●</span>}
-                </button>
+                <span key={a._id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    title={a.displayName || a.username || "conta"}
+                    onClick={() => s.setSelectedAccount(rede, a._id)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 7,
+                      padding: "6px 12px", borderRadius: 999, cursor: "pointer",
+                      border: on ? `1.5px solid ${cor}` : "1.5px solid transparent",
+                      background: on ? "#fff" : "rgba(0,0,0,0.04)",
+                      color: on ? "var(--label)" : "var(--label-2)",
+                      fontWeight: on ? 700 : 500, fontSize: 13,
+                      boxShadow: on ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
+                    }}
+                  >
+                    {a.profilePicture ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={a.profilePicture} alt="" style={{ width: 22, height: 22, borderRadius: 999, objectFit: "cover", display: "block" }} />
+                    ) : null}
+                    <span>{nm}</span>
+                    {on && <span aria-hidden="true" style={{ fontSize: 10, color: cor }}>●</span>}
+                  </button>
+                  {/* estrela: define a conta que abre por padrão neste canal */}
+                  <button
+                    type="button"
+                    title={isDefault ? "Conta padrão deste canal" : "Definir como conta padrão (abre por padrão)"}
+                    aria-label={isDefault ? "Conta padrão" : "Definir como padrão"}
+                    onClick={() => s.setManualStat(rede, { defaultAccount: isDefault ? undefined : a._id })}
+                    style={{ border: 0, background: "transparent", cursor: "pointer", fontSize: 14, lineHeight: 1, color: isDefault ? "var(--atencao)" : "var(--label-3)", padding: 2 }}
+                  >
+                    {isDefault ? "★" : "☆"}
+                  </button>
+                </span>
               );
             })}
           </div>

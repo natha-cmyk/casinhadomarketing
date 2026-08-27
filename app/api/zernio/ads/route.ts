@@ -7,6 +7,8 @@ import { listAdAccounts, adsInsights, googleAdsInsights, type AdInsightRow } fro
 import { listWorkspaceAccounts } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60; // muitas chamadas ao provedor (Meta + Google GAQL por cliente); evita corte prematuro
 
 // ── Google Ads (GAQL) — parsing defensivo do passthrough do Google ──
 const gnum = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
