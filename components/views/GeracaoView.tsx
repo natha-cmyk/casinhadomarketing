@@ -3,7 +3,7 @@
 // Conecta via ClickUp nativo (API REST) ou webhook genérico e mostra leads/oportunidades
 // por canal, categoria, produto, qualificação, status/etapa e motivo de perda, respeitando
 // o período da toolbar. O usuário mapeia os campos personalizados do ClickUp por dimensão.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { PageHead, BarRow } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
@@ -68,6 +68,7 @@ interface LeadsData {
   mapping?: Record<string, string | null>; // dimensão → campo do ClickUp que alimentou (transparência)
   availableFields?: { name: string; type: string; filled: number; sample: string | null }[];
   channelHealth?: { key: string; total: number; won: number; lost: number; open: number; value: number; conv: number }[];
+  campaignHealth?: { key: string; total: number; won: number; lost: number; open: number; value: number; conv: number; byQualification: { key: string; count: number }[]; lossTop: { key: string; count: number }[] }[];
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -912,7 +913,7 @@ function Dashboard({ data }: { data: LeadsData }) {
           { id: "qualificacao", label: "Por qualificação", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
           { id: "funil", label: "Por funil / etapa", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
           { id: "status", label: "Por status", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
-          { id: "campanha", label: "Performance por campanha", defaultSpan: 6, defaultH: 12, node: <GroupCard title="Performance por campanha" rows={data.byCampaign || []} color={cycle} empty="Sem campanha informada. Mapeie o campo 'Campanha' do ClickUp em Reconfigurar (ou nomeie o campo personalizado como 'Campanha')." defaultViz="list" showValue={false} /> },
+          { id: "campanha", label: "Performance por campanha", defaultSpan: 6, defaultH: 13, node: <CampaignPerfCard rows={data.campaignHealth || []} /> },
           ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, defaultH: 9, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
           ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Performance por canal", defaultSpan: 6, defaultH: 9, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
           // gráficos criados pelo usuário (chart builder)
@@ -1054,6 +1055,96 @@ function ChannelHealthCard({ rows }: { rows: NonNullable<LeadsData["channelHealt
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Performance por campanha: por campanha → oportunidades, conversão, e (expandindo) top motivos de
+// perda + qualificação. Campanha vazia = "Não vinculado à campanha" (não "não preenchido").
+function CampaignPerfCard({ rows }: { rows: NonNullable<LeadsData["campaignHealth"]> }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const SEMCAMP = "Não vinculado à campanha";
+  const nome = (k: string) => (k && k.trim() ? k : SEMCAMP);
+  if (!rows.length) {
+    return (
+      <div className="card">
+        <div className="card-head"><div className="t">Performance por campanha</div></div>
+        <div style={{ fontSize: 12.5, color: "var(--label-3)" }}>
+          Sem campanha detectada. Mapeie o campo <b>Campanha</b> do ClickUp em <b>Reconfigurar</b> (ou nomeie o campo personalizado como &quot;Campanha&quot;) e sincronize.
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="t">Performance por campanha</div>
+        <span className="badge">{rows.length}</span>
+      </div>
+      <div className="rel-scroll">
+        <table className="rel-tbl" style={{ width: "100%", tableLayout: "auto" }}>
+          <thead>
+            <tr>
+              <th style={{ width: 24 }} aria-hidden />
+              <th style={{ textAlign: "left" }}>Campanha</th>
+              <th>Oportunidades</th>
+              <th>Ganhos</th>
+              <th>Perdidos</th>
+              <th>Conversão</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => {
+              const isOpen = !!open[c.key];
+              const semDado = !c.key || !c.key.trim();
+              return (
+                <Fragment key={c.key || "__none__"}>
+                  <tr onClick={() => setOpen((o) => ({ ...o, [c.key]: !o[c.key] }))} style={{ cursor: "pointer" }}>
+                    <td style={{ textAlign: "center" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                        style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: ".18s", color: "var(--label-3)", verticalAlign: "middle" }}>
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </td>
+                    <td style={{ textAlign: "left", fontWeight: 600, fontStyle: semDado ? "italic" : "normal", color: semDado ? "var(--label-3)" : "var(--label)" }}>{nome(c.key)}</td>
+                    <td className="tnum">{fmt(c.total)}</td>
+                    <td className="tnum" style={{ color: "var(--excelente)" }}>{fmt(c.won)}</td>
+                    <td className="tnum" style={{ color: "var(--red)" }}>{fmt(c.lost)}</td>
+                    <td className="tnum" style={{ fontWeight: 700, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)" }}>{(c.conv * 100).toFixed(0)}%</td>
+                  </tr>
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: 0, background: "rgba(0,0,0,.02)" }}>
+                        <div style={{ padding: "12px 16px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 18 }}>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)", marginBottom: 6 }}>Top motivos de perda</div>
+                            {c.lossTop.length ? c.lossTop.map((l) => (
+                              <div key={l.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "2px 0" }}>
+                                <span style={{ color: "var(--label-1)" }}>{l.key}</span><span className="tnum" style={{ color: "var(--label-2)" }}>{fmt(l.count)}</span>
+                              </div>
+                            )) : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem perdas com motivo registrado.</div>}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)", marginBottom: 6 }}>Por qualificação</div>
+                            {c.byQualification.length ? c.byQualification.map((q) => (
+                              <div key={q.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "2px 0" }}>
+                                <span style={{ color: "var(--label-1)" }}>{q.key}</span><span className="tnum" style={{ color: "var(--label-2)" }}>{fmt(q.count)}</span>
+                              </div>
+                            )) : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem qualificação informada.</div>}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 10 }}>
+        Conversão = ganhos ÷ oportunidades da campanha. Clique numa linha pra ver motivos de perda e qualificação.
+      </div>
     </div>
   );
 }

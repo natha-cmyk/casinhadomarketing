@@ -91,6 +91,18 @@ export async function GET(req: Request) {
       c.total += 1; c[oc] += 1; if (oc === "won") c.value += v;
       chan.set(k, c);
     };
+    // saúde por CAMPANHA: desfecho + qualificação + top motivos de perda por campanha
+    interface CampAgg { total: number; won: number; lost: number; open: number; value: number; qual: Map<string, number>; loss: Map<string, number> }
+    const camp = new Map<string, CampAgg>();
+    const campBump = (key: string, oc: Outcome, v: number, qualification?: string | null, lossReason?: string | null) => {
+      const k = (key && key.trim()) || "";
+      const c = camp.get(k) ?? { total: 0, won: 0, lost: 0, open: 0, value: 0, qual: new Map(), loss: new Map() };
+      c.total += 1; c[oc] += 1; if (oc === "won") c.value += v;
+      const qk = (qualification && qualification.trim()) || "";
+      if (qk) c.qual.set(qk, (c.qual.get(qk) || 0) + 1);
+      if (oc === "lost" && lossReason && lossReason.trim()) c.loss.set(lossReason.trim(), (c.loss.get(lossReason.trim()) || 0) + 1);
+      camp.set(k, c);
+    };
 
     let totalValue = 0, pipelineValue = 0, wonValue = 0, won = 0, lost = 0, open = 0;
 
@@ -153,6 +165,7 @@ export async function GET(req: Request) {
       else if (outcome === "lost") { lost += 1; if (it.lossReason && it.lossReason.trim()) tally(lossReasons, it.lossReason, v); }
       else { open += 1; pipelineValue += v; }
       chanBump(it.channel ?? "", outcome, v);
+      campBump(it.campaign ?? "", outcome, v, it.qualification, it.lossReason);
 
       return {
         id: l.id, title: l.title,
@@ -189,6 +202,14 @@ export async function GET(req: Request) {
       lossReasons: toRows(lossReasons),
       channelHealth: [...chan.entries()]
         .map(([key, c]) => ({ key, ...c, conv: c.total ? c.won / c.total : 0 }))
+        .sort((a, b) => b.total - a.total),
+      campaignHealth: [...camp.entries()]
+        .map(([key, c]) => ({
+          key, total: c.total, won: c.won, lost: c.lost, open: c.open, value: c.value,
+          conv: c.total ? c.won / c.total : 0,
+          byQualification: [...c.qual.entries()].map(([k, n]) => ({ key: k, count: n })).sort((a, b) => b.count - a.count),
+          lossTop: [...c.loss.entries()].map(([k, n]) => ({ key: k, count: n })).sort((a, b) => b.count - a.count).slice(0, 3),
+        }))
         .sort((a, b) => b.total - a.total),
       mapping, // { dimensão: nome do campo ClickUp que alimentou }
       availableFields, // todos os campos personalizados vistos (p/ diagnóstico)

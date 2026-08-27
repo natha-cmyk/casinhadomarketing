@@ -120,7 +120,10 @@ function contentSummary(posts: PostAnalyticsItem[]) {
     byType[t in byType ? t : "other"]++;
   }
   const totReach = organic.reach + paid.reach;
-  return { total: posts.length, organic, paid, byType, organicShare: totReach ? organic.reach / totReach : null };
+  // orgânico vs impulsionado só faz sentido quando HÁ sinal de impulsionamento (post marcado como ad).
+  // Sem nenhum ad detectado, NÃO afirmamos "100% orgânico" (a API não separou) → organicShare = null.
+  const temSinalPago = paid.count > 0 || paid.reach > 0;
+  return { total: posts.length, organic, paid, byType, organicShare: (totReach && temSinalPago) ? organic.reach / totReach : null };
 }
 
 export async function GET(req: Request) {
@@ -171,7 +174,13 @@ export async function GET(req: Request) {
       hasContent ? postAnalytics({ accountId, platform, sortBy: "publishedAt", order: "desc", limit: 24 }).catch(() => null) : Promise.resolve(null),
       isIG ? profileLinkTaps(accountId, range).catch(() => null) : Promise.resolve(null),
       isIG ? listStories(accountId).then((s) => s.length).catch(() => null) : Promise.resolve(null),
-      hasPosting ? bestTime(accountId, platform, { fromDate: since, toDate: until }).catch(() => null) : Promise.resolve(null),
+      // Melhores horários: janela AMPLA (90 dias), independente do período do painel — senão, com
+      // poucos posts no mês, o heatmap concentra tudo num único dia da semana.
+      hasPosting ? bestTime(accountId, platform, (() => {
+        const to = until || new Date().toISOString().slice(0, 10);
+        const from = new Date(new Date(to + "T00:00:00").getTime() - 90 * 864e5).toISOString().slice(0, 10);
+        return { fromDate: from, toDate: to };
+      })()).catch(() => null) : Promise.resolve(null),
       hasDemo ? demographics(accountId, { platform }).catch(() => null) : Promise.resolve(null),
     ]);
 

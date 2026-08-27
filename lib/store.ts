@@ -119,7 +119,7 @@ export interface UIState {
   // opções CUSTOM do calendário criadas na hora (pilar/formato). Persistido no config.
   calOpcoes: { pilares: string[]; formatos: string[] };
   // indicadores MANUAIS por canal (ex.: Stories IG que a API não expõe). Persistido no config.
-  manualStats: Record<string, { stories?: number; crmCanal?: string; defaultAccount?: string; storiesByPeriod?: Record<string, number>; visitsByPeriod?: Record<string, number> }>;
+  manualStats: Record<string, { stories?: number; crmCanal?: string; defaultAccount?: string; storiesByPeriod?: Record<string, number>; visitsByPeriod?: Record<string, number>; storiesUpdatedAt?: string; visitsUpdatedAt?: string }>;
   // personalização dos agentes por workspace: { agentKey: {enabled, panels, promptExtra} }. Persistido no config.
   agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
   // layout dos widgets por painel. grid = coordenadas livres {x,y,w,h} por widget (tipo ClickUp);
@@ -280,14 +280,14 @@ export const useStore = create<UIState>((set) => ({
       const cur = s.manualStats[rede] || {};
       const byP = { ...(cur.storiesByPeriod || {}) };
       if (n == null) delete byP[periodKey]; else byP[periodKey] = n;
-      return { manualStats: { ...s.manualStats, [rede]: { ...cur, storiesByPeriod: byP } } };
+      return { manualStats: { ...s.manualStats, [rede]: { ...cur, storiesByPeriod: byP, storiesUpdatedAt: new Date().toISOString() } } };
     }),
   setVisitsForPeriod: (rede, periodKey, n) =>
     set((s) => {
       const cur = s.manualStats[rede] || {};
       const byP = { ...(cur.visitsByPeriod || {}) };
       if (n == null) delete byP[periodKey]; else byP[periodKey] = n;
-      return { manualStats: { ...s.manualStats, [rede]: { ...cur, visitsByPeriod: byP } } };
+      return { manualStats: { ...s.manualStats, [rede]: { ...cur, visitsByPeriod: byP, visitsUpdatedAt: new Date().toISOString() } } };
     }),
   setAgentConfig: (key, patch) =>
     set((s) => {
