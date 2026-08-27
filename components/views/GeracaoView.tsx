@@ -228,6 +228,28 @@ export function GeracaoView() {
     return () => clearTimeout(t);
   }, [msg]);
 
+  // publica o painel (funil/CRM) pro agente ler exatamente o que está na tela
+  useEffect(() => {
+    if (!data) return;
+    s.setPanelSnapshot({
+      view: "geracao",
+      label: `${range.since} a ${range.until}`,
+      data: {
+        crm: {
+          totalLeads: data.total, ganhos: data.won, perdidos: data.lost, emAberto: data.open,
+          taxaConversao: data.convRate, valorTotal: data.totalValue, valorGanho: data.wonValue, valorPipeline: data.pipelineValue,
+          porCanal: (data.byChannel || []).slice(0, 12).map((r) => ({ nome: r.key, leads: r.count })),
+          porCategoria: (data.byCategory || []).slice(0, 12).map((r) => ({ nome: r.key, leads: r.count })),
+          porQualificacao: (data.byQualification || []).slice(0, 12).map((r) => ({ nome: r.key, leads: r.count })),
+          porEtapa: (data.byStage || []).slice(0, 12).map((r) => ({ nome: r.key, leads: r.count })),
+          motivosPerda: (data.lossReasons || []).slice(0, 8).map((r) => ({ motivo: r.key, qtd: r.count })),
+        },
+      },
+    });
+    return () => s.setPanelSnapshot(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, range.since, range.until]);
+
   // Auto-sync ao abrir a tela conectada (incremental, silencioso) — 1x por montagem.
   const [autoSynced, setAutoSynced] = useState(false);
   useEffect(() => {

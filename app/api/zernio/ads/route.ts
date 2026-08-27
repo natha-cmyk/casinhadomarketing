@@ -7,6 +7,8 @@ import { listAdAccounts, adsInsights, googleAdsInsights, type AdInsightRow } fro
 import { listWorkspaceAccounts } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60; // muitas chamadas ao provedor (Meta + Google GAQL por cliente); evita corte prematuro
 
 // ── Google Ads (GAQL) — parsing defensivo do passthrough do Google ──
 const gnum = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -105,8 +107,38 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams;
     const since = q.get("since") ?? undefined;
     const until = q.get("until") ?? undefined;
+    const debug = q.get("debug") === "1";
 
     const accounts = await listWorkspaceAccounts(ws); // agrega profiles (multi-conta)
+
+    // diagnóstico: por que Google Ads (ou Meta) não aparece? Lista status por conexão.
+    if (debug) {
+      const isG = (p: string) => { const s = p.toLowerCase(); return s.includes("google") && s.includes("ads"); };
+      const gAccts = accounts.filter((a) => isG(String(a.platform || "")));
+      const gDetail = await Promise.all(gAccts.map(async (a) => {
+        const status = (a as { adsStatus?: string; status?: string }).adsStatus ?? (a as { status?: string }).status;
+        const st = String(status ?? "").toLowerCase();
+        const conectado = st !== "disconnected" && st !== "revoked" && st !== "error" && st !== "expired";
+        let customers: unknown = "não consultado (status não conectado)";
+        let gaqlSample: unknown = null;
+        if (conectado && since && until) {
+          const custs = await listAdAccounts(a._id).then((d) => d.accounts).catch((e) => ({ erro: String(e).slice(0, 120) }));
+          customers = custs;
+          const first = Array.isArray(custs) ? custs[0] : null;
+          if (first) {
+            const gaql = `SELECT campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'`;
+            gaqlSample = await googleAdsInsights(a._id, first.id, gaql).then((r) => ({ chaves: Object.keys(r || {}), linhas: gRows(r).length, amostra: gRows(r).slice(0, 2) })).catch((e) => ({ erro: String(e).slice(0, 160) }));
+          }
+        }
+        return { _id: a._id, adsStatus: status, conectado, customers, gaqlSample };
+      }));
+      return NextResponse.json({
+        ok: true, debug: true,
+        totalContas: accounts.length,
+        plataformas: accounts.map((a) => ({ platform: a.platform, adsStatus: (a as { adsStatus?: string }).adsStatus })),
+        googleAds: gDetail,
+      });
+    }
     const adConnected = accounts.filter(
       (a) => ADS_PLATFORMS.has(a.platform) && (a.adsStatus === "connected" || a.adsStatus === "active")
     );
@@ -163,7 +195,15 @@ export async function GET(req: Request) {
     );
 
     // ── Google Ads (googleads) — caminho próprio via GAQL ──
-    const gConnected = accounts.filter((a) => a.platform === "googleads" && ((a as { adsStatus?: string }).adsStatus === "connected" || (a as { adsStatus?: string }).adsStatus === "active"));
+    // Google Ads é conta STANDALONE (não add-on de posting como o Meta), então normalmente NÃO
+    // tem `adsStatus`. Basta ela existir na lista de contas conectadas — a menos que o status
+    // diga explicitamente que caiu. Tolerante a variações de nome (googleads/google_ads/google-ads).
+    const isGoogleAds = (p: string) => { const s = p.toLowerCase(); return s.includes("google") && s.includes("ads"); };
+    const gConnected = accounts.filter((a) => {
+      if (!isGoogleAds(String(a.platform || ""))) return false;
+      const st = String((a as { adsStatus?: string; status?: string }).adsStatus ?? (a as { status?: string }).status ?? "").toLowerCase();
+      return st !== "disconnected" && st !== "revoked" && st !== "error" && st !== "expired";
+    });
     const gseen = new Set<string>();
     const gConns = gConnected.filter((a) => (gseen.has(a._id) ? false : (gseen.add(a._id), true)));
     const gPer = (since && until) ? await Promise.all(gConns.map(async (conn) => {
@@ -180,7 +220,9 @@ export async function GET(req: Request) {
     const allAccts = [...perConn.flat(), ...gPer.flat()];
     const byId = new Map<string, (typeof allAccts)[number]>();
     for (const a of allAccts) {
-      if (!a.totals || (a.totals.spend <= 0 && a.totals.impressions <= 0)) continue;
+      const vazio = !a.totals || (a.totals.spend <= 0 && a.totals.impressions <= 0);
+      // Google Ads: mostra mesmo vazio (confirma que a conexão foi identificada). Meta esconde vazio.
+      if (vazio && a.platform !== "googleads") continue;
       if (!byId.has(a.id)) byId.set(a.id, a);
     }
     return NextResponse.json({ ok: true, accounts: [...byId.values()] });

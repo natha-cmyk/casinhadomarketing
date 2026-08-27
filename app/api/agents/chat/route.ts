@@ -34,53 +34,62 @@ const OPENAI_COMPAT: Record<string, { base: string; model: string }> = {
   gemini: { base: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.0-flash" },
 };
 
+// timeout de conexão com a LLM: se o provedor travar no connect, aborta e devolve erro legível
+// em vez de segurar a função serverless até a Vercel matar (FUNCTION_INVOCATION_TIMEOUT).
+const LLM_CONNECT_TIMEOUT_MS = 30_000;
+
 // ── OpenAI-compatible /chat/completions (OpenRouter/OpenAI/Gemini), streaming SSE ──
-async function streamOpenAICompat(base: string, defModel: string, system: string, history: Msg[], apiKey: string, modelIn: string): Promise<ReadableStream<Uint8Array>> {
+// Faz o fetch DENTRO do stream: a Response volta na hora e o handler nunca bloqueia no connect.
+function streamOpenAICompat(base: string, defModel: string, system: string, history: Msg[], apiKey: string, modelIn: string): ReadableStream<Uint8Array> {
   const model = modelIn || defModel;
-  const res = await fetch(`${base}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "X-Title": "Casinha do Marketing",
-    },
-    body: JSON.stringify({
-      model,
-      stream: true,
-      max_tokens: 1500,
-      messages: [{ role: "system", content: system }, ...history],
-    }),
-  });
   const encoder = new TextEncoder();
-  if (!res.ok || !res.body) {
-    const body = await res.text().catch(() => "");
-    return new ReadableStream({
-      start(c) { c.enqueue(encoder.encode(`[erro do LLM ${res.status}: ${body.slice(0, 140)}]`)); c.close(); },
-    });
-  }
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = "";
   return new ReadableStream({
-    async pull(controller) {
-      const { done, value } = await reader.read();
-      if (done) { controller.close(); return; }
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split("\n");
-      buf = lines.pop() || "";
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t.startsWith("data:")) continue;
-        const data = t.slice(5).trim();
-        if (data === "[DONE]") { controller.close(); return; }
-        try {
-          const j = JSON.parse(data);
-          const delta = j?.choices?.[0]?.delta?.content;
-          if (delta) controller.enqueue(encoder.encode(delta));
-        } catch { /* keep-alive / parcial — ignora */ }
+    async start(controller) {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), LLM_CONNECT_TIMEOUT_MS);
+      try {
+        const res = await fetch(`${base}/chat/completions`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "X-Title": "Casinha do Marketing" },
+          body: JSON.stringify({ model, stream: true, max_tokens: 1500, messages: [{ role: "system", content: system }, ...history] }),
+          signal: ac.signal,
+        });
+        if (!res.ok || !res.body) {
+          const body = await res.text().catch(() => "");
+          controller.enqueue(encoder.encode(`[erro do LLM ${res.status}: ${body.slice(0, 140)}]`));
+          controller.close();
+          return;
+        }
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() || "";
+          for (const line of lines) {
+            const ln = line.trim();
+            if (!ln.startsWith("data:")) continue;
+            const data = ln.slice(5).trim();
+            if (data === "[DONE]") { controller.close(); return; }
+            try {
+              const j = JSON.parse(data);
+              const delta = j?.choices?.[0]?.delta?.content;
+              if (delta) controller.enqueue(encoder.encode(delta));
+            } catch { /* keep-alive / parcial — ignora */ }
+          }
+        }
+        controller.close();
+      } catch (e) {
+        const msg = e instanceof Error && e.name === "AbortError" ? "tempo de conexão esgotado" : String(e).slice(0, 120);
+        controller.enqueue(encoder.encode(`\n\n[não consegui falar com a LLM agora: ${msg}]`));
+        controller.close();
+      } finally {
+        clearTimeout(t);
       }
     },
-    cancel() { reader.cancel().catch(() => {}); },
   });
 }
 
