@@ -7,6 +7,7 @@ import { savePosts, deletePostApi } from "@/lib/api";
 import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
 import { Ic } from "@/components/Ic";
 import { ICONS } from "@/lib/nav";
+import { PostPreview } from "@/components/views/PostPreview";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -26,6 +27,7 @@ type ZAccount = {
   username?: string;
   enabled?: boolean;
   adsStatus?: string;
+  profilePicture?: string;
 };
 
 // id da rede (Casinha) de uma conta Zernio (twitter→x).
@@ -557,6 +559,23 @@ export function PostModal() {
   // Guarda o id da rede em post.contas (mantém o shape usado pela fila/chips do calendário).
   const conn = redesConectadas(zernioAccounts);
 
+  // dados pro PREVIEW (avatar do perfil escolhido + 1ª mídia). Legenda do canal atual (override > geral).
+  const prevAcct = zernioAccounts.find((a) => a.username === f.perfil || a.displayName === f.perfil);
+  const ridPrev = redeIdDoCanal(f.canal);
+  const prevLegenda = (ridPrev && f.overrides[ridPrev]?.caption) || f.legenda;
+  const previewNode = (
+    <PostPreview
+      canal={f.canal}
+      formato={f.formato}
+      perfil={f.perfil}
+      avatarUrl={prevAcct?.profilePicture}
+      legenda={prevLegenda}
+      hashtags={f.hashtags}
+      media={f.media[0]}
+      titulo={f.titulo}
+    />
+  );
+
   // Opções dos seletores vêm dos canais/perfis conectados; preserva o valor atual (edição).
   const canalOptions =
     f.canal && !canais.some((c) => c.nome === f.canal)
@@ -595,7 +614,7 @@ export function PostModal() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="pm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+      <div className="pm pm-wide" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="pm-head">
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
             <b>{pm.mode === "edit" ? "Editar post" : "Novo post"}</b>
@@ -608,6 +627,7 @@ export function PostModal() {
             ✕
           </button>
         </div>
+        <div className="pm-main">
         <div className="pm-body">
           <div className="pm-row">
             <div>
@@ -945,6 +965,11 @@ export function PostModal() {
             </select>
             {msg && <div className={`pm-msg pm-msg-${msg.kind}`}>{msg.text}</div>}
           </div>
+        </div>
+        <aside className="pm-preview-col">
+          <div className="pm-preview-h">Pré-visualização</div>
+          {previewNode}
+        </aside>
         </div>
         <div className="pm-foot">
           {pm.mode === "edit" ? (
