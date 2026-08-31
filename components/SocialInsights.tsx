@@ -16,6 +16,7 @@ import { Ic } from "@/components/Ic";
 import { Chart } from "@/components/Chart";
 import { Spinner } from "@/components/Spinner";
 import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
+import { ProfilePreview } from "@/components/views/ProfilePreview";
 import { lineChart, barChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
@@ -1097,6 +1098,20 @@ export function SocialInsights({ rede }: { rede: string }) {
   ) });
 
   // ── Últimas publicações (grade recente do perfil, por DATA — distinto do "top" por engajamento) ──
+  // Preview real do perfil (como aparece na rede) — cabeçalho + grade do feed
+  if (acct) cards.push({ id: "perfil_preview", full: true, node: (
+    <ProfilePreview
+      platform={platform}
+      username={acct.username}
+      displayName={acct.displayName}
+      avatarUrl={acct.profilePicture}
+      followers={curFollLast}
+      postsTotal={content?.total ?? (recent?.length ?? null)}
+      recent={(recent || []).map((r) => ({ thumbnail: r.thumbnail, url: r.url, isVideo: r.isVideo, mediaType: r.mediaType }))}
+      cor={cor}
+    />
+  ) });
+
   if (recent && recent.length > 0) cards.push({ id: "recentes", full: true, node: (
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--cyan)" } as CSSProperties}>
       <div className="card-head">
