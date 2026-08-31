@@ -160,6 +160,11 @@ function iconeDoCanal(nome: string): string | null {
   const key = CANAL_ICON_BY_ID[rede.id] || rede.id;
   return ICONS[key] ? key : null;
 }
+// glifo por id de rede (usado nos chips de "Publicar em")
+function iconeDoRedeId(id: string): string | null {
+  const key = CANAL_ICON_BY_ID[id] || id;
+  return ICONS[key] ? key : null;
+}
 // inicial "limpa" p/ canal manual (ignora colchetes/prefixos tipo "[GW]")
 const inicialLimpa = (nome: string): string => {
   const m = nome.replace(/\[[^\]]*\]/g, "").replace(/[^A-Za-zÀ-ÿ0-9]/g, " ").trim();
@@ -853,72 +858,70 @@ export function PostModal() {
             {calManuais.includes(f.canal) ? (
               <div className="pm-hint">⚠️ Canal manual — <b>sem publicação automática sincronizada</b>. Serve só como registro no calendário; a publicação é feita manualmente por você na plataforma do canal.</div>
             ) : conn.length ? (
-              <div className="pm-contas" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
-                {conn.map((r) => {
-                  const chk = f.contas.includes(r.id);
+              <>
+                {/* chips lado a lado (ícone da rede) — selecionar marca o canal de publicação */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {conn.map((r) => {
+                    const chk = f.contas.includes(r.id);
+                    const ik = iconeDoRedeId(r.id);
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        className="pm-pubchip"
+                        aria-pressed={chk}
+                        data-pmconta={r.id}
+                        onClick={() => upd({ contas: chk ? f.contas.filter((x) => x !== r.id) : [...f.contas, r.id] })}
+                        style={chk ? { borderColor: r.cor, background: `${r.cor}14` } : undefined}
+                        title={r.label}
+                      >
+                        <span className="pm-pubchip-ic" style={{ background: chk ? r.cor : "var(--surface)", color: chk ? "#fff" : "var(--label-2)" }}>
+                          {ik ? <Ic name={ik} /> : (r.label[0] || "?")}
+                        </span>
+                        <span>{r.label}</span>
+                        {chk && <span style={{ color: r.cor, fontWeight: 800 }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* opções específicas só dos canais SELECIONADos (legenda por canal / YouTube) */}
+                {conn.filter((r) => f.contas.includes(r.id)).map((r) => {
+                  const ov = f.overrides[r.id] || {};
+                  const setOv = (patch: PostOverride) => upd({ overrides: { ...f.overrides, [r.id]: { ...ov, ...patch } } });
+                  const mostraLegenda = f.contas.length > 1;
+                  const isYt = r.id === "youtube";
+                  if (!mostraLegenda && !isYt) return null;
+                  const ik = iconeDoRedeId(r.id);
                   return (
-                    <div key={r.id}>
-                      <label className="pm-conta">
-                        <input
-                          type="checkbox"
-                          data-pmconta={r.id}
-                          checked={chk}
-                          onChange={(e) =>
-                            upd({
-                              contas: e.target.checked
-                                ? [...f.contas, r.id]
-                                : f.contas.filter((x) => x !== r.id),
-                            })
-                          }
-                        />
-                        <span className="conta-dot" style={{ background: r.cor }} />
-                        {r.label}
-                      </label>
-                      {chk && (() => {
-                        const ov = f.overrides[r.id] || {};
-                        const setOv = (patch: PostOverride) => upd({ overrides: { ...f.overrides, [r.id]: { ...ov, ...patch } } });
-                        return (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 5, marginLeft: 22 }}>
-                            {f.contas.length > 1 && (
-                              <input
-                                className="field-edit"
-                                style={{ fontSize: 12.5 }}
-                                value={ov.caption ?? ""}
-                                placeholder={`Legenda só do ${r.label} (vazio = legenda geral)`}
-                                onChange={(e) => setOv({ caption: e.target.value })}
-                              />
-                            )}
-                            {r.id === "youtube" && (
-                              <>
-                                <input
-                                  className="field-edit"
-                                  style={{ fontSize: 12.5 }}
-                                  maxLength={100}
-                                  value={ov.ytTitle ?? ""}
-                                  placeholder="Título do YouTube (≤100; vazio usa o título do post)"
-                                  onChange={(e) => setOv({ ytTitle: e.target.value })}
-                                />
-                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                  <select className="field-edit" style={{ fontSize: 12.5, flex: 1 }} value={ov.ytVisibility ?? "public"} onChange={(e) => setOv({ ytVisibility: e.target.value })}>
-                                    <option value="public">Público</option>
-                                    <option value="unlisted">Não listado</option>
-                                    <option value="private">Privado</option>
-                                  </select>
-                                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--label-2)", whiteSpace: "nowrap" }}>
-                                    <input type="checkbox" checked={!!ov.ytMadeForKids} onChange={(e) => setOv({ ytMadeForKids: e.target.checked })} />
-                                    infantil
-                                  </label>
-                                </div>
-                                <div className="pm-hint">Vídeo &lt;3min vira Short automaticamente. Capa custom só em vídeo ≥3min (o YouTube não permite em Short).</div>
-                              </>
-                            )}
+                    <div key={r.id} className="pm-ov-card">
+                      <div className="pm-ov-head">
+                        <span className="pm-pubchip-ic" style={{ background: r.cor, color: "#fff", width: 22, height: 22 }}>{ik ? <Ic name={ik} /> : (r.label[0] || "?")}</span>
+                        <b>{r.label}</b>
+                      </div>
+                      {mostraLegenda && (
+                        <input className="field-edit" style={{ fontSize: 12.5 }} value={ov.caption ?? ""} placeholder={`Legenda só do ${r.label} (vazio = legenda geral)`} onChange={(e) => setOv({ caption: e.target.value })} />
+                      )}
+                      {isYt && (
+                        <>
+                          <input className="field-edit" style={{ fontSize: 12.5 }} maxLength={100} value={ov.ytTitle ?? ""} placeholder="Título do YouTube (≤100; vazio usa o título do post)" onChange={(e) => setOv({ ytTitle: e.target.value })} />
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <select className="field-edit" style={{ fontSize: 12.5, flex: 1 }} value={ov.ytVisibility ?? "public"} onChange={(e) => setOv({ ytVisibility: e.target.value })}>
+                              <option value="public">Público</option>
+                              <option value="unlisted">Não listado</option>
+                              <option value="private">Privado</option>
+                            </select>
+                            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--label-2)", whiteSpace: "nowrap" }}>
+                              <input type="checkbox" checked={!!ov.ytMadeForKids} onChange={(e) => setOv({ ytMadeForKids: e.target.checked })} />
+                              infantil
+                            </label>
                           </div>
-                        );
-                      })()}
+                          <div className="pm-hint">Vídeo &lt;3min vira Short automaticamente. Capa custom só em vídeo ≥3min (o YouTube não permite em Short).</div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
-              </div>
+              </>
             ) : (
               <div className="pm-hint">
                 Nenhum canal conectado. Conecte canais em Personalização (ou na barra &quot;Canais
