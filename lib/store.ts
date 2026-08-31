@@ -52,7 +52,7 @@ export interface Perfil {
   empresa: string; segmento: string; cidade: string; site: string;
   ramo: string; telefone: string; emailContato: string; estado: string;
   canais: string[]; produtos: string[]; relacao: Record<string, boolean>;
-  logoUrl?: string;
+  logoUrl?: string; iconUrl?: string; iconBg?: string;
 }
 
 // ── Mídia paga MANUAL (canal pago informado à mão) ──
@@ -231,7 +231,7 @@ export const useStore = create<UIState>((set) => ({
   posts: [],
   personas: [], concorrentes: [],
   fontes: [], fonteMap: null,
-  perfil: { empresa: "", segmento: "", cidade: "", site: "", ramo: "", telefone: "", emailContato: "", estado: "", canais: [], produtos: [], relacao: {}, logoUrl: "" },
+  perfil: { empresa: "", segmento: "", cidade: "", site: "", ramo: "", telefone: "", emailContato: "", estado: "", canais: [], produtos: [], relacao: {}, logoUrl: "", iconUrl: "", iconBg: "" },
   hydrated: false,
   zernioAccounts: [],
   selectedAccount: {},
