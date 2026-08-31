@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useStore, newId, type PostItem, type PostMedia, type PostOverride } from "@/lib/store";
 import { savePosts, deletePostApi } from "@/lib/api";
 import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
+import { Ic } from "@/components/Ic";
+import { ICONS } from "@/lib/nav";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -150,6 +152,20 @@ function mimeToType(mime: string): PostMedia["type"] {
   return "document";
 }
 
+// ícone (glifo) da rede a partir do rótulo do canal; null p/ canal manual (sem marca).
+const CANAL_ICON_BY_ID: Record<string, string> = { instagram: "ig", x: "x" };
+function iconeDoCanal(nome: string): string | null {
+  const rede = REDES.find((r) => r.label === nome);
+  if (!rede) return null;
+  const key = CANAL_ICON_BY_ID[rede.id] || rede.id;
+  return ICONS[key] ? key : null;
+}
+// inicial "limpa" p/ canal manual (ignora colchetes/prefixos tipo "[GW]")
+const inicialLimpa = (nome: string): string => {
+  const m = nome.replace(/\[[^\]]*\]/g, "").replace(/[^A-Za-zÀ-ÿ0-9]/g, " ").trim();
+  return (m[0] || nome[0] || "?").toUpperCase();
+};
+
 // Etapa 1 do novo post: grade de canais conectados. Escolher um leva ao composer adaptado à rede.
 function ChannelPickerModal({ canais, onClose, onPick }: { canais: { nome: string; cor: string }[]; onClose: () => void; onPick: (nome: string) => void }) {
   return (
@@ -165,15 +181,20 @@ function ChannelPickerModal({ canais, onClose, onPick }: { canais: { nome: strin
             <div className="pm-hint">Nenhum canal conectado ainda. Conecte em Personalização → Conexões.</div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 12 }}>
-              {canais.map((c) => (
-                <button key={c.nome} type="button" onClick={() => onPick(c.nome)}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "18px 12px", border: "1.5px solid var(--hairline)", borderRadius: 14, background: "#fff", cursor: "pointer", transition: ".14s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = c.cor; e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,.08)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--hairline)"; e.currentTarget.style.boxShadow = "none"; }}>
-                  <span style={{ width: 44, height: 44, borderRadius: 999, background: c.cor, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{c.nome[0]?.toUpperCase()}</span>
-                  <span style={{ fontSize: 13, fontWeight: 650, color: "var(--label)", textAlign: "center" }}>{c.nome}</span>
-                </button>
-              ))}
+              {canais.map((c) => {
+                const ic = iconeDoCanal(c.nome);
+                return (
+                  <button key={c.nome} type="button" onClick={() => onPick(c.nome)}
+                    style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "18px 12px", border: "1.5px solid var(--hairline)", borderRadius: 14, background: "#fff", cursor: "pointer", transition: ".14s" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = c.cor; e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,.08)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--hairline)"; e.currentTarget.style.boxShadow = "none"; }}>
+                    <span style={{ width: 46, height: 46, borderRadius: 999, background: c.cor, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>
+                      {ic ? <Ic name={ic} /> : inicialLimpa(c.nome)}
+                    </span>
+                    <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label)", textAlign: "center", lineHeight: 1.25 }}>{c.nome}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
