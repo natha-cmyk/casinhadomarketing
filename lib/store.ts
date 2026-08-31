@@ -73,8 +73,16 @@ export interface CustomInd {
   kind: "kpi" | "chart";
 }
 
-let __id = 0;
-const uid = (p: string) => `${p}_${++__id}`;
+// id GLOBALMENTE único. Antes era um contador de módulo (`post_1`, `post_2`…) que ZERAVA a cada
+// carregamento de página — então sessões/usuários diferentes geravam os MESMOS ids e o upsert do
+// /api/posts sobrescrevia posts já salvos ("sumiram"). Agora usa UUID (colisão praticamente impossível).
+const uid = (p: string): string => {
+  const c = (globalThis as { crypto?: Crypto }).crypto;
+  const rnd = c && typeof c.randomUUID === "function"
+    ? c.randomUUID()
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+  return `${p}_${rnd}`;
+};
 
 export interface UIState {
   // escopo temporal

@@ -71,7 +71,6 @@ export function Pill({ tier, children }: { tier: StatusTier; children: ReactNode
 export function PageHead({
   eyebrow,
   title,
-  desc,
   right,
 }: {
   eyebrow?: string;
@@ -84,7 +83,8 @@ export function PageHead({
       <div>
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h2>{title}</h2>
-        {desc && <p>{desc}</p>}
+        {/* legenda sob o título REMOVIDA de todos os ambientes (decisão de produto).
+            `desc` fica na assinatura só por compat; não renderiza mais. */}
       </div>
       {right}
     </div>
