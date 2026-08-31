@@ -16,6 +16,7 @@ import { Ic } from "@/components/Ic";
 import { Chart } from "@/components/Chart";
 import { Spinner } from "@/components/Spinner";
 import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
+import { ProfilePreview } from "@/components/views/ProfilePreview";
 import { lineChart, barChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
@@ -211,6 +212,7 @@ const SI_CARD_LABELS: Record<string, string> = {
   producao: "Produção de conteúdo", mix: "Mix de conteúdo", seguidores: "Seguidores", engajamento: "Engajamento",
   organico: "Orgânico vs impulsionado", atividade: "Atividade", conversas: "Conversas",
   top: "Top conteúdos", recentes: "Últimas publicações", horarios: "Melhores horários", audiencia: "Audiência",
+  perfil_preview: "Prévia do perfil",
 };
 
 // Stories do Instagram — a API não expõe a contagem; entra como indicador MANUAL (editável, persistido).
@@ -1220,6 +1222,20 @@ export function SocialInsights({ rede }: { rede: string }) {
         })}
       </div>
     </div>
+  ) });
+
+  // Preview real do perfil — SEMPRE por ÚLTIMO (visão completa do perfil, longe de "Últimas publicações").
+  if (acct) cards.push({ id: "perfil_preview", full: true, node: (
+    <ProfilePreview
+      platform={platform}
+      username={acct.username}
+      displayName={acct.displayName}
+      avatarUrl={acct.profilePicture}
+      followers={curFollLast}
+      postsTotal={content?.total ?? (recent?.length ?? null)}
+      recent={(recent || []).map((r) => ({ thumbnail: r.thumbnail, url: r.url, isVideo: r.isVideo, mediaType: r.mediaType }))}
+      cor={cor}
+    />
   ) });
 
   // organização dos cards agora é via WidgetBoard (mode flow). cards[] é mapeado direto pra ele.
