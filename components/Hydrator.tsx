@@ -9,10 +9,25 @@ export function Hydrator() {
   useEffect(() => {
     let alive = true;
     const timers: Record<string, ReturnType<typeof setTimeout>> = {};
+    const pending: Record<string, () => void> = {}; // último save agendado por fatia (p/ flush)
     const debounce = (key: string, fn: () => void) => {
       clearTimeout(timers[key]);
-      timers[key] = setTimeout(fn, 600);
+      pending[key] = fn;
+      timers[key] = setTimeout(() => { delete pending[key]; fn(); }, 600);
     };
+    // flush imediato de tudo que está agendado — dispara ao esconder/fechar a aba pra não perder
+    // uma edição feita nos últimos 600ms (ex.: adicionar post e fechar a aba na sequência).
+    const flushAll = () => {
+      for (const key of Object.keys(pending)) {
+        clearTimeout(timers[key]);
+        const fn = pending[key];
+        delete pending[key];
+        try { fn(); } catch { /* ignora */ }
+      }
+    };
+    const onHide = () => { if (document.visibilityState === "hidden") flushAll(); };
+    window.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", flushAll);
     let unsub: (() => void) | undefined;
 
     (async () => {
@@ -41,6 +56,9 @@ export function Hydrator() {
     return () => {
       alive = false;
       if (unsub) unsub();
+      flushAll(); // não descarta saves pendentes ao desmontar
+      window.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", flushAll);
       Object.values(timers).forEach(clearTimeout);
     };
   }, []);
