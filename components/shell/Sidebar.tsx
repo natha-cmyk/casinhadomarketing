@@ -10,6 +10,10 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const redes = useStore((s) => s.redes);
+  const empresa = useStore((s) => s.perfil.empresa);
+  const logoUrl = useStore((s) => s.perfil.logoUrl);
+  const iconUrl = useStore((s) => s.perfil.iconUrl);
+  const iconBg = useStore((s) => s.perfil.iconBg);
   const [q, setQ] = useState("");
   const view = viewForPath(pathname);
   const query = q.trim().toLowerCase();
@@ -28,10 +32,21 @@ export function Sidebar() {
           <i />
         </div>
         <div className="brand">
-          <div className="mark">C</div>
+          <div className="mark" style={iconBg ? { background: iconBg } : undefined}>
+            {iconUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={iconUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} />
+            ) : logoUrl ? (
+              // logo centralizada sobre a cor de fundo (ícone gerado)
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: "16%", borderRadius: "inherit" }} />
+            ) : (
+              (empresa?.trim()?.[0] || "C").toUpperCase()
+            )}
+          </div>
           <div>
             <h1>Casinha do Marketing</h1>
-            <p>Seahub · 2026</p>
+            <p>{(empresa?.trim() || "Sua empresa")} · 2026</p>
           </div>
         </div>
       </div>

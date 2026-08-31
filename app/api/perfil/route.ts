@@ -31,6 +31,9 @@ export async function PUT(req: Request) {
       canais: Array.isArray(b.canais) ? b.canais : [],
       produtos: Array.isArray(b.produtos) ? b.produtos : [],
       relacao: b.relacao ?? {},
+      logoUrl: typeof b.logoUrl === "string" ? b.logoUrl : null,
+      iconUrl: typeof b.iconUrl === "string" ? b.iconUrl : null,
+      iconBg: typeof b.iconBg === "string" ? b.iconBg : null,
     };
     const p = await prisma.perfil.upsert({
       where: { workspaceId: ws },

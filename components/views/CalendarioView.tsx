@@ -16,6 +16,7 @@ import { PageHead } from "@/components/ui";
 import { Ic } from "@/components/Ic";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { PostModal } from "./PostModal";
+import { BibliotecaPanel } from "./BibliotecaPanel";
 
 // ícone (nome em ICONS) e COR DE MARCA por canal — usados na apresentação como ponto de identificação.
 const CANAL_ICONE: Record<string, string> = {
@@ -244,11 +245,17 @@ export function CalendarioView() {
         {fBadge && <span className={`pc-funil pc-funil-${fBadge}`} title={`Funil: ${p.funil}`}>{fBadge}</span>}
         {p.pilar && <span className="pc-pilar">{p.pilar}</span>}
         <span className="pc-t">{p.titulo || "(sem título)"}</span>
-        {p.status === "publicado" && (
-          <span className="pc-check" title={`Publicado ${p.hora || ""}`}>
-            ✓
-          </span>
-        )}
+        {(() => {
+          const STG: Record<string, { g: string; c: string }> = {
+            publicado: { g: "✓", c: "#2FB457" },
+            agendado: { g: "◷", c: "#00BBC5" },
+            rascunho: { g: "○", c: "#8E8E93" },
+            falhou: { g: "!", c: "#FF9F0A" },
+            cancelado: { g: "✕", c: "#FF001E" },
+          };
+          const sg = STG[p.status] || STG.rascunho;
+          return <span className="pc-status" style={{ color: sg.c }} title={`${st.label}${p.hora ? " · " + p.hora : ""}`}>{sg.g}</span>;
+        })()}
       </button>
     );
   };
@@ -258,6 +265,7 @@ export function CalendarioView() {
   const nConn = connRedes.length;
   const [contasOpen, setContasOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [bibOpen, setBibOpen] = useState(false);
 
   // ── modo apresentação (cronograma de produção por período) ──
   const [apOpen, setApOpen] = useState(false);
@@ -344,6 +352,12 @@ export function CalendarioView() {
                 <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
               </svg>
               Lixeira
+            </button>
+            <button className="btn-link" onClick={() => setBibOpen(true)} title="Biblioteca de conteúdo — histórico do que já foi produzido/publicado">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="7" height="16" rx="1.5" /><rect x="13" y="4" width="7" height="16" rx="1.5" /><path d="M6.5 8h0M16.5 8h0" />
+              </svg>
+              Biblioteca
             </button>
             <button className="btn-link" id="apresentarBtn" onClick={abrirApresentacao}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -828,6 +842,7 @@ export function CalendarioView() {
         />
       )}
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
+      {bibOpen && <BibliotecaPanel onClose={() => setBibOpen(false)} />}
     </>
   );
 }

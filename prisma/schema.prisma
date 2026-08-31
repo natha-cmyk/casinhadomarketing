@@ -240,6 +240,9 @@ model Perfil {
   canais      String[]  @default([])
   produtos    String[]  @default([])
   relacao     Json      @default("{}")
+  logoUrl     String?   // logo da empresa (aparece no topo da sidebar)
+  iconUrl     String?   // ícone pronto (quadradinho da sidebar); se vazio, gera da logo + iconBg
+  iconBg      String?   // cor de fundo do ícone gerado a partir da logo
   kitArquivo  String?
   updatedAt   DateTime  @updatedAt
 }

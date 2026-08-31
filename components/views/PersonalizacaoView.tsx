@@ -3,7 +3,7 @@
 // chip lists, matriz de relação, toggles de redes e acordeões de indicadores.
 // Fidelidade 1:1 com casinha-do-marketing.html.
 // UX: cada seção é um card colapsável (.psec) com acento de cor próprio; só "Conexões" abre por padrão.
-import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import { PageHead } from "@/components/ui";
 import { parseBR, fmt } from "@/lib/format";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
@@ -407,10 +407,12 @@ export default function PersonalizacaoView() {
         sub="Dados da empresa coletados no primeiro acesso — edite quando mudar."
         accent="var(--ink)"
       >
-        <div className="pm-row">
+        <IdentidadeUploader logoUrl={p.logoUrl} iconUrl={p.iconUrl} iconBg={p.iconBg} empresa={p.empresa} onChange={(patch) => setPerfil(patch)} />
+        <div className="pm-row" style={{ marginTop: 12 }}>
           <div>
             <label className="field-lbl">Empresa / marca</label>
             <input className="field-edit" value={p.empresa} onChange={(e) => setPerfil({ empresa: e.target.value })} aria-label="Empresa" />
+            <div className="pm-hint" style={{ marginTop: 4 }}>Aparece no topo do menu lateral (nome + logo).</div>
           </div>
           <div>
             <label className="field-lbl">Ramo de atividade</label>
@@ -927,6 +929,90 @@ function RedeToggle({ rede, on, onToggle }: { rede: (typeof REDES)[number]; on: 
         aria-label={rede.label}
         type="button"
       />
+    </div>
+  );
+}
+
+/* ===== Identidade visual: logo + ícone (pronto ou gerado da logo + cor de fundo) ===== */
+async function uploadImagem(file: File): Promise<string> {
+  const pres = await fetch("/api/posts/presign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }) });
+  const pj = await pres.json().catch(() => null);
+  if (!pres.ok || !pj?.uploadUrl) throw new Error(pj?.error || "não foi possível preparar o upload");
+  const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+  if (!put.ok) throw new Error(`upload falhou (${put.status})`);
+  return pj.publicUrl as string;
+}
+const ICON_BG_PRESETS = ["#FF001E", "#00BBC5", "#121111", "#2FB457", "#FF9F0A", "#8E5BE0", "#FFFFFF"];
+
+function IdentidadeUploader({ logoUrl, iconUrl, iconBg, empresa, onChange }: {
+  logoUrl?: string; iconUrl?: string; iconBg?: string; empresa?: string;
+  onChange: (patch: { logoUrl?: string; iconUrl?: string; iconBg?: string }) => void;
+}) {
+  const logoRef = useRef<HTMLInputElement>(null);
+  const iconRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<"" | "logo" | "icon">("");
+  const [err, setErr] = useState<string | null>(null);
+  const send = async (kind: "logo" | "icon", file: File) => {
+    if (!file) return;
+    setBusy(kind); setErr(null);
+    try {
+      const url = await uploadImagem(file);
+      onChange(kind === "logo" ? { logoUrl: url } : { iconUrl: url });
+    } catch (e) { setErr(String((e as Error)?.message || e).slice(0, 90)); }
+    finally { setBusy(""); if (logoRef.current) logoRef.current.value = ""; if (iconRef.current) iconRef.current.value = ""; }
+  };
+  const inicial = (empresa?.trim()?.[0] || "C").toUpperCase();
+  return (
+    <div>
+      <label className="field-lbl">Identidade visual (topo do menu)</label>
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
+        {/* PREVIEW do quadradinho como aparece na sidebar */}
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: iconBg || "var(--red)", display: "grid", placeItems: "center", overflow: "hidden", color: "#fff", fontWeight: 800, fontSize: 22, boxShadow: "var(--shadow-card)" }}>
+            {iconUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={iconUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: "16%" }} />
+            ) : inicial}
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--label-3)", marginTop: 5 }}>prévia</div>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* LOGO */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label-2)", width: 44 }}>Logo</span>
+            <input ref={logoRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) send("logo", f); }} />
+            <button className="btn-link ig" type="button" disabled={busy === "logo"} onClick={() => logoRef.current?.click()}>{busy === "logo" ? "Enviando…" : logoUrl ? "Trocar logo" : "Enviar logo"}</button>
+            {logoUrl && <button className="btn-link" type="button" onClick={() => onChange({ logoUrl: "" })}>Remover</button>}
+          </div>
+
+          {/* ÍCONE pronto */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label-2)", width: 44 }}>Ícone</span>
+            <input ref={iconRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) send("icon", f); }} />
+            <button className="btn-link ig" type="button" disabled={busy === "icon"} onClick={() => iconRef.current?.click()}>{busy === "icon" ? "Enviando…" : iconUrl ? "Trocar ícone" : "Enviar ícone pronto"}</button>
+            {iconUrl && <button className="btn-link" type="button" onClick={() => onChange({ iconUrl: "" })}>Remover</button>}
+          </div>
+
+          {/* GERAR ícone da logo: cor de fundo (só relevante quando não há ícone pronto) */}
+          {!iconUrl && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label-2)", width: 44 }}>Fundo</span>
+              {ICON_BG_PRESETS.map((c) => (
+                <button key={c} type="button" aria-label={`Fundo ${c}`} onClick={() => onChange({ iconBg: c })}
+                  style={{ width: 22, height: 22, borderRadius: 7, background: c, cursor: "pointer", border: (iconBg || "").toUpperCase() === c ? "2px solid var(--label)" : "1px solid var(--hairline)" }} />
+              ))}
+              <input type="color" value={iconBg || "#FF001E"} onChange={(e) => onChange({ iconBg: e.target.value })} title="Cor personalizada" style={{ width: 26, height: 26, padding: 0, border: "1px solid var(--hairline)", borderRadius: 7, background: "none", cursor: "pointer" }} />
+              {iconBg && <button className="btn-link" type="button" onClick={() => onChange({ iconBg: "" })}>Padrão</button>}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="pm-hint" style={{ marginTop: 8 }}>O ícone é o quadradinho do topo. Envie um ícone pronto, ou deixe gerar automaticamente da sua logo sobre a cor de fundo escolhida.</div>
+      {err && <div className="pm-msg pm-msg-err" style={{ marginTop: 6 }}>{err}</div>}
     </div>
   );
 }

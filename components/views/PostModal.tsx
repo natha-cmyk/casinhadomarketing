@@ -7,6 +7,7 @@ import { savePosts, deletePostApi } from "@/lib/api";
 import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
 import { Ic } from "@/components/Ic";
 import { ICONS } from "@/lib/nav";
+import { PostPreview } from "@/components/views/PostPreview";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -26,6 +27,7 @@ type ZAccount = {
   username?: string;
   enabled?: boolean;
   adsStatus?: string;
+  profilePicture?: string;
 };
 
 // id da rede (Casinha) de uma conta Zernio (twitter→x).
@@ -237,6 +239,9 @@ export function PostModal() {
   const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
   // Upload de mídia (presign Zernio → PUT direto no storage)
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState<number | null>(null); // % do upload atual (null = sem barra)
+  const [uploadNome, setUploadNome] = useState<string>("");        // nome do arquivo em envio
+  const [dragOver, setDragOver] = useState(false);                 // destaque da zona de drop
   const fileRef = useRef<HTMLInputElement>(null);
   // guarda o File local por url (pra recorte sem taint de CORS) + alvo do editor de recorte
   const filesByUrl = useRef<Map<string, File>>(new Map());
@@ -382,9 +387,23 @@ export function PostModal() {
 
   // Upload real: presign na nossa API → PUT do arquivo DIRETO no storage (não passa
   // pelo servidor → sem limite de 4.5MB) → guarda publicUrl como MediaItem.
+  // PUT com barra de progresso real (XHR expõe upload.onprogress; fetch não).
+  const putComProgresso = (url: string, body: Blob, contentType: string, onPct: (p: number) => void) =>
+    new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("content-type", contentType);
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onPct(Math.round((e.loaded / e.total) * 100)); };
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload falhou (${xhr.status})`)));
+      xhr.onerror = () => reject(new Error("falha de rede no upload"));
+      xhr.send(body);
+    });
+
   const onPickFile = async (file: File) => {
     if (!file || uploading) return;
     setUploading(true);
+    setUploadNome(file.name);
+    setUploadPct(0);
     setMsg(null);
     try {
       const pres = await fetch("/api/posts/presign", {
@@ -394,8 +413,7 @@ export function PostModal() {
       });
       const pj = await pres.json().catch(() => null);
       if (!pres.ok || !pj?.uploadUrl) throw new Error(pj?.error || "não foi possível preparar o upload");
-      const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
-      if (!put.ok) throw new Error(`upload falhou (${put.status})`);
+      await putComProgresso(pj.uploadUrl, file, file.type, setUploadPct);
       const item: PostMedia = { type: mimeToType(file.type), url: pj.publicUrl, filename: file.name, mimeType: file.type, size: file.size };
       filesByUrl.current.set(pj.publicUrl, file); // guarda p/ recorte sem CORS
       setF((prev) => ({ ...prev, media: [...prev.media, item], arquivo: prev.arquivo || file.name }));
@@ -404,6 +422,8 @@ export function PostModal() {
       setMsg({ kind: "err", text: `Falha no upload: ${String((e as Error)?.message || e).slice(0, 90)}` });
     } finally {
       setUploading(false);
+      setUploadPct(null);
+      setUploadNome("");
       if (fileRef.current) fileRef.current.value = "";
     }
   };
@@ -557,6 +577,25 @@ export function PostModal() {
   // Guarda o id da rede em post.contas (mantém o shape usado pela fila/chips do calendário).
   const conn = redesConectadas(zernioAccounts);
 
+  // dados pro PREVIEW (avatar do perfil escolhido + 1ª mídia). Legenda do canal atual (override > geral).
+  const prevAcct = zernioAccounts.find((a) => a.username === f.perfil || a.displayName === f.perfil);
+  const ridPrev = redeIdDoCanal(f.canal);
+  const prevLegenda = (ridPrev && f.overrides[ridPrev]?.caption) || f.legenda;
+  const previewNode = (
+    <PostPreview
+      canal={f.canal}
+      formato={f.formato}
+      perfil={f.perfil}
+      avatarUrl={prevAcct?.profilePicture}
+      legenda={prevLegenda}
+      hashtags={f.hashtags}
+      media={f.media[0]}
+      titulo={f.titulo}
+      pilar={f.pilar}
+      funil={f.funil}
+    />
+  );
+
   // Opções dos seletores vêm dos canais/perfis conectados; preserva o valor atual (edição).
   const canalOptions =
     f.canal && !canais.some((c) => c.nome === f.canal)
@@ -592,10 +631,11 @@ export function PostModal() {
       className="pm-back"
       id="pmBack"
       onClick={(e) => {
+        if (uploading) return; // não fecha por engano enquanto envia mídia
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="pm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+      <div className="pm pm-wide" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="pm-head">
           <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
             <b>{pm.mode === "edit" ? "Editar post" : "Novo post"}</b>
@@ -608,6 +648,7 @@ export function PostModal() {
             ✕
           </button>
         </div>
+        <div className="pm-main">
         <div className="pm-body">
           <div className="pm-row">
             <div>
@@ -754,15 +795,29 @@ export function PostModal() {
             style={{ display: "none" }}
             onChange={(e) => { const files = e.target.files; if (files?.length) onPickFiles(files); }}
           />
-          <button
-            type="button"
-            className="field-edit"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            style={{ textAlign: "left", cursor: uploading ? "default" : "pointer", color: uploading ? "var(--label-3)" : "var(--cyan)", fontWeight: 600 }}
+          <div
+            className={`pm-drop${dragOver ? " over" : ""}`}
+            onClick={() => { if (!uploading) fileRef.current?.click(); }}
+            onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); const files = e.dataTransfer.files; if (files?.length && !uploading) onPickFiles(files); }}
           >
-            {uploading ? "Enviando arquivo…" : "＋ Enviar arquivo"}
-          </button>
+            {uploading ? (
+              <div style={{ width: "100%" }}>
+                <div style={{ fontSize: 12.5, color: "var(--label-2)", marginBottom: 6, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Enviando {uploadNome}…</span>
+                  <b className="tnum">{uploadPct ?? 0}%</b>
+                </div>
+                <div className="pm-bar"><div className="pm-bar-fill" style={{ width: `${uploadPct ?? 0}%` }} /></div>
+                <div style={{ fontSize: 10.5, color: "var(--label-3)", marginTop: 6 }}>Mantenha esta janela aberta até concluir.</div>
+              </div>
+            ) : (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontWeight: 700, color: "var(--cyan)" }}>＋ Enviar arquivo</div>
+                <div style={{ fontSize: 11.5, color: "var(--label-3)", marginTop: 2 }}>ou arraste a mídia aqui</div>
+              </div>
+            )}
+          </div>
           {f.media.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
               {f.media.map((m) => (
@@ -945,6 +1000,11 @@ export function PostModal() {
             </select>
             {msg && <div className={`pm-msg pm-msg-${msg.kind}`}>{msg.text}</div>}
           </div>
+        </div>
+        <aside className="pm-preview-col">
+          <div className="pm-preview-h">Pré-visualização</div>
+          {previewNode}
+        </aside>
         </div>
         <div className="pm-foot">
           {pm.mode === "edit" ? (
