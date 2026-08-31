@@ -52,10 +52,11 @@ function MediaFrame({ media, ratio, cor }: { media?: PostMedia; ratio: number; c
 }
 
 export function PostPreview({
-  canal, formato, perfil, avatarUrl, legenda, hashtags, media, titulo,
+  canal, formato, perfil, avatarUrl, legenda, hashtags, media, titulo, pilar, funil,
 }: {
   canal: string; formato: string; perfil: string; avatarUrl?: string;
   legenda: string; hashtags: string; media?: PostMedia; titulo: string;
+  pilar?: string; funil?: string;
 }) {
   const rede = REDES.find((r) => r.label === canal);
   const cor = rede?.cor || "#111";
@@ -64,6 +65,18 @@ export function PostPreview({
   const ratio = aspecto(canal, formato);
   const user = perfil || rede?.label || "perfil";
   const cap = [legenda, hashtags].filter((s) => s && s.trim()).join("  ");
+  // tags do que já está preenchido (formato/pilar/funil) — leitura rápida do post
+  const tags: { t: string; c: string }[] = [];
+  if (formato) tags.push({ t: formato, c: cor });
+  if (pilar) tags.push({ t: pilar, c: "var(--ink)" });
+  if (funil) tags.push({ t: funil, c: "var(--cyan)" });
+  const tagsNode = tags.length ? (
+    <div className="pm-prev-tags">
+      {tags.map((x, i) => (
+        <span key={i} className="pm-prev-tag" style={{ color: x.c, borderColor: x.c }}>{x.t}</span>
+      ))}
+    </div>
+  ) : null;
 
   const Avatar = (
     <span style={{ width: 30, height: 30, borderRadius: 999, background: avatarUrl ? "transparent" : cor, color: "#fff", display: "grid", placeItems: "center", overflow: "hidden", flex: "0 0 auto" }}>
@@ -77,6 +90,7 @@ export function PostPreview({
   // YouTube: thumbnail 16:9 + título embaixo (feed do YouTube)
   if (id === "youtube") {
     return (
+      <>
       <div className="pm-prev-card">
         <MediaFrame media={media} ratio={16 / 9} cor={cor} />
         <div style={{ display: "flex", gap: 10, padding: "10px 12px" }}>
@@ -87,12 +101,15 @@ export function PostPreview({
           </div>
         </div>
       </div>
+      {tagsNode}
+      </>
     );
   }
 
   // padrão estilo feed (IG/LinkedIn/TikTok/etc.): header, mídia, ações, legenda
   const acoesIg = id === "instagram" || id === "facebook" || id === "threads" || id === "tiktok";
   return (
+    <>
     <div className="pm-prev-card">
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px" }}>
         {Avatar}
@@ -121,5 +138,7 @@ export function PostPreview({
         </div>
       )}
     </div>
+    {tagsNode}
+    </>
   );
 }
