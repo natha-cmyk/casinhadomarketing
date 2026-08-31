@@ -3,7 +3,7 @@
 // chip lists, matriz de relação, toggles de redes e acordeões de indicadores.
 // Fidelidade 1:1 com casinha-do-marketing.html.
 // UX: cada seção é um card colapsável (.psec) com acento de cor próprio; só "Conexões" abre por padrão.
-import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import { PageHead } from "@/components/ui";
 import { parseBR, fmt } from "@/lib/format";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
@@ -407,10 +407,12 @@ export default function PersonalizacaoView() {
         sub="Dados da empresa coletados no primeiro acesso — edite quando mudar."
         accent="var(--ink)"
       >
-        <div className="pm-row">
+        <LogoUploader value={p.logoUrl} onChange={(url) => setPerfil({ logoUrl: url })} />
+        <div className="pm-row" style={{ marginTop: 12 }}>
           <div>
             <label className="field-lbl">Empresa / marca</label>
             <input className="field-edit" value={p.empresa} onChange={(e) => setPerfil({ empresa: e.target.value })} aria-label="Empresa" />
+            <div className="pm-hint" style={{ marginTop: 4 }}>Aparece no topo do menu lateral (nome + logo).</div>
           </div>
           <div>
             <label className="field-lbl">Ramo de atividade</label>
@@ -927,6 +929,49 @@ function RedeToggle({ rede, on, onToggle }: { rede: (typeof REDES)[number]; on: 
         aria-label={rede.label}
         type="button"
       />
+    </div>
+  );
+}
+
+/* ===== Uploader da logo da empresa (topo da sidebar) ===== */
+function LogoUploader({ value, onChange }: { value?: string; onChange: (url: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const pick = async (file: File) => {
+    if (!file) return;
+    setBusy(true); setErr(null);
+    try {
+      const pres = await fetch("/api/posts/presign", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }) });
+      const pj = await pres.json().catch(() => null);
+      if (!pres.ok || !pj?.uploadUrl) throw new Error(pj?.error || "não foi possível preparar o upload");
+      const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+      if (!put.ok) throw new Error(`upload falhou (${put.status})`);
+      onChange(pj.publicUrl);
+    } catch (e) {
+      setErr(String((e as Error)?.message || e).slice(0, 90));
+    } finally {
+      setBusy(false);
+      if (ref.current) ref.current.value = "";
+    }
+  };
+  return (
+    <div>
+      <label className="field-lbl">Logo da empresa</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <span style={{ width: 52, height: 52, borderRadius: 12, background: value ? "#fff" : "var(--surface)", border: "1px solid var(--hairline)", display: "grid", placeItems: "center", overflow: "hidden", flex: "0 0 auto" }}>
+          {value ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={value} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <span style={{ fontSize: 10.5, color: "var(--label-3)" }}>sem logo</span>
+          )}
+        </span>
+        <input ref={ref} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); }} />
+        <button className="btn-link ig" type="button" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Enviando…" : "Enviar logo"}</button>
+        {value && <button className="btn-link" type="button" onClick={() => onChange("")}>Remover</button>}
+      </div>
+      {err && <div className="pm-msg pm-msg-err" style={{ marginTop: 6 }}>{err}</div>}
     </div>
   );
 }

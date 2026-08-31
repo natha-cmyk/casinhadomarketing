@@ -240,6 +240,7 @@ model Perfil {
   canais      String[]  @default([])
   produtos    String[]  @default([])
   relacao     Json      @default("{}")
+  logoUrl     String?   // logo da empresa (aparece no topo da sidebar)
   kitArquivo  String?
   updatedAt   DateTime  @updatedAt
 }

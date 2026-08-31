@@ -269,6 +269,23 @@ select.field-edit{-webkit-appearance:none;-moz-appearance:none;appearance:none;c
 .post-chip.st-falhou{border-left:3px solid #FF9F0A;background:rgba(255,159,10,.07)}
 .post-chip.st-cancelado{border-left:3px solid #FF001E;background:rgba(255,0,30,.05)}
 .pc-status{margin-left:auto;flex:0 0 auto;font-size:11px;font-weight:800;line-height:1}
+/* Biblioteca de conteúdo (arquivo em grade) */
+.bib-filtros{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 4px 14px}
+.bib-scroll{overflow-y:auto;padding:2px 2px 20px}
+.bib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.bib-tile{border:0;background:transparent;cursor:pointer;padding:0;text-align:left;display:flex;flex-direction:column;gap:6px}
+.bib-media{position:relative;width:100%;aspect-ratio:1;border-radius:12px;overflow:hidden;background:#0d0d0f;box-shadow:var(--shadow-card)}
+.bib-media img,.bib-media video{width:100%;height:100%;object-fit:cover;display:block}
+.bib-noimg{width:100%;height:100%;display:grid;place-items:center;padding:12px;text-align:center}
+.bib-noimg span{color:#fff;font-size:12px;font-weight:700;opacity:.9}
+.bib-play{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:22px;text-shadow:0 1px 6px rgba(0,0,0,.5);pointer-events:none}
+.bib-status{position:absolute;top:8px;right:8px;width:11px;height:11px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.bib-canal{position:absolute;left:8px;top:8px;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff;font-weight:800;font-size:12px}
+.bib-canal svg{width:14px;height:14px}
+.bib-tile:hover .bib-media{outline:2px solid var(--cyan);outline-offset:1px}
+.bib-info{padding:0 2px}
+.bib-title{font-size:12.5px;font-weight:600;color:var(--label);line-height:1.3;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.bib-meta{font-size:11px;color:var(--label-3);margin-top:2px}
 .fila-st{width:8px;height:8px;border-radius:50%;flex:0 0 8px;display:inline-block}
 .pm-sched{margin-top:12px;padding-top:12px;border-top:1px solid var(--hairline)}
 .pm-sched-h{font-size:11px;font-weight:700;color:var(--label-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
