@@ -193,7 +193,7 @@ function ChannelPickerModal({ canais, onClose, onPick }: { canais: { nome: strin
                     style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "18px 12px", border: "1.5px solid var(--hairline)", borderRadius: 14, background: "#fff", cursor: "pointer", transition: ".14s" }}
                     onMouseEnter={(e) => { e.currentTarget.style.borderColor = c.cor; e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,.08)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--hairline)"; e.currentTarget.style.boxShadow = "none"; }}>
-                    <span style={{ width: 46, height: 46, borderRadius: 999, background: c.cor, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>
+                    <span className="pm-pick-ic" style={{ background: c.cor, color: "#fff" }}>
                       {ic ? <Ic name={ic} /> : inicialLimpa(c.nome)}
                     </span>
                     <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label)", textAlign: "center", lineHeight: 1.25 }}>{c.nome}</span>
@@ -672,7 +672,7 @@ export function PostModal() {
             </div>
           </div>
           <div className="pm-row">
-            <div>
+            <div className="pm-perfil-wrap">
               <label className="field-lbl">Perfil</label>
               <select
                 className="field-edit"
@@ -689,11 +689,13 @@ export function PostModal() {
                 const rid = redeIdDoCanal(f.canal);
                 if (!rid || perfis.length < 2 || !f.perfil) return null;
                 const isDef = calDefaults[rid] === f.perfil;
+                // só aparece ao passar o mouse / focar o seletor de perfil (menos poluição)
                 return (
                   <button
                     type="button"
+                    className="pm-def-toggle"
                     onClick={() => setCalDefault(rid, isDef ? "" : f.perfil)}
-                    style={{ marginTop: 5, border: 0, background: "transparent", color: isDef ? "var(--cyan)" : "var(--label-3)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }}
+                    style={{ color: isDef ? "var(--cyan)" : "var(--label-3)" }}
                     title="Perfil que já vem selecionado quando você escolher este canal"
                   >
                     {isDef ? "★ perfil padrão deste canal" : "☆ tornar perfil padrão deste canal"}
