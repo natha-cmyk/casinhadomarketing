@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useStore, newId, type PostItem, type PostMedia, type PostOverride } from "@/lib/store";
 import { savePosts, deletePostApi } from "@/lib/api";
 import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropModal";
+import { Ic } from "@/components/Ic";
+import { ICONS } from "@/lib/nav";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -150,6 +152,62 @@ function mimeToType(mime: string): PostMedia["type"] {
   return "document";
 }
 
+// ícone (glifo) da rede a partir do rótulo do canal; null p/ canal manual (sem marca).
+const CANAL_ICON_BY_ID: Record<string, string> = { instagram: "ig", x: "x" };
+function iconeDoCanal(nome: string): string | null {
+  const rede = REDES.find((r) => r.label === nome);
+  if (!rede) return null;
+  const key = CANAL_ICON_BY_ID[rede.id] || rede.id;
+  return ICONS[key] ? key : null;
+}
+// glifo por id de rede (usado nos chips de "Publicar em")
+function iconeDoRedeId(id: string): string | null {
+  const key = CANAL_ICON_BY_ID[id] || id;
+  return ICONS[key] ? key : null;
+}
+// inicial "limpa" p/ canal manual (ignora colchetes/prefixos tipo "[GW]")
+const inicialLimpa = (nome: string): string => {
+  const m = nome.replace(/\[[^\]]*\]/g, "").replace(/[^A-Za-zÀ-ÿ0-9]/g, " ").trim();
+  return (m[0] || nome[0] || "?").toUpperCase();
+};
+
+// Etapa 1 do novo post: grade de canais conectados. Escolher um leva ao composer adaptado à rede.
+function ChannelPickerModal({ canais, onClose, onPick }: { canais: { nome: string; cor: string }[]; onClose: () => void; onPick: (nome: string) => void }) {
+  return (
+    <div className="pm-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+        <div className="pm-head">
+          <b>Novo post · escolha o canal</b>
+          <button className="pm-x" aria-label="Fechar" onClick={onClose}>✕</button>
+        </div>
+        <div className="pm-body">
+          <div style={{ fontSize: 13, color: "var(--label-2)", marginBottom: 14 }}>Pra onde vai esse conteúdo? O editor se adapta à rede escolhida (formatos, perfil, capa e legenda daquela plataforma).</div>
+          {canais.length === 0 ? (
+            <div className="pm-hint">Nenhum canal conectado ainda. Conecte em Personalização → Conexões.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 12 }}>
+              {canais.map((c) => {
+                const ic = iconeDoCanal(c.nome);
+                return (
+                  <button key={c.nome} type="button" onClick={() => onPick(c.nome)}
+                    style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "18px 12px", border: "1.5px solid var(--hairline)", borderRadius: 14, background: "#fff", cursor: "pointer", transition: ".14s" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = c.cor; e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,.08)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--hairline)"; e.currentTarget.style.boxShadow = "none"; }}>
+                    <span className="pm-pick-ic" style={{ background: c.cor, color: "#fff" }}>
+                      {ic ? <Ic name={ic} /> : inicialLimpa(c.nome)}
+                    </span>
+                    <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label)", textAlign: "center", lineHeight: 1.25 }}>{c.nome}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PostModal() {
   const pm = useStore((st) => st.postModal);
   const posts = useStore((st) => st.posts);
@@ -183,6 +241,9 @@ export function PostModal() {
   // guarda o File local por url (pra recorte sem taint de CORS) + alvo do editor de recorte
   const filesByUrl = useRef<Map<string, File>>(new Map());
   const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
+  // Fluxo do "novo post": primeiro ESCOLHE O CANAL, depois abre o composer adaptado àquela rede.
+  // Edição já entra direto no composer (canal definido). "trocar canal" volta pra etapa 1.
+  const [step, setStep] = useState<"canal" | "composer">(pm?.mode === "edit" ? "composer" : "canal");
 
   // Estado seed: post existente (edição) ou defaults do blueprint (novo).
   const [f, setF] = useState<Fields>(() => {
@@ -384,6 +445,17 @@ export function PostModal() {
 
   const close = () => set({ postModal: null });
 
+  // ETAPA 1 (novo post): escolher o canal. O composer só abre depois — já adaptado à rede.
+  if (step === "canal") {
+    return (
+      <ChannelPickerModal
+        canais={canais}
+        onClose={close}
+        onPick={(nome) => { onCanalChange(nome); setStep("composer"); }}
+      />
+    );
+  }
+
   // Monta os campos do post a partir do formulário (com status opcional forçado).
   const buildBase = (forceStatus?: string) => {
     const dp = f.data.split("/").map((s) => parseInt(s, 10));
@@ -525,7 +597,13 @@ export function PostModal() {
     >
       <div className="pm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="pm-head">
-          <b>{pm.mode === "edit" ? "Editar post" : "Novo post"}</b>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <b>{pm.mode === "edit" ? "Editar post" : "Novo post"}</b>
+            <span className="pm-canal-chip" style={{ background: (canais.find((c) => c.nome === f.canal)?.cor) || "var(--ink)" }}>{f.canal}</span>
+            {pm.mode === "new" && (
+              <button type="button" className="btn-link" style={{ fontSize: 12 }} onClick={() => setStep("canal")}>← trocar canal</button>
+            )}
+          </div>
           <button className="pm-x" id="pmClose" aria-label="Fechar" onClick={close}>
             ✕
           </button>
@@ -594,7 +672,7 @@ export function PostModal() {
             </div>
           </div>
           <div className="pm-row">
-            <div>
+            <div className="pm-perfil-wrap">
               <label className="field-lbl">Perfil</label>
               <select
                 className="field-edit"
@@ -611,11 +689,13 @@ export function PostModal() {
                 const rid = redeIdDoCanal(f.canal);
                 if (!rid || perfis.length < 2 || !f.perfil) return null;
                 const isDef = calDefaults[rid] === f.perfil;
+                // só aparece ao passar o mouse / focar o seletor de perfil (menos poluição)
                 return (
                   <button
                     type="button"
+                    className="pm-def-toggle"
                     onClick={() => setCalDefault(rid, isDef ? "" : f.perfil)}
-                    style={{ marginTop: 5, border: 0, background: "transparent", color: isDef ? "var(--cyan)" : "var(--label-3)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, padding: 0 }}
+                    style={{ color: isDef ? "var(--cyan)" : "var(--label-3)" }}
                     title="Perfil que já vem selecionado quando você escolher este canal"
                   >
                     {isDef ? "★ perfil padrão deste canal" : "☆ tornar perfil padrão deste canal"}
@@ -780,72 +860,70 @@ export function PostModal() {
             {calManuais.includes(f.canal) ? (
               <div className="pm-hint">⚠️ Canal manual — <b>sem publicação automática sincronizada</b>. Serve só como registro no calendário; a publicação é feita manualmente por você na plataforma do canal.</div>
             ) : conn.length ? (
-              <div className="pm-contas" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
-                {conn.map((r) => {
-                  const chk = f.contas.includes(r.id);
+              <>
+                {/* chips lado a lado (ícone da rede) — selecionar marca o canal de publicação */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {conn.map((r) => {
+                    const chk = f.contas.includes(r.id);
+                    const ik = iconeDoRedeId(r.id);
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        className="pm-pubchip"
+                        aria-pressed={chk}
+                        data-pmconta={r.id}
+                        onClick={() => upd({ contas: chk ? f.contas.filter((x) => x !== r.id) : [...f.contas, r.id] })}
+                        style={chk ? { borderColor: r.cor, background: `${r.cor}14` } : undefined}
+                        title={r.label}
+                      >
+                        <span className="pm-pubchip-ic" style={{ background: chk ? r.cor : "var(--surface)", color: chk ? "#fff" : "var(--label-2)" }}>
+                          {ik ? <Ic name={ik} /> : (r.label[0] || "?")}
+                        </span>
+                        <span>{r.label}</span>
+                        {chk && <span style={{ color: r.cor, fontWeight: 800 }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* opções específicas só dos canais SELECIONADos (legenda por canal / YouTube) */}
+                {conn.filter((r) => f.contas.includes(r.id)).map((r) => {
+                  const ov = f.overrides[r.id] || {};
+                  const setOv = (patch: PostOverride) => upd({ overrides: { ...f.overrides, [r.id]: { ...ov, ...patch } } });
+                  const mostraLegenda = f.contas.length > 1;
+                  const isYt = r.id === "youtube";
+                  if (!mostraLegenda && !isYt) return null;
+                  const ik = iconeDoRedeId(r.id);
                   return (
-                    <div key={r.id}>
-                      <label className="pm-conta">
-                        <input
-                          type="checkbox"
-                          data-pmconta={r.id}
-                          checked={chk}
-                          onChange={(e) =>
-                            upd({
-                              contas: e.target.checked
-                                ? [...f.contas, r.id]
-                                : f.contas.filter((x) => x !== r.id),
-                            })
-                          }
-                        />
-                        <span className="conta-dot" style={{ background: r.cor }} />
-                        {r.label}
-                      </label>
-                      {chk && (() => {
-                        const ov = f.overrides[r.id] || {};
-                        const setOv = (patch: PostOverride) => upd({ overrides: { ...f.overrides, [r.id]: { ...ov, ...patch } } });
-                        return (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 5, marginLeft: 22 }}>
-                            {f.contas.length > 1 && (
-                              <input
-                                className="field-edit"
-                                style={{ fontSize: 12.5 }}
-                                value={ov.caption ?? ""}
-                                placeholder={`Legenda só do ${r.label} (vazio = legenda geral)`}
-                                onChange={(e) => setOv({ caption: e.target.value })}
-                              />
-                            )}
-                            {r.id === "youtube" && (
-                              <>
-                                <input
-                                  className="field-edit"
-                                  style={{ fontSize: 12.5 }}
-                                  maxLength={100}
-                                  value={ov.ytTitle ?? ""}
-                                  placeholder="Título do YouTube (≤100; vazio usa o título do post)"
-                                  onChange={(e) => setOv({ ytTitle: e.target.value })}
-                                />
-                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                  <select className="field-edit" style={{ fontSize: 12.5, flex: 1 }} value={ov.ytVisibility ?? "public"} onChange={(e) => setOv({ ytVisibility: e.target.value })}>
-                                    <option value="public">Público</option>
-                                    <option value="unlisted">Não listado</option>
-                                    <option value="private">Privado</option>
-                                  </select>
-                                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--label-2)", whiteSpace: "nowrap" }}>
-                                    <input type="checkbox" checked={!!ov.ytMadeForKids} onChange={(e) => setOv({ ytMadeForKids: e.target.checked })} />
-                                    infantil
-                                  </label>
-                                </div>
-                                <div className="pm-hint">Vídeo &lt;3min vira Short automaticamente. Capa custom só em vídeo ≥3min (o YouTube não permite em Short).</div>
-                              </>
-                            )}
+                    <div key={r.id} className="pm-ov-card">
+                      <div className="pm-ov-head">
+                        <span className="pm-pubchip-ic" style={{ background: r.cor, color: "#fff", width: 22, height: 22 }}>{ik ? <Ic name={ik} /> : (r.label[0] || "?")}</span>
+                        <b>{r.label}</b>
+                      </div>
+                      {mostraLegenda && (
+                        <input className="field-edit" style={{ fontSize: 12.5 }} value={ov.caption ?? ""} placeholder={`Legenda só do ${r.label} (vazio = legenda geral)`} onChange={(e) => setOv({ caption: e.target.value })} />
+                      )}
+                      {isYt && (
+                        <>
+                          <input className="field-edit" style={{ fontSize: 12.5 }} maxLength={100} value={ov.ytTitle ?? ""} placeholder="Título do YouTube (≤100; vazio usa o título do post)" onChange={(e) => setOv({ ytTitle: e.target.value })} />
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <select className="field-edit" style={{ fontSize: 12.5, flex: 1 }} value={ov.ytVisibility ?? "public"} onChange={(e) => setOv({ ytVisibility: e.target.value })}>
+                              <option value="public">Público</option>
+                              <option value="unlisted">Não listado</option>
+                              <option value="private">Privado</option>
+                            </select>
+                            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--label-2)", whiteSpace: "nowrap" }}>
+                              <input type="checkbox" checked={!!ov.ytMadeForKids} onChange={(e) => setOv({ ytMadeForKids: e.target.checked })} />
+                              infantil
+                            </label>
                           </div>
-                        );
-                      })()}
+                          <div className="pm-hint">Vídeo &lt;3min vira Short automaticamente. Capa custom só em vídeo ≥3min (o YouTube não permite em Short).</div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
-              </div>
+              </>
             ) : (
               <div className="pm-hint">
                 Nenhum canal conectado. Conecte canais em Personalização (ou na barra &quot;Canais
