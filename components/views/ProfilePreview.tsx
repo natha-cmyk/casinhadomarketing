@@ -28,15 +28,8 @@ export function ProfilePreview({
   const tiles = recent.filter((r) => r.thumbnail || r.url).slice(0, grid16x9 ? 6 : lista ? 4 : 9);
 
   return (
-    <div className="card pad-lg tcard" style={{ "--tcard-accent": cor } as CSSProperties}>
-      <div className="card-head" style={{ marginBottom: 12 }}>
-        <div className="t">Como o perfil aparece</div>
-        <span className="badge" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          {ik && <Ic name={ik} />}{platform}
-        </span>
-      </div>
-
-      {/* cabeçalho do perfil */}
+    <div className="card pad-lg" style={{ "--tcard-accent": cor } as CSSProperties}>
+      {/* cabeçalho do perfil (visual da própria rede — sem título de card) */}
       <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <span style={{ width: 72, height: 72, borderRadius: 999, overflow: "hidden", flex: "0 0 auto", background: avatarUrl ? "transparent" : cor, display: "grid", placeItems: "center", color: "#fff", boxShadow: "var(--shadow-card)" }}>
           {avatarUrl ? (
@@ -45,7 +38,10 @@ export function ProfilePreview({
           ) : ik ? <Ic name={ik} /> : (nome[0] || "?").toUpperCase()}
         </span>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 750, color: "var(--label)", lineHeight: 1.2 }}>{nome}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            {ik && <span style={{ color: cor, display: "inline-flex" }}><Ic name={ik} /></span>}
+            <span style={{ fontSize: 16, fontWeight: 750, color: "var(--label)", lineHeight: 1.2 }}>{nome}</span>
+          </div>
           {user && <div style={{ fontSize: 13, color: "var(--label-3)" }}>{user}</div>}
           <div style={{ display: "flex", gap: 18, marginTop: 8 }}>
             <div><b className="tnum" style={{ fontSize: 15 }}>{kfmt(postsTotal)}</b> <span style={{ fontSize: 12, color: "var(--label-3)" }}>posts</span></div>
@@ -86,7 +82,6 @@ export function ProfilePreview({
           </div>
         )}
       </div>
-      <div style={{ fontSize: 10.5, color: "var(--label-3)", marginTop: 10 }}>Prévia montada com o avatar, os números e as publicações reais da conta conectada.</div>
     </div>
   );
 }
