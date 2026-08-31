@@ -150,6 +150,38 @@ function mimeToType(mime: string): PostMedia["type"] {
   return "document";
 }
 
+// Etapa 1 do novo post: grade de canais conectados. Escolher um leva ao composer adaptado à rede.
+function ChannelPickerModal({ canais, onClose, onPick }: { canais: { nome: string; cor: string }[]; onClose: () => void; onPick: (nome: string) => void }) {
+  return (
+    <div className="pm-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+        <div className="pm-head">
+          <b>Novo post · escolha o canal</b>
+          <button className="pm-x" aria-label="Fechar" onClick={onClose}>✕</button>
+        </div>
+        <div className="pm-body">
+          <div style={{ fontSize: 13, color: "var(--label-2)", marginBottom: 14 }}>Pra onde vai esse conteúdo? O editor se adapta à rede escolhida (formatos, perfil, capa e legenda daquela plataforma).</div>
+          {canais.length === 0 ? (
+            <div className="pm-hint">Nenhum canal conectado ainda. Conecte em Personalização → Conexões.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 12 }}>
+              {canais.map((c) => (
+                <button key={c.nome} type="button" onClick={() => onPick(c.nome)}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "18px 12px", border: "1.5px solid var(--hairline)", borderRadius: 14, background: "#fff", cursor: "pointer", transition: ".14s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = c.cor; e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,0,0,.08)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--hairline)"; e.currentTarget.style.boxShadow = "none"; }}>
+                  <span style={{ width: 44, height: 44, borderRadius: 999, background: c.cor, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18 }}>{c.nome[0]?.toUpperCase()}</span>
+                  <span style={{ fontSize: 13, fontWeight: 650, color: "var(--label)", textAlign: "center" }}>{c.nome}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PostModal() {
   const pm = useStore((st) => st.postModal);
   const posts = useStore((st) => st.posts);
@@ -183,6 +215,9 @@ export function PostModal() {
   // guarda o File local por url (pra recorte sem taint de CORS) + alvo do editor de recorte
   const filesByUrl = useRef<Map<string, File>>(new Map());
   const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
+  // Fluxo do "novo post": primeiro ESCOLHE O CANAL, depois abre o composer adaptado àquela rede.
+  // Edição já entra direto no composer (canal definido). "trocar canal" volta pra etapa 1.
+  const [step, setStep] = useState<"canal" | "composer">(pm?.mode === "edit" ? "composer" : "canal");
 
   // Estado seed: post existente (edição) ou defaults do blueprint (novo).
   const [f, setF] = useState<Fields>(() => {
@@ -384,6 +419,17 @@ export function PostModal() {
 
   const close = () => set({ postModal: null });
 
+  // ETAPA 1 (novo post): escolher o canal. O composer só abre depois — já adaptado à rede.
+  if (step === "canal") {
+    return (
+      <ChannelPickerModal
+        canais={canais}
+        onClose={close}
+        onPick={(nome) => { onCanalChange(nome); setStep("composer"); }}
+      />
+    );
+  }
+
   // Monta os campos do post a partir do formulário (com status opcional forçado).
   const buildBase = (forceStatus?: string) => {
     const dp = f.data.split("/").map((s) => parseInt(s, 10));
@@ -525,7 +571,13 @@ export function PostModal() {
     >
       <div className="pm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="pm-head">
-          <b>{pm.mode === "edit" ? "Editar post" : "Novo post"}</b>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <b>{pm.mode === "edit" ? "Editar post" : "Novo post"}</b>
+            <span className="pm-canal-chip" style={{ background: (canais.find((c) => c.nome === f.canal)?.cor) || "var(--ink)" }}>{f.canal}</span>
+            {pm.mode === "new" && (
+              <button type="button" className="btn-link" style={{ fontSize: 12 }} onClick={() => setStep("canal")}>← trocar canal</button>
+            )}
+          </div>
           <button className="pm-x" id="pmClose" aria-label="Fechar" onClick={close}>
             ✕
           </button>
