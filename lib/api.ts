@@ -1,6 +1,7 @@
 // Helpers de rede pra persistência. Tudo tolerante a falha (sem banco → no-op),
 // pra app seguir funcionando in-memory com o seed.
 import type { UIState } from "./store";
+import { useStore } from "./store";
 
 async function getJSON<T>(url: string): Promise<T | null> {
   try {
@@ -56,8 +57,22 @@ export function saveOkr(s: UIState) {
     areas: s.okr.areas.map((a) => ({ nome: a.nome, krs: a.krs.map((k) => ({ kr: k.kr, alvo: k.alvo, un: k.un, tag: k.tag, resp: k.resp })) })),
   });
 }
-export function savePosts(s: UIState) {
-  return putJSON("/api/posts", { posts: s.posts });
+export async function savePosts(s: UIState) {
+  // lê a resposta pra aplicar remapeamentos de id (quando o servidor teve que criar id novo por
+  // colisão com outro workspace) — assim o próximo save não recria o post duplicado.
+  try {
+    const r = await fetch("/api/posts", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ posts: s.posts }) });
+    if (!r.ok) return;
+    const data = (await r.json().catch(() => null)) as { remapped?: { from: string; to: string }[] } | null;
+    const remapped = data?.remapped;
+    if (remapped && remapped.length) {
+      const map = new Map(remapped.map((x) => [x.from, x.to]));
+      const st = useStore.getState();
+      st.set({ posts: st.posts.map((p) => (map.has(p.id) ? { ...p, id: map.get(p.id)! } : p)) });
+    }
+  } catch {
+    /* sem banco: ignora */
+  }
 }
 // exclusão EXPLÍCITA de um post no banco (o único jeito de remover — salvar é só upsert).
 export function deletePostApi(id: string) {
