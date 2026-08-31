@@ -244,11 +244,17 @@ export function CalendarioView() {
         {fBadge && <span className={`pc-funil pc-funil-${fBadge}`} title={`Funil: ${p.funil}`}>{fBadge}</span>}
         {p.pilar && <span className="pc-pilar">{p.pilar}</span>}
         <span className="pc-t">{p.titulo || "(sem título)"}</span>
-        {p.status === "publicado" && (
-          <span className="pc-check" title={`Publicado ${p.hora || ""}`}>
-            ✓
-          </span>
-        )}
+        {(() => {
+          const STG: Record<string, { g: string; c: string }> = {
+            publicado: { g: "✓", c: "#2FB457" },
+            agendado: { g: "◷", c: "#00BBC5" },
+            rascunho: { g: "○", c: "#8E8E93" },
+            falhou: { g: "!", c: "#FF9F0A" },
+            cancelado: { g: "✕", c: "#FF001E" },
+          };
+          const sg = STG[p.status] || STG.rascunho;
+          return <span className="pc-status" style={{ color: sg.c }} title={`${st.label}${p.hora ? " · " + p.hora : ""}`}>{sg.g}</span>;
+        })()}
       </button>
     );
   };
