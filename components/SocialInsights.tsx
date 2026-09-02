@@ -507,19 +507,14 @@ export function SocialInsights({ rede }: { rede: string }) {
   useEffect(() => {
     let alive = true;
     setCrmLoading(true);
-    fetch("/api/crm/leads", { cache: "no-store" })
+    // endpoint LEVE (groupBy na coluna channel) — não reinterpreta os leads (perf: não satura o pool).
+    fetch("/api/crm/channels", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
-        // a rota devolve channelHealth com { key, total, won, ... } — mapeia pro shape que este painel usa
-        // ({ canal, total, ganho }). Sem isso o select de vínculo ficava vazio e os leads nunca carregavam.
-        const rows = Array.isArray(d?.channelHealth) ? d.channelHealth : [];
+        const rows = Array.isArray(d?.channels) ? d.channels : [];
         setCrmHealth(rows
-          .map((c: { key?: string; canal?: string; total?: number; won?: number; ganho?: number }) => ({
-            canal: (c.canal ?? c.key ?? "").trim(),
-            total: c.total ?? 0,
-            ganho: c.ganho ?? c.won ?? 0,
-          }))
+          .map((c: { canal?: string; total?: number }) => ({ canal: (c.canal ?? "").trim(), total: c.total ?? 0, ganho: 0 }))
           .filter((c: { canal: string }) => c.canal));
       })
       .catch(() => {})
@@ -1011,7 +1006,7 @@ export function SocialInsights({ rede }: { rede: string }) {
               <ProdStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} accent="var(--excelente)" />
               <ProdStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} accent="var(--cyan)" />
             </div>
-            {crmLeads != null && crmGanho != null && (
+            {crmLeads != null && crmGanho != null && crmGanho > 0 && (
               <div className="insight">{fmt(crmGanho)} de {fmt(crmLeads)} leads do canal vinculado viraram cliente.</div>
             )}
             {/* vínculo do canal ao CRM — SEMPRE visível (flex:1 preenche o resto da coluna) */}
