@@ -218,27 +218,16 @@ const SI_CARD_LABELS: Record<string, string> = {
 // Vínculo do canal social → canal do CRM. Busca a lista REAL de canais do CRM e mostra um SELECT
 // (garante o cruzamento — nada de digitar e não casar). Seleciona → salva na hora. Recarregar +
 // desvincular. Persistido em manualStats[rede].crmCanal.
-function VincularCrm({ rede, atual }: { rede: string; atual?: string }) {
+function VincularCrm({ rede, atual, opcoes, loading, onReload }: { rede: string; atual?: string; opcoes: { canal?: string }[]; loading: boolean; onReload: () => void }) {
   const setStat = useStore((s) => s.setManualStat);
-  const [canais, setCanais] = useState<string[] | null>(null); // null = carregando
-  const load = () => {
-    setCanais(null);
-    fetch("/api/crm/leads", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        const rows = Array.isArray(d?.channelHealth) ? d.channelHealth : (Array.isArray(d?.byChannel) ? d.byChannel : []);
-        setCanais(Array.from(new Set(rows.map((c: { canal?: string; key?: string }) => String(c.canal ?? c.key ?? "").trim()).filter(Boolean))));
-      })
-      .catch(() => setCanais([]));
-  };
-  useEffect(load, []);
+  const canais = Array.from(new Set(opcoes.map((o) => String(o.canal || "").trim()).filter(Boolean)));
 
-  if (canais === null) return <div style={{ fontSize: 12, color: "var(--label-3)" }}>Carregando canais do CRM…</div>;
+  if (loading && !canais.length) return <div style={{ fontSize: 12, color: "var(--label-3)" }}>Carregando canais do CRM…</div>;
   if (!canais.length) return (
     <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.5 }}>
       Nenhum canal encontrado no seu CRM (0). Verifique se o CRM está conectado e sincronizado, e se os leads têm um campo de <b>canal/origem</b>.
       <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center" }}>
-        <button type="button" className="btn-link ig" style={{ fontSize: 12 }} onClick={load}>Recarregar</button>
+        <button type="button" className="btn-link ig" style={{ fontSize: 12 }} onClick={onReload}>Recarregar</button>
         <Link href="/geracao?crm=1" style={{ color: "var(--cyan)", fontWeight: 650, fontSize: 12 }}>Abrir Geração</Link>
       </div>
     </div>
@@ -513,8 +502,11 @@ export function SocialInsights({ rede }: { rede: string }) {
   // saúde do CRM por canal (lista completa) — o match com este canal é feito no render,
   // preferindo o VÍNCULO manual (manualStats[rede].crmCanal) e caindo no nome como heurística.
   const [crmHealth, setCrmHealth] = useState<{ canal?: string; total?: number; ganho?: number }[]>([]);
+  const [crmLoading, setCrmLoading] = useState(true);
+  const [crmReload, setCrmReload] = useState(0);
   useEffect(() => {
     let alive = true;
+    setCrmLoading(true);
     fetch("/api/crm/leads", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
@@ -530,9 +522,10 @@ export function SocialInsights({ rede }: { rede: string }) {
           }))
           .filter((c: { canal: string }) => c.canal));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (alive) setCrmLoading(false); });
     return () => { alive = false; };
-  }, []);
+  }, [crmReload]);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
   // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras)
@@ -1024,7 +1017,7 @@ export function SocialInsights({ rede }: { rede: string }) {
             {/* vínculo do canal ao CRM — SEMPRE visível (flex:1 preenche o resto da coluna) */}
             <div className="card pad-lg" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
               <div style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label-1)", marginBottom: 8 }}>Qual canal do CRM é o {label}?</div>
-              <VincularCrm rede={rede} atual={vinc} />
+              <VincularCrm rede={rede} atual={vinc} opcoes={crmHealth} loading={crmLoading} onReload={() => setCrmReload((n) => n + 1)} />
             </div>
           </div>
         </div>
