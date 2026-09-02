@@ -7,7 +7,7 @@
 // conversas, top conteúdos e heatmap de melhores horários. COMPARAÇÃO de períodos preservada.
 import {
   Fragment, useEffect, useState,
-  type CSSProperties, type ReactElement, type HTMLAttributes,
+  type CSSProperties, type ReactElement, type ReactNode, type HTMLAttributes,
 } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
@@ -384,6 +384,50 @@ function FollowerManualEditor({ rede, scope }: { rede: string; scope: Scope }) {
   );
 }
 
+// Ajuda contextual do painel de canais — modal estruturado (aberto pelo "?" no topo).
+function PanelHelp({ label, onClose }: { label: string; onClose: () => void }) {
+  const itens: { cor: string; ic: ReactElement; t: string; d: ReactNode }[] = [
+    {
+      cor: "var(--cyan)", t: "Período & comparação",
+      ic: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></svg>,
+      d: <>Escolha o período na barra do topo. Ligue <b>Comparar</b> e defina o <b>período B livre</b> (semana/mês/ano) — ex.: <b>W1 ago vs W1 jul</b> ou <b>ago/26 vs ago/25</b>. O <b>delta</b> aparece em cada card.</>,
+    },
+    {
+      cor: "var(--atencao)", t: "Indicadores manuais (✎)",
+      ic: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>,
+      d: <>Stories, Visitas ao site/link e Novos/Deixaram de seguir podem ser preenchidos <b>à mão por semana</b> quando a API da conta ainda não entrega — sempre marcados como manual.</>,
+    },
+    {
+      cor: "var(--excelente)", t: "Leads do CRM",
+      ic: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" /></svg>,
+      d: <>No bloco <b>Produção de conteúdo</b>, escolha qual <b>canal do seu CRM</b> representa <b>{label}</b> — os leads passam a somar aqui. Se o CRM ainda não estiver conectado, há um atalho pra conectar.</>,
+    },
+    {
+      cor: "var(--ink)", t: "Organizar os cards",
+      ic: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>,
+      d: <>Use <b>Organizar</b> (no topo) pra arrastar, redimensionar ou ocultar os cards e deixar o painel do seu jeito.</>,
+    },
+  ];
+  return (
+    <div className="pm-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pm" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <div className="pm-head"><b>Como ler o painel de {label}</b><button className="pm-x" aria-label="Fechar" onClick={onClose}>✕</button></div>
+        <div className="pm-body" style={{ gap: 12 }}>
+          {itens.map((x, i) => (
+            <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <span style={{ width: 34, height: 34, borderRadius: 10, flex: "0 0 auto", display: "grid", placeItems: "center", background: x.cor, color: "#fff" }}>{x.ic}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 750, color: "var(--label)" }}>{x.t}</div>
+                <div style={{ fontSize: 12.5, color: "var(--label-2)", lineHeight: 1.5, marginTop: 2 }}>{x.d}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -407,6 +451,7 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [inbox, setInbox] = useState<InboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   // saúde do CRM por canal (lista completa) — o match com este canal é feito no render,
   // preferindo o VÍNCULO manual (manualStats[rede].crmCanal) e caindo no nome como heurística.
   const [crmHealth, setCrmHealth] = useState<{ canal?: string; total?: number; ganho?: number }[]>([]);
@@ -635,8 +680,10 @@ export function SocialInsights({ rede }: { rede: string }) {
   const cmpViewsTotal = comparando ? cmpIns?.metrics?.views?.total ?? null : null;
   const cmpInterTotal = comparando ? cmpIns?.metrics?.total_interactions?.total ?? null : null;
 
-  const fGained = metrics.followers_gained?.total ?? null;
-  const fLost = metrics.followers_lost?.total ?? null;
+  // ganhos/perdas de seguidores vêm do FOLLOWER-HISTORY (foll), não do insights. Populam sozinho
+  // quando o snapshotter diário da rede acumula histórico; até lá, cai no registro manual.
+  const fGained = foll?.metrics?.followers_gained?.total ?? metrics.followers_gained?.total ?? null;
+  const fLost = foll?.metrics?.followers_lost?.total ?? metrics.followers_lost?.total ?? null;
   // Crescimento líquido: PREFERE a diferença real da série de follower_count (fim − início) — é o número
   // fiel. Só cai nos metrics gained/lost quando não há série. NÃO usa mais follows_and_unfollows: aquela
   // métrica vinha inflada (não é ganho/perda líquido) e distorcia "novos/deixaram/crescimento".
@@ -917,20 +964,14 @@ export function SocialInsights({ rede }: { rede: string }) {
             )}
             {/* vínculo do canal ao CRM — SEMPRE visível (flex:1 preenche o resto da coluna) */}
             <div className="card pad-lg" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--label-1)", marginBottom: 4 }}>Vincular ao canal do CRM</div>
               {crmHealth.some((c) => c.canal) ? (
                 <>
-                  <div style={{ fontSize: 11.5, color: "var(--label-3)", marginBottom: 8, lineHeight: 1.45 }}>
-                    Seu CRM classifica os leads por canal (ex.: &quot;Redes sociais&quot;, &quot;Site&quot;). Escolha qual desses representa <b>{label}</b> pra somar os leads certos neste widget.
-                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label-1)", marginBottom: 6 }}>Qual canal do CRM é o {label}?</div>
                   <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
                 </>
               ) : (
-                <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.45 }}>
-                  Nenhum canal de CRM conectado ainda. Conecte seu CRM (ClickUp ou webhook) pra puxar os leads e vincular a <b>{label}</b>.
-                  <div style={{ marginTop: 10 }}>
-                    <Link href="/geracao?crm=1" className="btn-link ig" style={{ fontSize: 12.5, fontWeight: 700 }}>Conectar CRM →</Link>
-                  </div>
+                <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.5 }}>
+                  Nenhum canal do CRM chegou aqui ainda. <Link href="/geracao" style={{ color: "var(--cyan)", fontWeight: 700 }}>Conectar CRM →</Link>
                 </div>
               )}
             </div>
@@ -1293,19 +1334,11 @@ export function SocialInsights({ rede }: { rede: string }) {
             {profileUrl && (
               <a className="btn-link" href={profileUrl} target="_blank" rel="noopener">Abrir perfil ↗</a>
             )}
+            <button className="help-btn" type="button" onClick={() => setHelpOpen(true)} aria-label="Como ler este painel" title="Como ler este painel">?</button>
           </div>
         }
       />
-      {/* Guia contextual — como ler/usar este painel (recolhível) */}
-      <details className="panel-help">
-        <summary>Como ler este painel</summary>
-        <ul>
-          <li><b>Período & comparação:</b> escolha o período na barra do topo. Ligue <b>Comparar</b> e defina o <b>período B livre</b> (semana/mês/ano — ex.: W1 ago vs W1 jul, ou ago/26 vs ago/25). O delta aparece em cada card.</li>
-          <li><b>Indicadores manuais (✎):</b> Stories, Visitas ao site/link e Novos/Deixaram de seguir podem ser preenchidos à mão por semana quando a API da conta ainda não entrega — sempre marcados como manual.</li>
-          <li><b>Leads (CRM):</b> no bloco <b>Produção de conteúdo</b>, vincule este canal ao canal do seu CRM. Sem CRM conectado, o botão <b>Conectar CRM →</b> leva direto à configuração.</li>
-          <li><b>Organizar:</b> use <b>Organizar</b> (no topo) pra arrastar, redimensionar ou ocultar cards.</li>
-        </ul>
-      </details>
+      {helpOpen && <PanelHelp label={label} onClose={() => setHelpOpen(false)} />}
       {/* Seletor de conta: SÓ aparece em multi-conta (2+ contas da mesma rede). Com 1 conta,
           fica oculto — o título do painel já identifica a conta (menos ruído visual). */}
       {accts.length >= 2 && (
