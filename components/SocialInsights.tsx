@@ -137,6 +137,7 @@ interface Combined {
   bestTime: BestTimeSlot[] | null;              // engajamento médio por dia da semana × hora
   demographics: DemographicsResponse | null;
 }
+const EMPTY_COMBINED: Combined = { insights: null, followers: null, keySeries: null, daily: null, top: null, content: null, recent: null, linkTaps: null, stories: null, bestTime: null, demographics: null };
 const TYPE_PT: Record<string, string> = { video: "Reels / vídeos", image: "Imagens", carousel: "Carrosséis", other: "Outros" };
 // resposta da rota de inbox (conversas/DMs)
 interface InboxData {
@@ -553,34 +554,34 @@ export function SocialInsights({ rede }: { rede: string }) {
     setErr(null);
 
     // timeout no cliente: nunca fica "carregando" pra sempre — aborta em 15s e mostra o que já veio.
-    const fetchOne = (since: string, until: string): Promise<Combined & { error?: string }> => {
+    const fetchPart = (since: string, until: string, part: "core" | "extras"): Promise<Partial<Combined> & { error?: string }> => {
       const ac = new AbortController();
       const to = setTimeout(() => ac.abort(), 15_000);
-      return fetch(`/api/zernio/insights?platform=${platform}&accountId=${acct._id}&since=${since}&until=${until}`, { cache: "no-store", signal: ac.signal })
+      return fetch(`/api/zernio/insights?platform=${platform}&accountId=${acct._id}&since=${since}&until=${until}&part=${part}`, { cache: "no-store", signal: ac.signal })
         .then((r) => r.json())
-        .catch(() => ({ error: "tempo esgotado ao carregar métricas" }) as Combined & { error?: string })
+        .catch(() => ({ error: "tempo esgotado ao carregar métricas" }))
         .finally(() => clearTimeout(to));
     };
 
-    Promise.all([
-      fetchOne(cur.since, cur.until),
-      cmpR ? fetchOne(cmpR.since, cmpR.until) : Promise.resolve(null),
-    ])
-      .then(([d, c]) => {
-        if (!alive) return;
-        if (d?.error) {
-          if (!cachedCur) setErr(String(d.error));
-        } else if (d) {
-          INS_CACHE.set(curKey, d);
-          setData(d);
-        }
-        if (c && !c.error && cmpKey) {
-          INS_CACHE.set(cmpKey, c);
-          setCmpData(c);
-        }
-      })
-      .catch((e) => alive && !cachedCur && setErr(String(e)))
-      .finally(() => alive && setLoading(false));
+    // CORE primeiro (poucas chamadas → KPIs aparecem rápido); EXTRAS (cards pesados) em background.
+    fetchPart(cur.since, cur.until, "core").then((core) => {
+      if (!alive) return;
+      if (core?.error) { if (!cachedCur) setErr(String(core.error)); }
+      else setData((prev) => ({ ...(prev || EMPTY_COMBINED), insights: core.insights ?? null, followers: core.followers ?? null, keySeries: core.keySeries ?? null }));
+      setLoading(false);
+      fetchPart(cur.since, cur.until, "extras").then((ex) => {
+        if (!alive || !ex || ex.error) return;
+        setData((prev) => ({ ...(prev || EMPTY_COMBINED), daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null }));
+        INS_CACHE.set(curKey, { ...EMPTY_COMBINED, ...(cachedCur || {}), insights: core.insights ?? null, followers: core.followers ?? null, keySeries: core.keySeries ?? null, daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null } as Combined);
+      });
+    });
+    // comparação: só os KPIs (core) do período B
+    if (cmpR && cmpKey) fetchPart(cmpR.since, cmpR.until, "core").then((c) => {
+      if (!alive || !c || c.error) return;
+      const merged = { ...EMPTY_COMBINED, insights: c.insights ?? null, followers: c.followers ?? null, keySeries: c.keySeries ?? null } as Combined;
+      INS_CACHE.set(cmpKey, merged);
+      setCmpData(merged);
+    });
     return () => {
       alive = false;
     };
