@@ -140,57 +140,57 @@ export async function GET(req: Request) {
     const since = q.get("since") ?? undefined;
     const until = q.get("until") ?? undefined;
     const range = { since, until };
+    // part=core → só os KPIs (rápido); part=extras → cards pesados; full → tudo (compat/agentes).
+    const part = q.get("part") || "full";
+    const wantCore = part !== "extras";
+    const wantExtras = part !== "core";
 
-    // cache 30s por (workspace + conta + período) — reloads e trocas de card ficam instantâneos
-    const payload = await cached(`insights:${ws.id}:${platform}:${accountId}:${since}:${until}`, 30_000, async () => {
+    // cache 30s por (workspace + conta + período + parte) — reloads e trocas de card ficam instantâneos
+    const payload = await cached(`insights:${ws.id}:${platform}:${accountId}:${since}:${until}:${part}`, 30_000, async () => {
     const isIG = platform === "instagram";
-    // plataformas com posting/série (account-insights com série, daily-metrics, posts, best-time)
     const hasPosting = platform === "instagram" || platform === "facebook" || platform === "tiktok";
-    // produção de conteúdo (posts publicados): tb youtube/linkedin têm posts, mesmo sem série diária
     const hasContent = hasPosting || platform === "youtube" || platform === "linkedin";
-    // demografia disponível: instagram + youtube
     const hasDemo = platform === "instagram" || platform === "youtube";
+    const NULL = Promise.resolve(null);
 
-    // insights por PLATAFORMA (endpoint certo → envelope uniforme)
-    const insightsP: Promise<AnalyticsResponse | null> =
-      platform === "youtube"
-        ? youtubeChannelInsights(accountId, range)
-            .then((r: YoutubeChannelInsights) => toInsights("youtube", accountId, r?.metrics, range))
-            .catch(() => null)
-        : platform === "linkedin"
-          ? linkedinAggregate(accountId, range)
-              .then((r: LinkedinAggregate) => toInsights("linkedin", accountId, r?.analytics, range))
-              .catch(() => null)
-          : platform === "threads"
-            ? Promise.resolve<AnalyticsResponse | null>(null)
-            : accountInsightsFull(platform, accountId, range).catch(() => null);
+    // ── CORE: métricas dos KPIs + seguidores (poucas chamadas → rápido) ──
+    let insights: AnalyticsResponse | null = null, followers: Awaited<ReturnType<typeof followerHistory>> | null = null, keySeries: Awaited<ReturnType<typeof keyMetricSeries>> | null = null;
+    if (wantCore) {
+      const insightsP: Promise<AnalyticsResponse | null> =
+        platform === "youtube"
+          ? youtubeChannelInsights(accountId, range).then((r: YoutubeChannelInsights) => toInsights("youtube", accountId, r?.metrics, range)).catch(() => null)
+          : platform === "linkedin"
+            ? linkedinAggregate(accountId, range).then((r: LinkedinAggregate) => toInsights("linkedin", accountId, r?.analytics, range)).catch(() => null)
+            : platform === "threads" ? NULL
+              : accountInsightsFull(platform, accountId, range).catch(() => null);
+      [insights, followers, keySeries] = await Promise.all([
+        insightsP,
+        hasPosting ? followerHistory(platform, accountId, range).catch(() => null) : NULL,
+        hasPosting ? keyMetricSeries(platform, accountId, range).catch(() => null) : NULL,
+      ]);
+    }
 
-    const [insights, followers, keySeries, daily, postsResp, recentResp, linkTaps, stories, bestSlots, demo] = await Promise.all([
-      insightsP,
-      hasPosting ? followerHistory(platform, accountId, range).catch(() => null) : Promise.resolve(null),
-      hasPosting ? keyMetricSeries(platform, accountId, range).catch(() => null) : Promise.resolve(null),
-      hasPosting ? dailyMetrics(accountId, platform, { fromDate: since, toDate: until }).catch(() => null) : Promise.resolve(null),
-      hasContent ? postAnalytics({ accountId, platform, fromDate: since, toDate: until, sortBy: "engagement", limit: 100 }).catch(() => null) : Promise.resolve(null),
-      // "Últimas publicações": SEM filtro de período — as mais recentes SEMPRE (independe do período
-      // selecionado no painel; senão TikTok/redes sem post no mês ficam vazias).
-      hasContent ? postAnalytics({ accountId, platform, sortBy: "publishedAt", order: "desc", limit: 24 }).catch(() => null) : Promise.resolve(null),
-      isIG ? profileLinkTaps(accountId, range).catch(() => null) : Promise.resolve(null),
-      isIG ? listStories(accountId).then((s) => s.length).catch(() => null) : Promise.resolve(null),
-      // Melhores horários: janela AMPLA (90 dias), independente do período do painel — senão, com
-      // poucos posts no mês, o heatmap concentra tudo num único dia da semana.
-      hasPosting ? bestTime(accountId, platform, (() => {
-        const to = until || new Date().toISOString().slice(0, 10);
-        const from = new Date(new Date(to + "T00:00:00").getTime() - 90 * 864e5).toISOString().slice(0, 10);
-        return { fromDate: from, toDate: to };
-      })()).catch(() => null) : Promise.resolve(null),
-      hasDemo ? demographics(accountId, { platform }).catch(() => null) : Promise.resolve(null),
-    ]);
+    // ── EXTRAS: posts/mix/orgânico, últimas, link-taps, stories, best-time, demografia, série diária ──
+    let daily = null, postsResp = null, recentResp = null, linkTaps = null, stories: number | null = null, bestSlots = null, demo = null;
+    if (wantExtras) {
+      [daily, postsResp, recentResp, linkTaps, stories, bestSlots, demo] = await Promise.all([
+        hasPosting ? dailyMetrics(accountId, platform, { fromDate: since, toDate: until }).catch(() => null) : NULL,
+        hasContent ? postAnalytics({ accountId, platform, fromDate: since, toDate: until, sortBy: "engagement", limit: 100 }).catch(() => null) : NULL,
+        hasContent ? postAnalytics({ accountId, platform, sortBy: "publishedAt", order: "desc", limit: 24 }).catch(() => null) : NULL,
+        isIG ? profileLinkTaps(accountId, range).catch(() => null) : NULL,
+        isIG ? listStories(accountId).then((s) => s.length).catch(() => null) : NULL,
+        hasPosting ? bestTime(accountId, platform, (() => {
+          const to = until || new Date().toISOString().slice(0, 10);
+          const from = new Date(new Date(to + "T00:00:00").getTime() - 90 * 864e5).toISOString().slice(0, 10);
+          return { fromDate: from, toDate: to };
+        })()).catch(() => null) : NULL,
+        hasDemo ? demographics(accountId, { platform }).catch(() => null) : NULL,
+      ]);
+    }
 
     const posts = postsResp?.posts || [];
     const top = postsResp ? { overview: postsResp.overview, posts: posts.slice(0, 8) } : null;
     const content = postsResp ? contentSummary(posts) : null;
-    // "Últimas publicações": os 9 posts mais RECENTES por data (busca dedicada, sem período).
-    // Fallback pros posts do período se a busca dedicada falhar.
     const recentSrc = recentResp?.posts?.length ? recentResp.posts : posts;
     const recent = recentSrc.length ? recentPosts(recentSrc, 9) : null;
 
