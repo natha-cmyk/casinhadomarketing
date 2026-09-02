@@ -67,9 +67,21 @@ function sumActions(actions: AdInsightRow["actions"], match: (t: string) => bool
   if (!actions) return 0;
   return actions.reduce((s, a) => (match(a.action_type) ? s + num(a.value) : s), 0);
 }
+// LEADS (Meta) — SEM dupla contagem. O Meta devolve vários action_types de lead que se SOBREPÕEM:
+// o MESMO lead aparece como "lead", "onsite_conversion.lead_grouped" E "offsite_conversion.fb_pixel_lead".
+// Somar todos (o antigo t.includes("lead")) contava o lead 2-3x — era a causa do número inflado (ex.: 449).
+// Regra: usa o TOTAL unificado do Meta (action_type EXATO "lead" = o que o Gerenciador mostra em
+// "Resultados: Leads"); só quando ele não existe é que soma as FONTES distintas (form on-facebook + pixel
+// do site), evitando os agregados "_grouped" que duplicam.
+function leadsOf(actions: AdInsightRow["actions"]): number {
+  if (!actions?.length) return 0;
+  const exact = actions.find((a) => a.action_type === "lead");
+  if (exact) return num(exact.value);
+  const FONTES = new Set(["onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead", "leadgen.other"]);
+  return actions.reduce((s, a) => (FONTES.has(a.action_type) ? s + num(a.value) : s), 0);
+}
 // predicados de action_type — reusados por total e por campanha (mesma definição = campanhas
 // somam de forma consistente com o total da conta)
-const isLead = (t: string) => t.includes("lead");
 const isForm = (t: string) => t.includes("complete_registration") || t === "lead";
 const isMessaging = (t: string) => t.includes("messaging") && (t.includes("connection") || t.includes("started"));
 const isLandingView = (t: string) => t.includes("landing_page_view");
@@ -79,7 +91,7 @@ function totalsFrom(row: AdInsightRow | undefined) {
   const spend = num(row.spend);
   const impressions = num(row.impressions);
   const clicks = num(row.clicks);
-  const leads = sumActions(row.actions, isLead);
+  const leads = leadsOf(row.actions);
   const messaging = sumActions(row.actions, isMessaging);
   const linkClicks = num(row.inline_link_clicks) || sumActions(row.actions, (t) => t === "link_click");
   const purchases = sumActions(row.actions, (t) => t.includes("purchase"));
@@ -165,7 +177,7 @@ export async function GET(req: Request) {
             const campaigns = camp
               .map((c) => {
                 const spend = num(c.spend);
-                const leads = sumActions(c.actions, isLead);
+                const leads = leadsOf(c.actions);
                 return {
                   name: c.campaign_name || "—",
                   objective: typeof c.objective === "string" ? c.objective : "",

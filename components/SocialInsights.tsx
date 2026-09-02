@@ -82,6 +82,8 @@ function derived(key: string, m: MetricMap, followers?: number): number | null {
   return null;
 }
 const pctFmt = (frac: number) => (frac * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+// dinheiro compacto pro card de stat (R$ 12,5k / R$ 850) — cabe no card sem estourar
+const moneyShort = (n: number | null | undefined) => n == null ? "—" : "R$ " + (Math.abs(n) >= 1000 ? kfmt(n) : Math.round(n).toLocaleString("pt-BR"));
 // engagementRate de post: pode vir como fração (0.05) ou já como percentual (5,0)
 const erFmt = (v: number) => (v <= 1 ? v * 100 : v).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
 // segundos → humano ("6s" / "26min" / "2h")
@@ -344,11 +346,12 @@ function StoriesEditableRow({ rede, scope, value, max, color }: {
 }
 
 // widget de indicador — card próprio com número grande (usado no bloco Produção)
-function ProdStat({ l, n, accent }: { l: string; n: string; accent?: string }) {
+function ProdStat({ l, n, accent, delta }: { l: string; n: string; accent?: string; delta?: ReactNode }) {
   return (
     <div className="card" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", justifyContent: "center", minHeight: 78 }}>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)" }}>{l}</div>
       <div className="tnum" style={{ fontSize: 25, fontWeight: 750, marginTop: 4, color: accent || "var(--label)", lineHeight: 1.1 }}>{n}</div>
+      {delta ? <div style={{ marginTop: 5 }}>{delta}</div> : null}
     </div>
   );
 }
@@ -498,12 +501,15 @@ export function SocialInsights({ rede }: { rede: string }) {
   const [data, setData] = useState<Combined | null>(null);
   const [cmpData, setCmpData] = useState<Combined | null>(null);
   const [inbox, setInbox] = useState<InboxData | null>(null);
+  const [inboxCmp, setInboxCmp] = useState<InboxData | null>(null); // período B (comparação)
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   // saúde do CRM por canal (lista completa) — o match com este canal é feito no render,
   // preferindo o VÍNCULO manual (manualStats[rede].crmCanal) e caindo no nome como heurística.
-  const [crmHealth, setCrmHealth] = useState<{ canal?: string; total?: number; ganho?: number }[]>([]);
+  interface CrmChan { canal?: string; total?: number; ganho?: number; receita?: number }
+  const [crmHealth, setCrmHealth] = useState<CrmChan[]>([]);
+  const [crmHealthCmp, setCrmHealthCmp] = useState<CrmChan[]>([]); // período B (comparação)
   const [crmLoading, setCrmLoading] = useState(true);
   const [crmReload, setCrmReload] = useState(0);
   useEffect(() => {
@@ -513,23 +519,26 @@ export function SocialInsights({ rede }: { rede: string }) {
     const to = setTimeout(() => ac.abort(), 12_000); // não fica "carregando canais" pra sempre
     // Mesma FONTE da Geração (channelHealth, interpretado ao vivo) + escopo do PERÍODO do painel:
     // agosto → leads de agosto por canal; julho → julho; etc. Rota cacheada 45s.
+    // total = leads, ganho = viraram cliente, receita = valor ganho (value) do período.
+    const mapRows = (d: unknown): CrmChan[] => {
+      const rows = Array.isArray((d as { channelHealth?: unknown })?.channelHealth) ? (d as { channelHealth: Record<string, unknown>[] }).channelHealth : [];
+      return rows
+        .map((c) => ({
+          canal: String((c.canal ?? c.key ?? "")).trim(),
+          total: Number(c.total ?? 0), ganho: Number(c.won ?? c.ganho ?? 0), receita: Number(c.value ?? c.receita ?? 0),
+        }))
+        .filter((c) => c.canal);
+    };
     const cur = dateRange(s);
-    fetch(`/api/crm/leads?since=${cur.since}&until=${cur.until}`, { cache: "no-store", signal: ac.signal })
-      .then((r) => r.json())
-      .then((d) => {
-        if (!alive) return;
-        const rows = Array.isArray(d?.channelHealth) ? d.channelHealth : [];
-        setCrmHealth(rows
-          .map((c: { key?: string; canal?: string; total?: number; won?: number; ganho?: number }) => ({
-            canal: (c.canal ?? c.key ?? "").trim(), total: c.total ?? 0, ganho: c.ganho ?? c.won ?? 0,
-          }))
-          .filter((c: { canal: string }) => c.canal));
-      })
-      .catch(() => {})
+    const jobs = [fetch(`/api/crm/leads?since=${cur.since}&until=${cur.until}`, { cache: "no-store", signal: ac.signal }).then((r) => r.json()).then(mapRows).catch(() => [] as CrmChan[])];
+    const cmpR = s.scenario ? dateRange(s.cmp) : null;
+    if (cmpR) jobs.push(fetch(`/api/crm/leads?since=${cmpR.since}&until=${cmpR.until}`, { cache: "no-store", signal: ac.signal }).then((r) => r.json()).then(mapRows).catch(() => [] as CrmChan[]));
+    Promise.all(jobs)
+      .then(([atual, comp]) => { if (!alive) return; setCrmHealth(atual); setCrmHealthCmp(comp || []); })
       .finally(() => { clearTimeout(to); if (alive) setCrmLoading(false); });
     return () => { alive = false; clearTimeout(to); ac.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crmReload, s.period, s.year, s.month, s.quarter, s.week]);
+  }, [crmReload, s.period, s.year, s.month, s.quarter, s.week, s.scenario, s.cmp.period, s.cmp.year, s.cmp.month, s.cmp.quarter, s.cmp.week]);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
   // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras)
@@ -581,12 +590,19 @@ export function SocialInsights({ rede }: { rede: string }) {
         INS_CACHE.set(curKey, { ...EMPTY_COMBINED, ...(cachedCur || {}), insights: core.insights ?? null, followers: core.followers ?? null, keySeries: core.keySeries ?? null, daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null } as Combined);
       });
     });
-    // comparação: só os KPIs (core) do período B
+    // comparação: KPIs (core) + cards pesados (extras) do período B — pra TODOS os widgets compararem
+    // (mix de conteúdo, orgânico etc. dependem de extras). Core primeiro, extras mescla em background.
     if (cmpR && cmpKey) fetchPart(cmpR.since, cmpR.until, "core").then((c) => {
       if (!alive || !c || c.error) return;
-      const merged = { ...EMPTY_COMBINED, insights: c.insights ?? null, followers: c.followers ?? null, keySeries: c.keySeries ?? null } as Combined;
-      INS_CACHE.set(cmpKey, merged);
-      setCmpData(merged);
+      const base = { ...EMPTY_COMBINED, insights: c.insights ?? null, followers: c.followers ?? null, keySeries: c.keySeries ?? null } as Combined;
+      INS_CACHE.set(cmpKey, base);
+      setCmpData(base);
+      fetchPart(cmpR.since, cmpR.until, "extras").then((cx) => {
+        if (!alive || !cx || cx.error) return;
+        const full = { ...base, daily: cx.daily ?? null, top: cx.top ?? null, content: cx.content ?? null, recent: cx.recent ?? null, linkTaps: cx.linkTaps ?? null, stories: cx.stories ?? null, bestTime: cx.bestTime ?? null, demographics: cx.demographics ?? null } as Combined;
+        INS_CACHE.set(cmpKey, full);
+        setCmpData(full);
+      });
     });
     return () => {
       alive = false;
@@ -600,23 +616,23 @@ export function SocialInsights({ rede }: { rede: string }) {
   // fetch de inbox (conversas/DMs) — só onde a plataforma tem caixa de entrada. Estado
   // e cache próprios; período atual (sem comparação).
   useEffect(() => {
-    if (!acct || !COM_INBOX.has(platform)) { setInbox(null); return; }
+    if (!acct || !COM_INBOX.has(platform)) { setInbox(null); setInboxCmp(null); return; }
     const cur = dateRange(s);
-    const key = keyOf(platform, acct._id, cur.since, cur.until);
     let alive = true;
-    const cached = INBOX_CACHE.get(key);
-    if (cached) setInbox(cached);
-    fetch(`/api/zernio/inbox?accountId=${acct._id}&platform=${platform}&since=${cur.since}&until=${cur.until}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: InboxData & { error?: string }) => {
-        if (!alive || d?.error) return;
-        INBOX_CACHE.set(key, d);
-        setInbox(d);
-      })
-      .catch(() => {});
+    const load = (since: string, until: string, set: (d: InboxData | null) => void) => {
+      const key = keyOf(platform, acct._id, since, until);
+      const cached = INBOX_CACHE.get(key);
+      if (cached) set(cached);
+      fetch(`/api/zernio/inbox?accountId=${acct._id}&platform=${platform}&since=${since}&until=${until}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d: InboxData & { error?: string }) => { if (!alive || d?.error) return; INBOX_CACHE.set(key, d); set(d); })
+        .catch(() => {});
+    };
+    load(cur.since, cur.until, setInbox);
+    if (s.scenario) { const c = dateRange(s.cmp); load(c.since, c.until, setInboxCmp); } else setInboxCmp(null);
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [acct?._id, platform, s.period, s.year, s.month, s.quarter, s.week]);
+  }, [acct?._id, platform, s.period, s.year, s.month, s.quarter, s.week, s.scenario, s.cmp.period, s.cmp.year, s.cmp.month, s.cmp.quarter, s.cmp.week]);
 
   // publica o que ESTE painel mostra pro agente (números ao vivo do canal + produção).
   // Fica ANTES de qualquer return condicional (regra dos hooks). Deriva tudo de `data`.
@@ -767,6 +783,23 @@ export function SocialInsights({ rede }: { rede: string }) {
   const cmpContentTotal = comparando ? (cmpData?.content?.total ?? null) : null;
   const cmpOrganicShare = comparando ? (cmpData?.content?.organicShare ?? null) : null;
   const cmpAccountsEngaged = comparando ? (cmpIns?.metrics?.accounts_engaged?.total ?? null) : null;
+
+  // ── SEGUIDORES do período B: API (followers_gained/lost) OU registro manual do escopo de comparação ──
+  const cmpScope = { period: s.cmp.period, year: s.cmp.year, month: s.cmp.month, week: s.cmp.week, quarter: s.cmp.quarter };
+  const cmpFollValsB = cmpFoll?.metrics?.follower_count?.values || [];
+  const cmpGainedApi = cmpFoll?.metrics?.followers_gained?.total ?? null;
+  const cmpLostApi = cmpFoll?.metrics?.followers_lost?.total ?? null;
+  const cmpManualGain = comparando ? sumByScope(s.manualStats[rede]?.folGainByPeriod || {}, cmpScope) : 0;
+  const cmpManualLost = comparando ? sumByScope(s.manualStats[rede]?.folLostByPeriod || {}, cmpScope) : 0;
+  const cmpNovos = comparando ? (cmpGainedApi ?? (cmpManualGain > 0 ? cmpManualGain : null)) : null;
+  const cmpSaida = comparando ? (cmpLostApi ?? (cmpManualLost > 0 ? cmpManualLost : null)) : null;
+  const cmpNetSeries = cmpFollValsB.length >= 2 ? (cmpFollValsB[cmpFollValsB.length - 1].value - cmpFollValsB[0].value) : null;
+  const cmpNet = comparando ? (cmpNetSeries ?? ((cmpNovos != null || cmpSaida != null) ? (cmpNovos || 0) - (cmpSaida || 0) : null)) : null;
+  // ── CONVERSAS do período B ──
+  const cmpConversas = comparando ? (inboxCmp?.volume?.summary.uniqueConversations ?? null) : null;
+  const cmpInboxLeads = comparando && inboxCmp
+    ? (inboxCmp.sources?.sources?.find((x) => x.source === "contact")?.received ?? inboxCmp.volume?.summary.received ?? null)
+    : null;
 
   // ── KPIs-herói POR PLATAFORMA (estudo por canal): cada rede mostra os indicadores reais dela ──
   const mtot = (k: string) => metrics[k]?.total ?? null;
@@ -979,11 +1012,18 @@ export function SocialInsights({ rede }: { rede: string }) {
     // CRM: vínculo manual (manualStats[rede].crmCanal) > heurística por nome
     const vinc = s.manualStats[rede]?.crmCanal;
     const vincNorm = (vinc || "").trim().toLowerCase();
-    const crmRow = vinc
-      ? crmHealth.find((c) => String(c.canal || "").trim().toLowerCase() === vincNorm)
-      : crmHealth.find((c) => { const cn = String(c.canal || "").toLowerCase(); return cn && (cn.includes(ll) || ll.includes(cn)); });
+    // mesma regra de match nos dois períodos: vínculo manual > heurística por nome
+    const matchCrm = (list: CrmChan[]) => vinc
+      ? list.find((c) => String(c.canal || "").trim().toLowerCase() === vincNorm)
+      : list.find((c) => { const cn = String(c.canal || "").toLowerCase(); return cn && (cn.includes(ll) || ll.includes(cn)); });
+    const crmRow = matchCrm(crmHealth);
+    const crmRowCmp = comparando ? matchCrm(crmHealthCmp) : undefined;
     const crmLeads = crmRow?.total ?? null;
     const crmGanho = crmRow?.ganho ?? null;
+    const crmReceita = crmRow?.receita ?? null;
+    const crmLeadsCmp = comparando ? (crmRowCmp?.total ?? null) : null;
+    const crmGanhoCmp = comparando ? (crmRowCmp?.ganho ?? null) : null;
+    const crmReceitaCmp = comparando ? (crmRowCmp?.receita ?? null) : null;
 
     const totalDisplay = temApi || stories > 0 ? fmt(totalConteudos) : "—";
 
@@ -1017,13 +1057,15 @@ export function SocialInsights({ rede }: { rede: string }) {
           {/* DIREITA — indicadores (widgets) + vínculo (preenche a altura, sem vazio) */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <ProdStat l="Conteúdos" n={totalDisplay} accent={cor} />
+              <ProdStat l="Conteúdos" n={totalDisplay} accent={cor} delta={cmpChip(apiTotal, cmpContentTotal)} />
               <VisitsStat rede={rede} scope={{ period: s.period, year: s.year, month: s.month, week: s.week, quarter: s.quarter }} apiValue={siteVisits} />
-              <ProdStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} accent="var(--excelente)" />
-              <ProdStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} accent="var(--cyan)" />
+              <ProdStat l="Leads (CRM)" n={crmLeads != null ? fmt(crmLeads) : "—"} accent="var(--excelente)" delta={cmpChip(crmLeads, crmLeadsCmp)} />
+              <ProdStat l="Leads via DM" n={dmLeads != null ? fmt(dmLeads) : "—"} accent="var(--cyan)" delta={cmpChip(dmLeads, cmpConversas)} />
+              <ProdStat l="Conversões (clientes)" n={crmGanho != null ? fmt(crmGanho) : "—"} accent="var(--excelente)" delta={cmpChip(crmGanho, crmGanhoCmp)} />
+              <ProdStat l="Receita gerada" n={crmReceita ? moneyShort(crmReceita) : "—"} accent="var(--ink)" delta={cmpChip(crmReceita, crmReceitaCmp)} />
             </div>
             {crmLeads != null && crmGanho != null && crmGanho > 0 && (
-              <div className="insight">{fmt(crmGanho)} de {fmt(crmLeads)} leads do canal vinculado viraram cliente.</div>
+              <div className="insight">{fmt(crmGanho)} de {fmt(crmLeads)} leads do canal vinculado viraram cliente{crmReceita ? <> · {moneyShort(crmReceita)} em receita</> : null}.</div>
             )}
             {/* vínculo do canal ao CRM — SEMPRE visível (flex:1 preenche o resto da coluna) */}
             <div className="card pad-lg" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
@@ -1066,10 +1108,10 @@ export function SocialInsights({ rede }: { rede: string }) {
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--cyan)" } as CSSProperties}>
       <div className="card-head"><div className="t">Seguidores</div></div>
       <div className="mini">
-        <MiniStat l="Novos seguidores" n={novos != null ? fmt(novos) : "—"} />
-        <MiniStat l="Deixaram de seguir" n={saida != null ? fmt(saida) : "—"} />
-        <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} />
-        <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} />
+        <MiniStat l="Novos seguidores" n={novos != null ? fmt(novos) : "—"} delta={cmpChip(novos, cmpNovos)} />
+        <MiniStat l="Deixaram de seguir" n={saida != null ? fmt(saida) : "—"} delta={cmpChip(saida, cmpSaida)} />
+        <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} delta={cmpChip(net, cmpNet)} />
+        <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} delta={cmpChip(followersCount, cmpFollLast)} />
       </div>
       {fGained == null && fLost == null && <FollowerManualEditor rede={rede} scope={scopeNow} />}
       {showFollChart && (
@@ -1147,8 +1189,8 @@ export function SocialInsights({ rede }: { rede: string }) {
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--excelente)" } as CSSProperties}>
       <div className="card-head"><div className="t">Conversas</div></div>
       <div className="mini">
-        <MiniStat l="Leads (DM)" n={inboxLeads != null ? fmt(inboxLeads) : "—"} />
-        <MiniStat l="Conversas" n={inbox?.volume ? fmt(inbox.volume.summary.uniqueConversations) : "—"} />
+        <MiniStat l="Leads (DM)" n={inboxLeads != null ? fmt(inboxLeads) : "—"} delta={cmpChip(inboxLeads, cmpInboxLeads)} />
+        <MiniStat l="Conversas" n={inbox?.volume ? fmt(inbox.volume.summary.uniqueConversations) : "—"} delta={cmpChip(inbox?.volume?.summary.uniqueConversations ?? null, cmpConversas)} />
         <MiniStat l="Tempo de resposta" n={inbox?.responseTime && inbox.responseTime.summary.sampleSize > 0 ? humanDur(inbox.responseTime.summary.medianSeconds) : "—"} />
       </div>
       {showConvChart && inbox?.volume && (

@@ -114,11 +114,12 @@ export function BarRow({ k, v, max, color, formatted }: { k: string; v: number; 
   );
 }
 
-export function MiniStat({ l, n }: { l: string; n: ReactNode }) {
+export function MiniStat({ l, n, delta }: { l: string; n: ReactNode; delta?: ReactNode }) {
   return (
     <div className="m">
       <div className="l">{l}</div>
       <div className="n tnum">{n}</div>
+      {delta ? <div style={{ marginTop: 3 }}>{delta}</div> : null}
     </div>
   );
 }
