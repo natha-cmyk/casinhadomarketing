@@ -11,7 +11,7 @@ function apiKey(): string {
 
 // timeout por chamada: upstream travado falha rápido em vez de segurar a função serverless
 // até a Vercel derrubar (o que zerava TODAS as métricas do painel de uma vez).
-const ZERNIO_TIMEOUT_MS = 20_000;
+const ZERNIO_TIMEOUT_MS = 8_000;
 
 async function zernio<T>(path: string, init?: RequestInit): Promise<T> {
   const ac = new AbortController();
