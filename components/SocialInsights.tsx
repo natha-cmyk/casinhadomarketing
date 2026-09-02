@@ -455,8 +455,11 @@ export function SocialInsights({ rede }: { rede: string }) {
   // saúde do CRM por canal (lista completa) — o match com este canal é feito no render,
   // preferindo o VÍNCULO manual (manualStats[rede].crmCanal) e caindo no nome como heurística.
   const [crmHealth, setCrmHealth] = useState<{ canal?: string; total?: number; ganho?: number }[]>([]);
+  const [crmConnected, setCrmConnected] = useState<boolean | null>(null); // null = ainda checando
   useEffect(() => {
     let alive = true;
+    // status de conexão do CRM (pra distinguir "sem canal mapeado" de "sem CRM")
+    fetch("/api/crm/config", { cache: "no-store" }).then((r) => r.json()).then((d) => { if (alive) setCrmConnected(!!d?.config); }).catch(() => { if (alive) setCrmConnected(false); });
     fetch("/api/crm/leads", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
@@ -968,11 +971,18 @@ export function SocialInsights({ rede }: { rede: string }) {
                 <>
                   <div style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label-1)", marginBottom: 6 }}>Qual canal do CRM é o {label}?</div>
                   <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
+                  <div style={{ fontSize: 10.5, color: "var(--label-3)", marginTop: 6 }}>Escolha e pronto — os leads desse canal somam aqui.</div>
                 </>
-              ) : (
+              ) : crmConnected ? (
                 <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.5 }}>
-                  Nenhum canal do CRM chegou aqui ainda. <Link href="/geracao" style={{ color: "var(--cyan)", fontWeight: 700 }}>Conectar CRM →</Link>
+                  Seu CRM está conectado, mas ainda não veio nenhum <b>canal/origem</b> nos leads. Mapeie o campo de <b>canal</b> (ex.: &quot;Redes sociais&quot;) em <Link href="/geracao?crm=1" style={{ color: "var(--cyan)", fontWeight: 700 }}>Geração → Reconfigurar</Link> e sincronize — os canais aparecem aqui pra vincular.
                 </div>
+              ) : crmConnected === false ? (
+                <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.5 }}>
+                  CRM ainda não conectado. <Link href="/geracao?crm=1" style={{ color: "var(--cyan)", fontWeight: 700 }}>Conectar CRM →</Link>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11.5, color: "var(--label-3)" }}>Checando o CRM…</div>
               )}
             </div>
           </div>
