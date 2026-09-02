@@ -722,8 +722,8 @@ export function PostModal() {
                 onChange={(e) => upd({ data: e.target.value })}
               />
             </div>
-            <div>
-              <label className="field-lbl">Horário</label>
+            <div className="pm-hora-wrap">
+              <label className="field-lbl">Horário{sugHoras.length > 0 && <span title="Melhores horários disponíveis — passe o mouse" style={{ color: "var(--cyan)", marginLeft: 4, cursor: "help" }}>★</span>}</label>
               <input
                 className="field-edit"
                 id="pmHora"
@@ -733,7 +733,7 @@ export function PostModal() {
               />
               {sugHoras.length > 0 && (
                 <select
-                  className="field-edit"
+                  className="field-edit pm-hora-sug"
                   style={{ marginTop: 5, fontSize: 12.5, borderRadius: 10 }}
                   value=""
                   onChange={(e) => { if (e.target.value) upd({ hora: e.target.value }); }}
