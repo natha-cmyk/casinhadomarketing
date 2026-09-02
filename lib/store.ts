@@ -151,6 +151,7 @@ export interface UIState {
   setPeriod: (p: Period) => void; setYear: (y: number) => void; setMonth: (m: number) => void;
   setWeek: (w: number) => void; setQuarter: (q: number) => void;
   toggleScenario: () => void; toggleAgent: () => void;
+  setCmp: (patch: Partial<Cmp>) => void;
   // zernio: seta contas conectadas e ATIVA o painel da rede automaticamente
   setZernioAccounts: (accounts: UIState["zernioAccounts"]) => void;
   // multi-conta: escolhe qual conta daquela rede o painel exibe
@@ -374,6 +375,11 @@ export const useStore = create<UIState>((set) => ({
   setWeek: (w) => set({ week: w }),
   setQuarter: (q) => set({ quarter: q }),
   toggleScenario: () => set((s) => ({ scenario: !s.scenario })),
+  setCmp: (patch) => set((s) => {
+    const cmp = { ...s.cmp, ...patch };
+    if (patch.month != null) cmp.quarter = quarterOf(patch.month);
+    return { cmp };
+  }),
   toggleAgent: () => set((s) => ({ agentOpen: !s.agentOpen })),
 
   toggleRede: (id) => set((s) => ({ redes: { ...s.redes, [id]: !s.redes[id] } })),

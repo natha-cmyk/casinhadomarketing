@@ -105,12 +105,49 @@ export function Toolbar() {
         {temporal && <span className="updated">{scopeLabelText(scope)}</span>}
       </div>
 
-      {s.scenario && usesCompare(view) && (
-        <div className="scnbar">
-          <b>Cenário</b> · comparando {scopeLabelText(scope)} com {s.cmp.year} —{" "}
-          {MONTHS_FULL[s.cmp.month]} {s.cmp.year}
-        </div>
-      )}
+      {s.scenario && usesCompare(view) && (() => {
+        const cmpScope: Scope = { period: s.cmp.period, year: s.cmp.year, month: s.cmp.month, week: s.cmp.week, quarter: s.cmp.quarter };
+        // "período anterior" = recua 1 unidade do escopo ATUAL (semana→semana, mês→mês…)
+        const anterior = () => {
+          const p = s.period;
+          if (p === "ano") return s.setCmp({ period: "ano", year: s.year - 1 });
+          if (p === "trimestre") { const q = s.quarter - 1; return q < 0 ? s.setCmp({ period: "trimestre", year: s.year - 1, quarter: 3 }) : s.setCmp({ period: "trimestre", year: s.year, quarter: q }); }
+          if (p === "semana") { const w = s.week - 1; return w < 0 ? s.setCmp({ period: "semana", year: s.month === 0 ? s.year - 1 : s.year, month: (s.month + 11) % 12, week: 3 }) : s.setCmp({ period: "semana", year: s.year, month: s.month, week: w }); }
+          return s.setCmp({ period: "mes", year: s.month === 0 ? s.year - 1 : s.year, month: (s.month + 11) % 12 });
+        };
+        const anoPassado = () => s.setCmp({ period: s.period, year: s.year - 1, month: s.month, week: s.week, quarter: s.quarter });
+        return (
+          <div className="scnbar scnbar-flex">
+            <b>Comparar com</b>
+            <div className="seg seg-sm">
+              {PERIODS.map((p) => (
+                <button key={p.value} className={s.cmp.period === p.value ? "on" : ""} onClick={() => s.setCmp({ period: p.value })} type="button">{p.label}</button>
+              ))}
+            </div>
+            <select className="tb-select" value={s.cmp.year} onChange={(e) => s.setCmp({ year: Number(e.target.value) })} aria-label="Ano da comparação">
+              {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            {(s.cmp.period === "mes" || s.cmp.period === "semana") && (
+              <select className="tb-select" value={s.cmp.month} onChange={(e) => s.setCmp({ month: Number(e.target.value) })} aria-label="Mês da comparação">
+                {MONTHS_FULL.map((m, i) => <option key={i} value={i}>{m}</option>)}
+              </select>
+            )}
+            {s.cmp.period === "semana" && (
+              <select className="tb-select" value={s.cmp.week} onChange={(e) => s.setCmp({ week: Number(e.target.value) })} aria-label="Semana da comparação">
+                {[0, 1, 2, 3].map((w) => <option key={w} value={w}>{"W" + (w + 1)}</option>)}
+              </select>
+            )}
+            {s.cmp.period === "trimestre" && (
+              <select className="tb-select" value={s.cmp.quarter} onChange={(e) => s.setCmp({ quarter: Number(e.target.value) })} aria-label="Trimestre da comparação">
+                {[0, 1, 2, 3].map((q) => <option key={q} value={q}>{"Q" + (q + 1)}</option>)}
+              </select>
+            )}
+            <button className="scn-preset" type="button" onClick={anterior} title="Período imediatamente anterior ao atual">período anterior</button>
+            <button className="scn-preset" type="button" onClick={anoPassado} title="Mesmo período, um ano atrás">ano passado</button>
+            <span className="scn-lbl">{scopeLabelText(scope)} <b>vs</b> {scopeLabelText(cmpScope)}</span>
+          </div>
+        );
+      })()}
     </>
   );
 }

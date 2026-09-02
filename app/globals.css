@@ -64,6 +64,12 @@ button{font-family:inherit} a{color:inherit}
 .updated{font-size:11.5px;color:var(--label-3);white-space:nowrap}
 .scnbar{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 22px;border-bottom:1px solid var(--hairline);background:rgba(0,187,197,.06);flex-wrap:wrap;font-size:12.5px}
 .scnbar b{color:#0a8a91;font-weight:650}
+.scnbar-flex .seg-sm{transform:scale(.9);transform-origin:left center}
+.scnbar-flex .tb-select{padding:4px 8px;font-size:12px}
+.scn-preset{border:1px solid var(--hairline-2);background:#fff;border-radius:999px;padding:4px 11px;font-size:11.5px;font-weight:650;color:var(--cyan);cursor:pointer;transition:.12s}
+.scn-preset:hover{background:rgba(0,187,197,.10)}
+.scn-lbl{color:var(--label-2);font-size:11.5px}
+.scn-lbl b{color:var(--label-3)}
 
 .content{flex:1;overflow-y:auto;padding:26px 28px 60px}
 .view{max-width:1080px;margin:0 auto;animation:rise .28s ease}
