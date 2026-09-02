@@ -652,6 +652,13 @@ export function SocialInsights({ rede }: { rede: string }) {
   const hasInbox = COM_INBOX.has(platform);
   const accountsEngaged = metrics.accounts_engaged?.total ?? null;
 
+  // ── COMPARAÇÃO por widget: chip de delta reusável (só quando comparando e há os dois valores) ──
+  const cmpChip = (cur: number | null | undefined, prev: number | null | undefined) =>
+    comparando && cur != null && prev != null ? <DeltaChip delta={computeDelta(cur, prev, true)} scn /> : null;
+  const cmpContentTotal = comparando ? (cmpData?.content?.total ?? null) : null;
+  const cmpOrganicShare = comparando ? (cmpData?.content?.organicShare ?? null) : null;
+  const cmpAccountsEngaged = comparando ? (cmpIns?.metrics?.accounts_engaged?.total ?? null) : null;
+
   // ── KPIs-herói POR PLATAFORMA (estudo por canal): cada rede mostra os indicadores reais dela ──
   const mtot = (k: string) => metrics[k]?.total ?? null;
   const cmpMtot = (k: string) => (comparando ? cmpIns?.metrics?.[k]?.total ?? null : null);
@@ -874,7 +881,10 @@ export function SocialInsights({ rede }: { rede: string }) {
       <div style={{ marginBottom: 16 }}>
         <div className="card-head" style={{ marginBottom: 12 }}>
           <div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div>
-          <span className="badge">{totalDisplay} conteúdos</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {cmpChip(apiTotal, cmpContentTotal)}
+            <span className="badge">{totalDisplay} conteúdos</span>
+          </div>
         </div>
         {/* metade: "por tipo" · metade: indicadores em widgets separados. alignItems stretch +
             cards com height:100% pra NÃO sobrar espaço em branco entre as colunas. */}
@@ -936,7 +946,10 @@ export function SocialInsights({ rede }: { rede: string }) {
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
       <div className="card-head">
         <div className="t">Mix de conteúdo</div>
-        {mixTop && <span className="badge">Vencedor: {mixTop}</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {cmpChip(content.total, cmpContentTotal)}
+          {mixTop && <span className="badge">Vencedor: {mixTop}</span>}
+        </div>
       </div>
       {mixRows.map(([t, v]) => (
         <BarRow key={t} k={TYPE_PT[t] || t} v={v} max={content.total} color={cor} formatted={fmt(v)} />
@@ -987,6 +1000,7 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div className="t">Engajamento por tipo</div>
           <div className="sub tnum">{fmt(engTypeSum)} interações</div>
         </div>
+        {cmpChip(engTypeSum, comparando ? sum(engTypeRows.map((r) => cmpIns?.metrics?.[r.key]?.total ?? 0)) : null)}
       </div>
       {engTypeRows.map((r) => (
         <BarRow key={r.key} k={r.k} v={metrics[r.key].total} max={engTypeMax} color="var(--cyan)" formatted={fmt(metrics[r.key].total)} />
@@ -1001,6 +1015,7 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div className="t">Rendimento orgânico</div>
           <div className="sub">{content.organicShare != null ? `${pctFmt(content.organicShare)} orgânico` : "sem dado no período"}</div>
         </div>
+        {cmpChip(content.organicShare != null ? content.organicShare * 100 : null, cmpOrganicShare != null ? cmpOrganicShare * 100 : null)}
       </div>
       {(() => {
         const orMax = Math.max(1, content.organic.reach, content.paid.reach);
@@ -1022,7 +1037,7 @@ export function SocialInsights({ rede }: { rede: string }) {
 
   if (showActivity) cards.push({ id: "atividade", node: (
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
-      <div className="card-head"><div className="t">Atividade &amp; audiência</div></div>
+      <div className="card-head"><div className="t">Atividade &amp; audiência</div>{cmpChip(accountsEngaged, cmpAccountsEngaged)}</div>
       <div className="mini">
         {accountsEngaged != null && <MiniStat l="Atividades no perfil" n={fmt(accountsEngaged)} />}
         <MiniStat l="Visitas ao site" n={linkTaps?.WEBSITE != null ? fmt(linkTaps.WEBSITE) : "—"} />
