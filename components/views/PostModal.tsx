@@ -8,6 +8,7 @@ import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropMod
 import { Ic } from "@/components/Ic";
 import { ICONS } from "@/lib/nav";
 import { PostPreview } from "@/components/views/PostPreview";
+import { FeedGridPreview } from "@/components/views/FeedGridPreview";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -242,6 +243,9 @@ export function PostModal() {
   const [uploadPct, setUploadPct] = useState<number | null>(null); // % do upload atual (null = sem barra)
   const [uploadNome, setUploadNome] = useState<string>("");        // nome do arquivo em envio
   const [dragOver, setDragOver] = useState(false);                 // destaque da zona de drop
+  const [prevMode, setPrevMode] = useState<"post" | "feed">("post"); // aba do preview: publicação x grade do feed
+  const [feedRecent, setFeedRecent] = useState<{ thumbnail: string | null; url: string | null; isVideo?: boolean }[] | null>(null);
+  const [feedLoading, setFeedLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // guarda o File local por url (pra recorte sem taint de CORS) + alvo do editor de recorte
   const filesByUrl = useRef<Map<string, File>>(new Map());
@@ -350,6 +354,23 @@ export function PostModal() {
       .catch(() => { if (alive) setSugHoras([]); });
     return () => { alive = false; };
   }, [f.canal, f.perfil, zernioAccounts]);
+
+  // Planejador de grade: busca o feed real do perfil (posts recentes) quando a aba "Feed" abre.
+  useEffect(() => {
+    if (prevMode !== "feed") return;
+    const acc = zernioAccounts.find((a) => a.username === f.perfil || a.displayName === f.perfil);
+    const rede = REDES.find((r) => r.label === f.canal);
+    const plat = rede ? (rede.id === "x" ? "twitter" : rede.id) : "";
+    if (!acc?._id || !plat) { setFeedRecent([]); return; }
+    let alive = true;
+    setFeedLoading(true);
+    fetch(`/api/zernio/insights?platform=${plat}&accountId=${acc._id}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (alive) setFeedRecent(Array.isArray(d?.recent) ? d.recent : []); })
+      .catch(() => { if (alive) setFeedRecent([]); })
+      .finally(() => { if (alive) setFeedLoading(false); });
+    return () => { alive = false; };
+  }, [prevMode, f.perfil, f.canal, zernioAccounts]);
 
   if (!pm) return null;
   if (pm.mode === "edit" && !existing) return null;
@@ -578,6 +599,8 @@ export function PostModal() {
   const conn = redesConectadas(zernioAccounts);
 
   // dados pro PREVIEW (avatar do perfil escolhido + 1ª mídia). Legenda do canal atual (override > geral).
+  // canal com grade de feed (planejador só faz sentido em redes de grade)
+  const feedGridCanal = (() => { const rede = REDES.find((r) => r.label === f.canal); return !!rede && ["instagram", "tiktok", "facebook", "threads"].includes(rede.id); })();
   const prevAcct = zernioAccounts.find((a) => a.username === f.perfil || a.displayName === f.perfil);
   const ridPrev = redeIdDoCanal(f.canal);
   const prevLegenda = (ridPrev && f.overrides[ridPrev]?.caption) || f.legenda;
@@ -1002,8 +1025,15 @@ export function PostModal() {
           </div>
         </div>
         <aside className="pm-preview-col">
-          <div className="pm-preview-h">Pré-visualização</div>
-          {previewNode}
+          <div className="pm-prev-tabs">
+            <button type="button" className={prevMode === "post" ? "on" : ""} onClick={() => setPrevMode("post")}>Publicação</button>
+            {feedGridCanal && <button type="button" className={prevMode === "feed" ? "on" : ""} onClick={() => setPrevMode("feed")}>No feed</button>}
+          </div>
+          {prevMode === "feed" && feedGridCanal ? (
+            <FeedGridPreview newMedia={f.media[0]} recent={feedRecent || []} loading={feedLoading} cor={(canais.find((c) => c.nome === f.canal)?.cor) || "var(--ink)"} />
+          ) : (
+            previewNode
+          )}
         </aside>
         </div>
         <div className="pm-foot">

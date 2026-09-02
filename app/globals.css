@@ -237,6 +237,9 @@ select.field-edit{-webkit-appearance:none;-moz-appearance:none;appearance:none;c
 .pm-main .pm-body{flex:1;min-width:0}
 .pm-preview-col{border-top:1px solid var(--hairline);background:var(--cream);padding:16px 20px}
 .pm-preview-h{font-size:11px;font-weight:700;color:var(--label-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px}
+.pm-prev-tabs{display:inline-flex;gap:2px;background:var(--surface);border-radius:10px;padding:3px;margin-bottom:12px}
+.pm-prev-tabs button{border:0;background:transparent;font:inherit;font-size:12px;font-weight:650;color:var(--label-2);padding:5px 12px;border-radius:8px;cursor:pointer}
+.pm-prev-tabs button.on{background:#fff;color:var(--label);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .pm-prev-card{background:#fff;border:1px solid var(--hairline);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-card);max-width:340px;margin:0 auto}
 /* zona de drop de midia + barra de progresso */
 .pm-drop{border:1.5px dashed var(--hairline-2);border-radius:12px;padding:14px 16px;min-height:56px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:.12s;background:#fff}
