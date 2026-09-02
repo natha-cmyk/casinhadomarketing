@@ -184,6 +184,9 @@ select.field-edit{-webkit-appearance:none;-moz-appearance:none;appearance:none;c
 .cc-h{font-size:11px;font-weight:700;color:var(--label-3);text-transform:uppercase;letter-spacing:.03em;text-align:center;padding:2px 0}
 .cc-cell{min-height:104px;min-width:0;overflow:hidden;border:1px solid var(--hairline);border-radius:10px;padding:6px;background:#fff;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:.1s}
 .cc-cell{position:relative}
+.cc-cell.cc-drop{border-color:var(--cyan);background:rgba(0,187,197,.08);box-shadow:inset 0 0 0 1px var(--cyan)}
+.post-chip{cursor:grab}
+.post-chip:active{cursor:grabbing}
 .cc-cell:hover{overflow:visible;z-index:20}
 /* popup do dia (hover) — lista todos os posts com título completo */
 .cc-daypop{display:none;position:absolute;top:calc(100% - 6px);left:0;z-index:40;min-width:230px;max-width:320px;background:#fff;border:1px solid var(--hairline-2);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.16);padding:8px;flex-direction:column;gap:3px}

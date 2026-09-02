@@ -124,7 +124,7 @@ const calKey = (y: number, m: number, d: number) => y + "-" + (m + 1) + "-" + d;
 
 // ── Modo apresentação ──────────────────────────────────────────────
 const WD_FULL = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-type ApPeriodo = "mes" | "quinzena" | "semana";
+type ApPeriodo = "mes" | "quinzena" | "semana" | "custom";
 // Janelas [diaInicio, diaFim] dentro do mês, conforme o período escolhido.
 function apWindows(periodo: ApPeriodo, year: number, month: number): [number, number][] {
   const dim = daysInMonth(year, month);
@@ -141,6 +141,7 @@ function semanaNum(diaInicio: number): number {
 function apWindowLabel(periodo: ApPeriodo, win: [number, number], month: number): string {
   const mes = MONTHS_FULL[month];
   if (periodo === "mes") return mes;
+  if (periodo === "custom") return `${win[0]}–${win[1]} de ${mes}`;
   if (periodo === "quinzena") return `${win[0]}–${win[1]} de ${mes}`;
   return `Semana ${semanaNum(win[0])} (W${semanaNum(win[0])}) · ${win[0]}–${win[1]} de ${mes}`;
 }
@@ -231,7 +232,9 @@ export function CalendarioView() {
         key={p.id}
         className={`post-chip st-${p.status}`}
         data-post={p.id}
-        title={`${p.titulo || "(sem título)"}\n${norteador} · ${st.label}${acc}`}
+        draggable
+        onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData("text/plain", p.id); e.dataTransfer.effectAllowed = "move"; }}
+        title={`${p.titulo || "(sem título)"}\n${norteador} · ${st.label}${acc}\n(arraste pra outro dia pra remarcar)`}
         onClick={(e) => {
           e.stopPropagation();
           set({ postModal: { mode: "edit", id: p.id, y: p.y, m: p.m, d: p.d } });
@@ -266,18 +269,25 @@ export function CalendarioView() {
   const [contasOpen, setContasOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [bibOpen, setBibOpen] = useState(false);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null); // célula sob o post arrastado
 
   // ── modo apresentação (cronograma de produção por período) ──
   const [apOpen, setApOpen] = useState(false);
   const [apPeriodo, setApPeriodo] = useState<ApPeriodo>("mes");
+  const [apCustom, setApCustom] = useState<[number, number]>([1, 15]); // range [de, até] no mês (modo custom)
   const [apOff, setApOff] = useState(0);
   const [apHidden, setApHidden] = useState<Set<string>>(new Set()); // canais desligados nos chips
   const [apModo, setApModo] = useState<"lista" | "grade" | "dia">("lista"); // como exibir os dias da janela
   const [apDia, setApDia] = useState(0); // índice do dia no modo "dia a dia"
 
+  // janelas da apresentação (custom = uma janela [de, até] no mês)
+  const apWins = (): [number, number][] => apPeriodo === "custom"
+    ? [[Math.min(apCustom[0], apCustom[1]), Math.max(apCustom[0], apCustom[1])]]
+    : apWindows(apPeriodo, year, month);
+
   const abrirApresentacao = () => {
     // abre na janela que contém "hoje" (se o mês exibido for o atual)
-    const wins = apWindows(apPeriodo, year, month);
+    const wins = apWins();
     const hoje = new Date();
     let off = 0;
     if (hoje.getFullYear() === year && hoje.getMonth() === month) {
@@ -478,10 +488,13 @@ export function CalendarioView() {
               .sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
             return (
               <div
-                className={`cc-cell ${dow === 0 || dow === 6 ? "cc-we" : ""}`}
+                className={`cc-cell ${dow === 0 || dow === 6 ? "cc-we" : ""}${dragOverKey === key ? " cc-drop" : ""}`}
                 data-newpost={`${year}-${month}-${d}`}
                 key={d}
                 onClick={() => set({ postModal: { mode: "new", y: year, m: month, d } })}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dragOverKey !== key) setDragOverKey(key); }}
+                onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
+                onDrop={(e) => { e.preventDefault(); setDragOverKey(null); const id = e.dataTransfer.getData("text/plain"); if (id) updatePost(id, { y: year, m: month, d }); }}
               >
                 <div className="cc-top">
                   <span className="cc-dn">{d}</span>
@@ -630,7 +643,7 @@ export function CalendarioView() {
       {/* Modo apresentação — cronograma de produção por período */}
       {apOpen &&
         (() => {
-          const wins = apWindows(apPeriodo, year, month);
+          const wins = apWins();
           const off = Math.min(apOff, wins.length - 1);
           const win = wins[off] || [1, daysInMonth(year, month)];
           const canaisVisiveis = (nome: string) => !apHidden.has(nome);
@@ -703,7 +716,7 @@ export function CalendarioView() {
 
                 <div className="ap-controls">
                   <div className="ap-seg">
-                    {([["mes", "Mês"], ["quinzena", "Quinzena"], ["semana", "Semana"]] as [ApPeriodo, string][]).map(
+                    {([["mes", "Mês"], ["quinzena", "Quinzena"], ["semana", "Semana"], ["custom", "Período"]] as [ApPeriodo, string][]).map(
                       ([v, l]) => (
                         <button
                           key={v}
@@ -718,6 +731,18 @@ export function CalendarioView() {
                       )
                     )}
                   </div>
+                  {apPeriodo === "custom" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--label-2)" }}>
+                      <span>de</span>
+                      <select className="field-edit" style={{ width: 64, padding: "5px 8px" }} value={apCustom[0]} onChange={(e) => { setApCustom(([, b]) => [Number(e.target.value), b]); setApOff(0); }}>
+                        {Array.from({ length: daysInMonth(year, month) }).map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+                      </select>
+                      <span>até</span>
+                      <select className="field-edit" style={{ width: 64, padding: "5px 8px" }} value={apCustom[1]} onChange={(e) => { setApCustom(([a]) => [a, Number(e.target.value)]); setApOff(0); }}>
+                        {Array.from({ length: daysInMonth(year, month) }).map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div className="ap-seg">
                     {([["lista", "Lista"], ["grade", "Semana"], ["dia", "Dia a dia"]] as ["lista" | "grade" | "dia", string][]).map(([v, l]) => (
                       <button key={v} className={apModo === v ? "on" : ""} onClick={() => { setApModo(v); if (v === "dia") setApDia(0); }}>

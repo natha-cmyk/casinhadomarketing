@@ -9,8 +9,8 @@ export function FeedGridPreview({ newMedia, recent, loading, cor }: {
   newMedia?: PostMedia; recent: RecentLite[]; loading: boolean; cor: string;
 }) {
   const antigos = recent.filter((r) => r.thumbnail || r.url).slice(0, 11);
-  const novoUrl = newMedia?.url || null;
-  const novoVideo = newMedia?.type === "video";
+  const novoVideo = newMedia?.type === "video" && !newMedia?.thumbnail;
+  const novoUrl = (newMedia?.type === "video" && newMedia?.thumbnail) ? newMedia.thumbnail : (newMedia?.url || null);
 
   return (
     <div>
