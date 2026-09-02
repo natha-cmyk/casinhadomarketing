@@ -20,6 +20,8 @@ import {
 } from "@/lib/zernio";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 
 const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const interactions = (a: PostAnalyticsItem["analytics"]) => n(a?.likes) + n(a?.comments) + n(a?.shares) + n(a?.saves);
