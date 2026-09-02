@@ -215,17 +215,26 @@ const SI_CARD_LABELS: Record<string, string> = {
   perfil_preview: "Prévia do perfil",
 };
 
-// Stories do Instagram — a API não expõe a contagem; entra como indicador MANUAL (editável, persistido).
-// Vínculo do canal social → canal do CRM (pra atribuir os leads certos). Some se não há CRM.
+// Vínculo do canal social → canal do CRM. Combobox: escolhe da lista OU digita o nome (ex.: "Redes
+// sociais"). Funciona mesmo se a lista ainda não carregou — o vínculo fica salvo e passa a somar os
+// leads daquele canal assim que o CRM sincroniza. Persistido em manualStats[rede].crmCanal.
 function VincularCrm({ rede, opcoes, atual }: { rede: string; opcoes: { canal?: string }[]; atual?: string }) {
   const setStat = useStore((s) => s.setManualStat);
   const nomes = Array.from(new Set(opcoes.map((o) => String(o.canal || "").trim()).filter(Boolean)));
-  if (!nomes.length) return null;
+  const listId = `crm-canais-${rede}`;
   return (
-    <select className="field-edit" style={{ fontSize: 12.5, maxWidth: 260 }} value={atual ?? ""} onChange={(e) => setStat(rede, { crmCanal: e.target.value || undefined })}>
-      <option value="">— automático (por nome) —</option>
-      {nomes.map((n) => <option key={n} value={n}>{n}</option>)}
-    </select>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <input
+        className="field-edit"
+        style={{ fontSize: 12.5, maxWidth: 240 }}
+        list={listId}
+        value={atual ?? ""}
+        placeholder="Ex.: Redes sociais"
+        onChange={(e) => setStat(rede, { crmCanal: e.target.value || undefined })}
+      />
+      <datalist id={listId}>{nomes.map((n) => <option key={n} value={n} />)}</datalist>
+      {atual && <button type="button" className="btn-link" style={{ fontSize: 11.5 }} onClick={() => setStat(rede, { crmCanal: undefined })}>desvincular</button>}
+    </div>
   );
 }
 
@@ -919,8 +928,9 @@ export function SocialInsights({ rede }: { rede: string }) {
     const siteVisits = linkTaps && Object.keys(linkTaps).length ? Object.values(linkTaps).reduce((a, b) => a + b, 0) : null;
     // CRM: vínculo manual (manualStats[rede].crmCanal) > heurística por nome
     const vinc = s.manualStats[rede]?.crmCanal;
+    const vincNorm = (vinc || "").trim().toLowerCase();
     const crmRow = vinc
-      ? crmHealth.find((c) => String(c.canal || "") === vinc)
+      ? crmHealth.find((c) => String(c.canal || "").trim().toLowerCase() === vincNorm)
       : crmHealth.find((c) => { const cn = String(c.canal || "").toLowerCase(); return cn && (cn.includes(ll) || ll.includes(cn)); });
     const crmLeads = crmRow?.total ?? null;
     const crmGanho = crmRow?.ganho ?? null;
@@ -967,23 +977,15 @@ export function SocialInsights({ rede }: { rede: string }) {
             )}
             {/* vínculo do canal ao CRM — SEMPRE visível (flex:1 preenche o resto da coluna) */}
             <div className="card pad-lg" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              {crmHealth.some((c) => c.canal) ? (
-                <>
-                  <div style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label-1)", marginBottom: 6 }}>Qual canal do CRM é o {label}?</div>
-                  <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
-                  <div style={{ fontSize: 10.5, color: "var(--label-3)", marginTop: 6 }}>Escolha e pronto — os leads desse canal somam aqui.</div>
-                </>
-              ) : crmConnected ? (
-                <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.5 }}>
-                  Seu CRM está conectado, mas ainda não veio nenhum <b>canal/origem</b> nos leads. Mapeie o campo de <b>canal</b> (ex.: &quot;Redes sociais&quot;) em <Link href="/geracao?crm=1" style={{ color: "var(--cyan)", fontWeight: 700 }}>Geração → Reconfigurar</Link> e sincronize — os canais aparecem aqui pra vincular.
-                </div>
-              ) : crmConnected === false ? (
-                <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.5 }}>
-                  CRM ainda não conectado. <Link href="/geracao?crm=1" style={{ color: "var(--cyan)", fontWeight: 700 }}>Conectar CRM →</Link>
-                </div>
-              ) : (
-                <div style={{ fontSize: 11.5, color: "var(--label-3)" }}>Checando o CRM…</div>
-              )}
+              <div style={{ fontSize: 12.5, fontWeight: 650, color: "var(--label-1)", marginBottom: 6 }}>Qual canal do CRM é o {label}?</div>
+              <VincularCrm rede={rede} opcoes={crmHealth} atual={vinc} />
+              <div style={{ fontSize: 10.5, color: "var(--label-3)", marginTop: 6, lineHeight: 1.45 }}>
+                {crmHealth.some((c) => c.canal)
+                  ? "Escolha da lista (canais do seu CRM) — os leads desse canal passam a somar aqui, sincronizando com o CRM."
+                  : crmConnected === false
+                    ? <>Você ainda pode deixar o vínculo pronto digitando o nome. <Link href="/geracao?crm=1" style={{ color: "var(--cyan)", fontWeight: 650 }}>Conectar CRM</Link> pra puxar os leads.</>
+                    : "Digite o nome do canal do seu CRM (ex.: Redes sociais). Fica vinculado e passa a somar assim que o CRM sincronizar."}
+              </div>
             </div>
           </div>
         </div>
