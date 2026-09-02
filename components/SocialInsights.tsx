@@ -1296,6 +1296,16 @@ export function SocialInsights({ rede }: { rede: string }) {
           </div>
         }
       />
+      {/* Guia contextual — como ler/usar este painel (recolhível) */}
+      <details className="panel-help">
+        <summary>Como ler este painel</summary>
+        <ul>
+          <li><b>Período & comparação:</b> escolha o período na barra do topo. Ligue <b>Comparar</b> e defina o <b>período B livre</b> (semana/mês/ano — ex.: W1 ago vs W1 jul, ou ago/26 vs ago/25). O delta aparece em cada card.</li>
+          <li><b>Indicadores manuais (✎):</b> Stories, Visitas ao site/link e Novos/Deixaram de seguir podem ser preenchidos à mão por semana quando a API da conta ainda não entrega — sempre marcados como manual.</li>
+          <li><b>Leads (CRM):</b> no bloco <b>Produção de conteúdo</b>, vincule este canal ao canal do seu CRM. Sem CRM conectado, o botão <b>Conectar CRM →</b> leva direto à configuração.</li>
+          <li><b>Organizar:</b> use <b>Organizar</b> (no topo) pra arrastar, redimensionar ou ocultar cards.</li>
+        </ul>
+      </details>
       {/* Seletor de conta: SÓ aparece em multi-conta (2+ contas da mesma rede). Com 1 conta,
           fica oculto — o título do painel já identifica a conta (menos ruído visual). */}
       {accts.length >= 2 && (
