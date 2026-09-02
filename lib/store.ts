@@ -128,7 +128,7 @@ export interface UIState {
   // opções CUSTOM do calendário criadas na hora (pilar/formato). Persistido no config.
   calOpcoes: { pilares: string[]; formatos: string[] };
   // indicadores MANUAIS por canal (ex.: Stories IG que a API não expõe). Persistido no config.
-  manualStats: Record<string, { stories?: number; crmCanal?: string; defaultAccount?: string; storiesByPeriod?: Record<string, number>; visitsByPeriod?: Record<string, number>; storiesUpdatedAt?: string; visitsUpdatedAt?: string }>;
+  manualStats: Record<string, { stories?: number; crmCanal?: string; defaultAccount?: string; storiesByPeriod?: Record<string, number>; visitsByPeriod?: Record<string, number>; folGainByPeriod?: Record<string, number>; folLostByPeriod?: Record<string, number>; storiesUpdatedAt?: string; visitsUpdatedAt?: string }>;
   // personalização dos agentes por workspace: { agentKey: {enabled, panels, promptExtra} }. Persistido no config.
   agentsConfig: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>;
   // layout dos widgets por painel. grid = coordenadas livres {x,y,w,h} por widget (tipo ClickUp);
@@ -151,6 +151,7 @@ export interface UIState {
   setPeriod: (p: Period) => void; setYear: (y: number) => void; setMonth: (m: number) => void;
   setWeek: (w: number) => void; setQuarter: (q: number) => void;
   toggleScenario: () => void; toggleAgent: () => void;
+  setCmp: (patch: Partial<Cmp>) => void;
   // zernio: seta contas conectadas e ATIVA o painel da rede automaticamente
   setZernioAccounts: (accounts: UIState["zernioAccounts"]) => void;
   // multi-conta: escolhe qual conta daquela rede o painel exibe
@@ -172,6 +173,7 @@ export interface UIState {
   setManualStat: (rede: string, patch: { stories?: number; crmCanal?: string; defaultAccount?: string }) => void;
   setStoriesForPeriod: (rede: string, periodKey: string, n: number | undefined) => void;
   setVisitsForPeriod: (rede: string, periodKey: string, n: number | undefined) => void;
+  setFollowerManual: (rede: string, metric: "gain" | "lost", periodKey: string, n: number | undefined) => void;
   setAgentConfig: (key: string, patch: Partial<{ enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>) => void;
   setWidgetLayout: (panel: string, layout: UIState["widgetLayout"][string]) => void;
   toggleWidgetEdit: (panel: string) => void;
@@ -298,6 +300,14 @@ export const useStore = create<UIState>((set) => ({
       if (n == null) delete byP[periodKey]; else byP[periodKey] = n;
       return { manualStats: { ...s.manualStats, [rede]: { ...cur, visitsByPeriod: byP, visitsUpdatedAt: new Date().toISOString() } } };
     }),
+  setFollowerManual: (rede, metric, periodKey, n) =>
+    set((s) => {
+      const cur = s.manualStats[rede] || {};
+      const field = metric === "gain" ? "folGainByPeriod" : "folLostByPeriod";
+      const byP = { ...((cur as Record<string, Record<string, number> | undefined>)[field] || {}) };
+      if (n == null) delete byP[periodKey]; else byP[periodKey] = n;
+      return { manualStats: { ...s.manualStats, [rede]: { ...cur, [field]: byP } } };
+    }),
   setAgentConfig: (key, patch) =>
     set((s) => {
       const cur = s.agentsConfig[key] ?? { enabled: true, panels: null, promptExtra: "" };
@@ -374,6 +384,11 @@ export const useStore = create<UIState>((set) => ({
   setWeek: (w) => set({ week: w }),
   setQuarter: (q) => set({ quarter: q }),
   toggleScenario: () => set((s) => ({ scenario: !s.scenario })),
+  setCmp: (patch) => set((s) => {
+    const cmp = { ...s.cmp, ...patch };
+    if (patch.month != null) cmp.quarter = quarterOf(patch.month);
+    return { cmp };
+  }),
   toggleAgent: () => set((s) => ({ agentOpen: !s.agentOpen })),
 
   toggleRede: (id) => set((s) => ({ redes: { ...s.redes, [id]: !s.redes[id] } })),

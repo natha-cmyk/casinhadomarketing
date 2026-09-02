@@ -150,6 +150,11 @@ export function GeracaoView() {
     };
   }, []);
 
+  // atalho vindo de outro painel (ex.: "Conectar CRM →" do Instagram) abre a config direto
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("crm") === "1") setEditing(true);
+  }, []);
+
   const connected = !!config && !editing;
 
   // carrega leads (quando conectado + no período)
@@ -446,9 +451,15 @@ function ConnectCard({
 
       {mode === "clickup" && (
         <div>
+          {/* Guia passo-a-passo — onde achar cada coisa no ClickUp */}
+          <ol style={{ margin: "0 0 14px", paddingLeft: 18, fontSize: 12.5, color: "var(--label-2)", lineHeight: 1.7 }}>
+            <li>No ClickUp: sua <b>foto</b> (canto inferior esquerdo) → <b>Settings</b> → <b>Apps</b> → <b>Generate</b> um <b>API Token</b> (começa com <code>pk_</code>). Cole no campo <b>Token</b> abaixo.</li>
+            <li>Abra a <b>Lista</b> do seu funil de vendas → botão <b>•••</b> ao lado do nome → <b>Copy link</b>. O <b>número</b> no fim do link é o <b>List ID</b>. Cole abaixo.</li>
+            <li>Clique <b>Detectar campos</b> e confira o mapeamento (canal, campanha, valor, status…). Ajuste se algum campo estiver no lugar errado.</li>
+            <li><b>Salvar</b>. Os leads aparecem aqui — e no painel de cada rede você vincula qual canal do CRM representa aquela rede.</li>
+          </ol>
           <div className="pm-hint" style={{ marginBottom: 12 }}>
-            Cole o <b>token pessoal</b> do ClickUp e o <b>List ID</b> da lista do funil. Depois clique em{" "}
-            <b>Detectar campos</b> pra mapear cada dimensão ao campo personalizado certo.
+            Sem ClickUp? Use o modo <b>Webhook</b> acima — a gente te dá uma URL pro seu sistema mandar os leads.
           </div>
           <div style={{ marginBottom: 10 }}>
             <label className="field-lbl">Token do ClickUp</label>

@@ -365,6 +365,25 @@ function VisitsStat({ rede, scope, apiValue }: { rede: string; scope: Scope; api
   );
 }
 
+// registro manual de novos/deixaram de seguir por período (quando a API não separa ganhos/perdas)
+function FollowerManualEditor({ rede, scope }: { rede: string; scope: Scope }) {
+  const setFM = useStore((s) => s.setFollowerManual);
+  const gainBy = useStore((s) => s.manualStats[rede]?.folGainByPeriod) || {};
+  const lostBy = useStore((s) => s.manualStats[rede]?.folLostByPeriod) || {};
+  const [open, setOpen] = useState<"" | "gain" | "lost">("");
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--hairline)" }}>
+      <div style={{ fontSize: 10.5, color: "var(--label-3)", marginBottom: 6 }}>A API desta conta ainda não separa ganhos/perdas de seguidores. Registre por semana:</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button className="btn-link ig" type="button" style={{ fontSize: 12 }} onClick={() => setOpen((o) => (o === "gain" ? "" : "gain"))}>✎ Novos seguidores</button>
+        <button className="btn-link" type="button" style={{ fontSize: 12 }} onClick={() => setOpen((o) => (o === "lost" ? "" : "lost"))}>✎ Deixaram de seguir</button>
+      </div>
+      {open === "gain" && <WeeklyInputs rede={rede} scope={scope} byP={gainBy} setForPeriod={(r, k, n) => setFM(r, "gain", k, n)} onDone={() => setOpen("")} />}
+      {open === "lost" && <WeeklyInputs rede={rede} scope={scope} byP={lostBy} setForPeriod={(r, k, n) => setFM(r, "lost", k, n)} onDone={() => setOpen("")} />}
+    </div>
+  );
+}
+
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -622,13 +641,23 @@ export function SocialInsights({ rede }: { rede: string }) {
   // fiel. Só cai nos metrics gained/lost quando não há série. NÃO usa mais follows_and_unfollows: aquela
   // métrica vinha inflada (não é ganho/perda líquido) e distorcia "novos/deixaram/crescimento".
   const netFromSeries = follVals.length >= 2 ? (follVals[follVals.length - 1].value - follVals[0].value) : null;
-  const net = netFromSeries ?? (fGained != null && fLost != null ? fGained - fLost : null);
-  // novos/saída: só quando a API entrega as métricas dedicadas; senão "—" (não inventa a partir de outra).
-  const novos = fGained;
-  const saida = fLost;
+  // fallback MANUAL (a série da API zera até o snapshotter da rede acumular): novos/saída por período.
+  const scopeNow = { period: s.period, year: s.year, month: s.month, week: s.week, quarter: s.quarter };
+  const manualGain = sumByScope(s.manualStats[rede]?.folGainByPeriod || {}, scopeNow);
+  const manualLost = sumByScope(s.manualStats[rede]?.folLostByPeriod || {}, scopeNow);
+  const novos = fGained ?? (manualGain > 0 ? manualGain : null);
+  const saida = fLost ?? (manualLost > 0 ? manualLost : null);
+  const net = netFromSeries ?? ((novos != null || saida != null) ? (novos || 0) - (saida || 0) : null);
 
   const hasInbox = COM_INBOX.has(platform);
   const accountsEngaged = metrics.accounts_engaged?.total ?? null;
+
+  // ── COMPARAÇÃO por widget: chip de delta reusável (só quando comparando e há os dois valores) ──
+  const cmpChip = (cur: number | null | undefined, prev: number | null | undefined) =>
+    comparando && cur != null && prev != null ? <DeltaChip delta={computeDelta(cur, prev, true)} scn /> : null;
+  const cmpContentTotal = comparando ? (cmpData?.content?.total ?? null) : null;
+  const cmpOrganicShare = comparando ? (cmpData?.content?.organicShare ?? null) : null;
+  const cmpAccountsEngaged = comparando ? (cmpIns?.metrics?.accounts_engaged?.total ?? null) : null;
 
   // ── KPIs-herói POR PLATAFORMA (estudo por canal): cada rede mostra os indicadores reais dela ──
   const mtot = (k: string) => metrics[k]?.total ?? null;
@@ -852,7 +881,10 @@ export function SocialInsights({ rede }: { rede: string }) {
       <div style={{ marginBottom: 16 }}>
         <div className="card-head" style={{ marginBottom: 12 }}>
           <div><div className="t">Produção de conteúdo</div><div className="sub">no período · {label}</div></div>
-          <span className="badge">{totalDisplay} conteúdos</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {cmpChip(apiTotal, cmpContentTotal)}
+            <span className="badge">{totalDisplay} conteúdos</span>
+          </div>
         </div>
         {/* metade: "por tipo" · metade: indicadores em widgets separados. alignItems stretch +
             cards com height:100% pra NÃO sobrar espaço em branco entre as colunas. */}
@@ -895,7 +927,10 @@ export function SocialInsights({ rede }: { rede: string }) {
                 </>
               ) : (
                 <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.45 }}>
-                  Nenhum canal de CRM detectado ainda. Conecte e sincronize seu CRM em <b>Geração por Canais</b> — depois volte aqui pra escolher qual canal representa <b>{label}</b>.
+                  Nenhum canal de CRM conectado ainda. Conecte seu CRM (ClickUp ou webhook) pra puxar os leads e vincular a <b>{label}</b>.
+                  <div style={{ marginTop: 10 }}>
+                    <Link href="/geracao?crm=1" className="btn-link ig" style={{ fontSize: 12.5, fontWeight: 700 }}>Conectar CRM →</Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -911,7 +946,10 @@ export function SocialInsights({ rede }: { rede: string }) {
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--ink)" } as CSSProperties}>
       <div className="card-head">
         <div className="t">Mix de conteúdo</div>
-        {mixTop && <span className="badge">Vencedor: {mixTop}</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {cmpChip(content.total, cmpContentTotal)}
+          {mixTop && <span className="badge">Vencedor: {mixTop}</span>}
+        </div>
       </div>
       {mixRows.map(([t, v]) => (
         <BarRow key={t} k={TYPE_PT[t] || t} v={v} max={content.total} color={cor} formatted={fmt(v)} />
@@ -937,6 +975,7 @@ export function SocialInsights({ rede }: { rede: string }) {
         <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} />
         <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} />
       </div>
+      {fGained == null && fLost == null && <FollowerManualEditor rede={rede} scope={scopeNow} />}
       {showFollChart && (
         <div style={{ marginTop: 14 }}>
           <Chart svg={lineChart(
@@ -961,6 +1000,7 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div className="t">Engajamento por tipo</div>
           <div className="sub tnum">{fmt(engTypeSum)} interações</div>
         </div>
+        {cmpChip(engTypeSum, comparando ? sum(engTypeRows.map((r) => cmpIns?.metrics?.[r.key]?.total ?? 0)) : null)}
       </div>
       {engTypeRows.map((r) => (
         <BarRow key={r.key} k={r.k} v={metrics[r.key].total} max={engTypeMax} color="var(--cyan)" formatted={fmt(metrics[r.key].total)} />
@@ -975,6 +1015,7 @@ export function SocialInsights({ rede }: { rede: string }) {
           <div className="t">Rendimento orgânico</div>
           <div className="sub">{content.organicShare != null ? `${pctFmt(content.organicShare)} orgânico` : "sem dado no período"}</div>
         </div>
+        {cmpChip(content.organicShare != null ? content.organicShare * 100 : null, cmpOrganicShare != null ? cmpOrganicShare * 100 : null)}
       </div>
       {(() => {
         const orMax = Math.max(1, content.organic.reach, content.paid.reach);
@@ -996,7 +1037,7 @@ export function SocialInsights({ rede }: { rede: string }) {
 
   if (showActivity) cards.push({ id: "atividade", node: (
     <div className="card pad-lg tcard" style={{ "--tcard-accent": "var(--atencao)" } as CSSProperties}>
-      <div className="card-head"><div className="t">Atividade &amp; audiência</div></div>
+      <div className="card-head"><div className="t">Atividade &amp; audiência</div>{cmpChip(accountsEngaged, cmpAccountsEngaged)}</div>
       <div className="mini">
         {accountsEngaged != null && <MiniStat l="Atividades no perfil" n={fmt(accountsEngaged)} />}
         <MiniStat l="Visitas ao site" n={linkTaps?.WEBSITE != null ? fmt(linkTaps.WEBSITE) : "—"} />
@@ -1255,6 +1296,16 @@ export function SocialInsights({ rede }: { rede: string }) {
           </div>
         }
       />
+      {/* Guia contextual — como ler/usar este painel (recolhível) */}
+      <details className="panel-help">
+        <summary>Como ler este painel</summary>
+        <ul>
+          <li><b>Período & comparação:</b> escolha o período na barra do topo. Ligue <b>Comparar</b> e defina o <b>período B livre</b> (semana/mês/ano — ex.: W1 ago vs W1 jul, ou ago/26 vs ago/25). O delta aparece em cada card.</li>
+          <li><b>Indicadores manuais (✎):</b> Stories, Visitas ao site/link e Novos/Deixaram de seguir podem ser preenchidos à mão por semana quando a API da conta ainda não entrega — sempre marcados como manual.</li>
+          <li><b>Leads (CRM):</b> no bloco <b>Produção de conteúdo</b>, vincule este canal ao canal do seu CRM. Sem CRM conectado, o botão <b>Conectar CRM →</b> leva direto à configuração.</li>
+          <li><b>Organizar:</b> use <b>Organizar</b> (no topo) pra arrastar, redimensionar ou ocultar cards.</li>
+        </ul>
+      </details>
       {/* Seletor de conta: SÓ aparece em multi-conta (2+ contas da mesma rede). Com 1 conta,
           fica oculto — o título do painel já identifica a conta (menos ruído visual). */}
       {accts.length >= 2 && (
