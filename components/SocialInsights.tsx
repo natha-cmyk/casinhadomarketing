@@ -365,6 +365,25 @@ function VisitsStat({ rede, scope, apiValue }: { rede: string; scope: Scope; api
   );
 }
 
+// registro manual de novos/deixaram de seguir por período (quando a API não separa ganhos/perdas)
+function FollowerManualEditor({ rede, scope }: { rede: string; scope: Scope }) {
+  const setFM = useStore((s) => s.setFollowerManual);
+  const gainBy = useStore((s) => s.manualStats[rede]?.folGainByPeriod) || {};
+  const lostBy = useStore((s) => s.manualStats[rede]?.folLostByPeriod) || {};
+  const [open, setOpen] = useState<"" | "gain" | "lost">("");
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--hairline)" }}>
+      <div style={{ fontSize: 10.5, color: "var(--label-3)", marginBottom: 6 }}>A API desta conta ainda não separa ganhos/perdas de seguidores. Registre por semana:</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button className="btn-link ig" type="button" style={{ fontSize: 12 }} onClick={() => setOpen((o) => (o === "gain" ? "" : "gain"))}>✎ Novos seguidores</button>
+        <button className="btn-link" type="button" style={{ fontSize: 12 }} onClick={() => setOpen((o) => (o === "lost" ? "" : "lost"))}>✎ Deixaram de seguir</button>
+      </div>
+      {open === "gain" && <WeeklyInputs rede={rede} scope={scope} byP={gainBy} setForPeriod={(r, k, n) => setFM(r, "gain", k, n)} onDone={() => setOpen("")} />}
+      {open === "lost" && <WeeklyInputs rede={rede} scope={scope} byP={lostBy} setForPeriod={(r, k, n) => setFM(r, "lost", k, n)} onDone={() => setOpen("")} />}
+    </div>
+  );
+}
+
 export function SocialInsights({ rede }: { rede: string }) {
   const s = useStore();
   const platform = zplat(rede);
@@ -622,10 +641,13 @@ export function SocialInsights({ rede }: { rede: string }) {
   // fiel. Só cai nos metrics gained/lost quando não há série. NÃO usa mais follows_and_unfollows: aquela
   // métrica vinha inflada (não é ganho/perda líquido) e distorcia "novos/deixaram/crescimento".
   const netFromSeries = follVals.length >= 2 ? (follVals[follVals.length - 1].value - follVals[0].value) : null;
-  const net = netFromSeries ?? (fGained != null && fLost != null ? fGained - fLost : null);
-  // novos/saída: só quando a API entrega as métricas dedicadas; senão "—" (não inventa a partir de outra).
-  const novos = fGained;
-  const saida = fLost;
+  // fallback MANUAL (a série da API zera até o snapshotter da rede acumular): novos/saída por período.
+  const scopeNow = { period: s.period, year: s.year, month: s.month, week: s.week, quarter: s.quarter };
+  const manualGain = sumByScope(s.manualStats[rede]?.folGainByPeriod || {}, scopeNow);
+  const manualLost = sumByScope(s.manualStats[rede]?.folLostByPeriod || {}, scopeNow);
+  const novos = fGained ?? (manualGain > 0 ? manualGain : null);
+  const saida = fLost ?? (manualLost > 0 ? manualLost : null);
+  const net = netFromSeries ?? ((novos != null || saida != null) ? (novos || 0) - (saida || 0) : null);
 
   const hasInbox = COM_INBOX.has(platform);
   const accountsEngaged = metrics.accounts_engaged?.total ?? null;
@@ -940,6 +962,7 @@ export function SocialInsights({ rede }: { rede: string }) {
         <MiniStat l="Crescimento líquido" n={net != null ? `${net >= 0 ? "+" : ""}${fmt(net)}` : "—"} />
         <MiniStat l="Total atual" n={followersCount != null ? fmt(followersCount) : "—"} />
       </div>
+      {fGained == null && fLost == null && <FollowerManualEditor rede={rede} scope={scopeNow} />}
       {showFollChart && (
         <div style={{ marginTop: 14 }}>
           <Chart svg={lineChart(
