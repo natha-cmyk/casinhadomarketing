@@ -851,6 +851,9 @@ svg.chartI{cursor:crosshair}
 /* toggle "perfil padrao deste canal" — some por padrao, aparece ao focar/passar o mouse no seletor */
 .pm-perfil-wrap .pm-def-toggle{margin-top:5px;border:0;background:transparent;cursor:pointer;font-size:11.5px;font-weight:700;padding:0;opacity:0;max-height:0;overflow:hidden;transition:opacity .12s}
 .pm-perfil-wrap:hover .pm-def-toggle,.pm-perfil-wrap:focus-within .pm-def-toggle{opacity:1;max-height:24px}
+/* melhores horarios: recolhido por padrao, aparece ao focar/passar o mouse no campo Horario */
+.pm-hora-wrap .pm-hora-sug{opacity:0;max-height:0;margin-top:0!important;padding-top:0;padding-bottom:0;border-width:0;overflow:hidden;transition:opacity .12s}
+.pm-hora-wrap:hover .pm-hora-sug,.pm-hora-wrap:focus-within .pm-hora-sug{opacity:1;max-height:44px;margin-top:5px!important;padding-top:8px;padding-bottom:8px;border-width:1px}
 .conx-sq-off{border:0;background:transparent;font-size:10.5px;font-weight:600;color:var(--label-3);cursor:pointer;padding:2px 9px;border-radius:6px;transition:.12s}
 .conx-sq-off:hover{background:rgba(255,0,30,.10);color:var(--red)}
 .conx-sq-off:disabled{opacity:.5;cursor:default}
