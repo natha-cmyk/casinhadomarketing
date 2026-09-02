@@ -351,20 +351,26 @@ export async function bestTime(accountId: string, platform: string, opts?: { fro
 
 // ── Toques em links do perfil por TIPO (WEBSITE/CALL/EMAIL/TEXT/DIRECTION) — IG ──
 export async function profileLinkTaps(accountId: string, opts?: { since?: string; until?: string }): Promise<Record<string, number>> {
-  const q = new URLSearchParams({ accountId, metrics: "profile_links_taps", breakdown: "contact_button_type" });
-  if (opts?.since) q.set("since", opts.since);
-  if (opts?.until) q.set("until", opts.until);
-  const r = await zernio<AnalyticsResponse & { metrics: Record<string, { total: number; breakdowns?: { dimension: string; value: number }[] }> }>(
-    `/analytics/instagram/account-insights?${q.toString()}`
-  );
+  type LinkResp = AnalyticsResponse & { metrics: Record<string, { total: number; breakdowns?: { dimension: string; value: number }[] }> };
+  // 1) TOTAL (sem breakdown) — chamada mais confiável; é o "visitas ao site/link" que queremos.
+  const qTot = new URLSearchParams({ accountId, metrics: "profile_links_taps" });
+  if (opts?.since) qTot.set("since", opts.since);
+  if (opts?.until) qTot.set("until", opts.until);
   const out: Record<string, number> = {};
-  for (const b of r.metrics?.profile_links_taps?.breakdowns || []) out[b.dimension] = b.value;
-  // fallback: muitas contas não retornam o breakdown por tipo de botão, mas trazem o TOTAL.
-  // Sem isso, "Visitas ao site/link" ficava zerado mesmo havendo toques.
-  if (!Object.keys(out).length) {
+  try {
+    const r = await zernio<LinkResp>(`/analytics/instagram/account-insights?${qTot.toString()}`);
     const total = r.metrics?.profile_links_taps?.total;
     if (total != null && Number(total) > 0) out.TOTAL = Number(total);
-  }
+  } catch { /* segue pro breakdown */ }
+  // 2) breakdown por tipo de botão (opcional) — só substitui se vier detalhado.
+  try {
+    const qBk = new URLSearchParams({ accountId, metrics: "profile_links_taps", breakdown: "contact_button_type" });
+    if (opts?.since) qBk.set("since", opts.since);
+    if (opts?.until) qBk.set("until", opts.until);
+    const r2 = await zernio<LinkResp>(`/analytics/instagram/account-insights?${qBk.toString()}`);
+    const bks = r2.metrics?.profile_links_taps?.breakdowns || [];
+    if (bks.length) { for (const b of bks) out[b.dimension] = b.value; delete out.TOTAL; }
+  } catch { /* fica com o TOTAL */ }
   return out;
 }
 
