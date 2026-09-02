@@ -409,6 +409,32 @@ export const inboxVolume = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxVo
 export const inboxResponseTime = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxResponseTime>(`/analytics/inbox/response-time?${inboxQS(o)}`);
 export const inboxSourceBreakdown = (o?: Parameters<typeof inboxQS>[0]) => zernio<InboxSourceBreakdown>(`/analytics/inbox/source-breakdown?${inboxQS(o)}`);
 
+// ── Conversas (DMs) com CONTEÚDO — pra classificar por tipo/intenção via LLM ──
+export interface InboxConversation {
+  id?: string; _id?: string; platform?: string; accountId?: string;
+  participant?: { name?: string; username?: string } | string;
+  lastMessage?: string | { text?: string; body?: string };
+  lastMessageAt?: string; createdAt?: string; unreadCount?: number;
+  isStoryReply?: boolean; isStoryMention?: boolean;
+  messages?: { text?: string; body?: string; direction?: string }[];
+}
+// texto da última mensagem da conversa (defensivo: string ou objeto)
+export function convText(c: InboxConversation): string {
+  const lm = c.lastMessage;
+  if (typeof lm === "string") return lm;
+  if (lm && typeof lm === "object") return String(lm.text || lm.body || "");
+  const inbound = (c.messages || []).filter((m) => (m.direction || "inbound") === "inbound");
+  return String((inbound[inbound.length - 1] || c.messages?.[0])?.text || inbound[inbound.length - 1]?.body || "");
+}
+export async function listConversations(opts?: { accountId?: string; platform?: string; limit?: number }): Promise<InboxConversation[]> {
+  const q = new URLSearchParams();
+  if (opts?.accountId) q.set("accountId", opts.accountId);
+  if (opts?.platform) q.set("platform", opts.platform);
+  q.set("limit", String(opts?.limit ?? 50));
+  const r = await zernio<{ conversations?: InboxConversation[]; data?: InboxConversation[]; items?: InboxConversation[] }>(`/inbox/conversations?${q.toString()}`);
+  return r.conversations ?? r.data ?? r.items ?? [];
+}
+
 // ── Publicação / agendamento (POST /posts) ─────────────────────────────────
 // Contrato CONFIRMADO ao vivo (OpenAPI Zernio 1.0.4). Body:
 //   { title?, content?, mediaItems?,
