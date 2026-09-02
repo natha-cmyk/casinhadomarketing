@@ -507,8 +507,10 @@ export function SocialInsights({ rede }: { rede: string }) {
   useEffect(() => {
     let alive = true;
     setCrmLoading(true);
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 12_000); // não fica "carregando canais" pra sempre
     // endpoint LEVE (groupBy na coluna channel) — não reinterpreta os leads (perf: não satura o pool).
-    fetch("/api/crm/channels", { cache: "no-store" })
+    fetch("/api/crm/channels", { cache: "no-store", signal: ac.signal })
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
@@ -518,8 +520,8 @@ export function SocialInsights({ rede }: { rede: string }) {
           .filter((c: { canal: string }) => c.canal));
       })
       .catch(() => {})
-      .finally(() => { if (alive) setCrmLoading(false); });
-    return () => { alive = false; };
+      .finally(() => { clearTimeout(to); if (alive) setCrmLoading(false); });
+    return () => { alive = false; clearTimeout(to); ac.abort(); };
   }, [crmReload]);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
@@ -550,8 +552,15 @@ export function SocialInsights({ rede }: { rede: string }) {
     setCmpData(cachedCmp ?? null);
     setErr(null);
 
-    const fetchOne = (since: string, until: string): Promise<Combined & { error?: string }> =>
-      fetch(`/api/zernio/insights?platform=${platform}&accountId=${acct._id}&since=${since}&until=${until}`, { cache: "no-store" }).then((r) => r.json());
+    // timeout no cliente: nunca fica "carregando" pra sempre — aborta em 15s e mostra o que já veio.
+    const fetchOne = (since: string, until: string): Promise<Combined & { error?: string }> => {
+      const ac = new AbortController();
+      const to = setTimeout(() => ac.abort(), 15_000);
+      return fetch(`/api/zernio/insights?platform=${platform}&accountId=${acct._id}&since=${since}&until=${until}`, { cache: "no-store", signal: ac.signal })
+        .then((r) => r.json())
+        .catch(() => ({ error: "tempo esgotado ao carregar métricas" }) as Combined & { error?: string })
+        .finally(() => clearTimeout(to));
+    };
 
     Promise.all([
       fetchOne(cur.since, cur.until),
