@@ -8,6 +8,7 @@ import { MediaCropModal, type CropTarget } from "@/components/views/MediaCropMod
 import { Ic } from "@/components/Ic";
 import { ICONS } from "@/lib/nav";
 import { PostPreview } from "@/components/views/PostPreview";
+import { FeedGridPreview } from "@/components/views/FeedGridPreview";
 import {
   CANAL_POST_COLORS,
   PILARES_POST,
@@ -242,7 +243,13 @@ export function PostModal() {
   const [uploadPct, setUploadPct] = useState<number | null>(null); // % do upload atual (null = sem barra)
   const [uploadNome, setUploadNome] = useState<string>("");        // nome do arquivo em envio
   const [dragOver, setDragOver] = useState(false);                 // destaque da zona de drop
+  const [prevMode, setPrevMode] = useState<"post" | "feed">("post"); // aba do preview: publicação x grade do feed
+  const [feedRecent, setFeedRecent] = useState<{ thumbnail: string | null; url: string | null; isVideo?: boolean }[] | null>(null);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [coverBusy, setCoverBusy] = useState<"" | "up" | "frame">(""); // envio/captura da capa do vídeo
+  const [coverErr, setCoverErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const coverRef = useRef<HTMLInputElement>(null);
   // guarda o File local por url (pra recorte sem taint de CORS) + alvo do editor de recorte
   const filesByUrl = useRef<Map<string, File>>(new Map());
   const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
@@ -351,6 +358,23 @@ export function PostModal() {
     return () => { alive = false; };
   }, [f.canal, f.perfil, zernioAccounts]);
 
+  // Planejador de grade: busca o feed real do perfil (posts recentes) quando a aba "Feed" abre.
+  useEffect(() => {
+    if (prevMode !== "feed") return;
+    const acc = zernioAccounts.find((a) => a.username === f.perfil || a.displayName === f.perfil);
+    const rede = REDES.find((r) => r.label === f.canal);
+    const plat = rede ? (rede.id === "x" ? "twitter" : rede.id) : "";
+    if (!acc?._id || !plat) { setFeedRecent([]); return; }
+    let alive = true;
+    setFeedLoading(true);
+    fetch(`/api/zernio/insights?platform=${plat}&accountId=${acc._id}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (alive) setFeedRecent(Array.isArray(d?.recent) ? d.recent : []); })
+      .catch(() => { if (alive) setFeedRecent([]); })
+      .finally(() => { if (alive) setFeedLoading(false); });
+    return () => { alive = false; };
+  }, [prevMode, f.perfil, f.canal, zernioAccounts]);
+
   if (!pm) return null;
   if (pm.mode === "edit" && !existing) return null;
 
@@ -446,6 +470,41 @@ export function PostModal() {
     const put = await fetch(pj.uploadUrl, { method: "PUT", headers: { "content-type": contentType }, body: blob });
     if (!put.ok) throw new Error(`upload falhou (${put.status})`);
     return pj.publicUrl as string;
+  };
+
+  // capa (thumbnail) do vídeo: grava no media[i].thumbnail
+  const setThumb = (mUrl: string, thumb: string) =>
+    setF((prev) => ({ ...prev, media: prev.media.map((x) => (x.url === mUrl ? { ...x, thumbnail: thumb || undefined } : x)) }));
+  // enviar capa (imagem)
+  const pickCover = async (mUrl: string, file: File) => {
+    setCoverBusy("up"); setCoverErr(null);
+    try { const url = await uploadBlob(file, file.name, file.type); setThumb(mUrl, url); }
+    catch (e) { setCoverErr(String((e as Error)?.message || e).slice(0, 100)); }
+    finally { setCoverBusy(""); if (coverRef.current) coverRef.current.value = ""; }
+  };
+  // capturar um FRAME do vídeo como capa (usa o arquivo local quando há, evitando CORS)
+  const capturarFrame = async (m: PostMedia) => {
+    setCoverBusy("frame"); setCoverErr(null);
+    try {
+      const localFile = filesByUrl.current.get(m.url);
+      const src = localFile ? URL.createObjectURL(localFile) : m.url;
+      const video = document.createElement("video");
+      if (!localFile) video.crossOrigin = "anonymous";
+      video.src = src; video.muted = true; (video as HTMLVideoElement).playsInline = true;
+      await new Promise<void>((res, rej) => { video.onloadeddata = () => res(); video.onerror = () => rej(new Error("não consegui abrir o vídeo")); });
+      const t = isFinite(video.duration) && video.duration ? video.duration / 2 : 1;
+      await new Promise<void>((res) => { video.onseeked = () => res(); video.currentTime = Math.min(t, Math.max(0, (video.duration || 2) - 0.1)); });
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 720; canvas.height = video.videoHeight || 1280;
+      const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("canvas indisponível");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/jpeg", 0.9));
+      if (localFile) URL.revokeObjectURL(src);
+      if (!blob) throw new Error("não consegui capturar o frame (vídeo pode estar protegido). Reenvie o vídeo neste mesmo modal e tente de novo.");
+      const url = await uploadBlob(blob, "capa.jpg", "image/jpeg");
+      setThumb(m.url, url);
+    } catch (e) { setCoverErr(String((e as Error)?.message || e).slice(0, 130)); }
+    finally { setCoverBusy(""); }
   };
   // salva o recorte: sobe a imagem recortada e troca a mídia original por ela
   const onCropSave = async (blob: Blob) => {
@@ -578,6 +637,8 @@ export function PostModal() {
   const conn = redesConectadas(zernioAccounts);
 
   // dados pro PREVIEW (avatar do perfil escolhido + 1ª mídia). Legenda do canal atual (override > geral).
+  // canal com grade de feed (planejador só faz sentido em redes de grade)
+  const feedGridCanal = (() => { const rede = REDES.find((r) => r.label === f.canal); return !!rede && ["instagram", "tiktok", "facebook", "threads"].includes(rede.id); })();
   const prevAcct = zernioAccounts.find((a) => a.username === f.perfil || a.displayName === f.perfil);
   const ridPrev = redeIdDoCanal(f.canal);
   const prevLegenda = (ridPrev && f.overrides[ridPrev]?.caption) || f.legenda;
@@ -839,6 +900,30 @@ export function PostModal() {
               ))}
             </div>
           )}
+          {/* Capa (thumbnail) do vídeo — enviar imagem ou capturar um frame */}
+          {(() => {
+            const vid = f.media.find((m) => m.type === "video");
+            if (!vid) return null;
+            return (
+              <div className="pm-ov-card" style={{ marginTop: 8 }}>
+                <div className="pm-ov-head"><b>Capa do vídeo (thumbnail)</b></div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <span style={{ width: 54, height: 54, borderRadius: 10, overflow: "hidden", background: "#0d0d0f", display: "grid", placeItems: "center", flex: "0 0 auto" }}>
+                    {vid.thumbnail ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={vid.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : <span style={{ color: "#fff", opacity: .5, fontSize: 16 }}>▶</span>}
+                  </span>
+                  <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => { const fl = e.target.files?.[0]; if (fl) pickCover(vid.url, fl); }} />
+                  <button className="btn-link ig" type="button" disabled={coverBusy !== ""} onClick={() => coverRef.current?.click()}>{coverBusy === "up" ? "Enviando…" : "Enviar capa"}</button>
+                  <button className="btn-link" type="button" disabled={coverBusy !== ""} onClick={() => capturarFrame(vid)}>{coverBusy === "frame" ? "Capturando…" : "Capturar frame do vídeo"}</button>
+                  {vid.thumbnail && <button className="btn-link" type="button" onClick={() => setThumb(vid.url, "")}>Remover</button>}
+                </div>
+                {coverErr && <div className="pm-msg pm-msg-err" style={{ marginTop: 6 }}>{coverErr}</div>}
+                <div className="pm-hint" style={{ marginTop: 4 }}>Capa do vídeo (YouTube ≥3min, Reels, etc.). Envie uma imagem ou capture um frame do próprio vídeo.</div>
+              </div>
+            );
+          })()}
           <label className="field-lbl">Legenda</label>
           <textarea
             className="field-edit"
@@ -1002,8 +1087,15 @@ export function PostModal() {
           </div>
         </div>
         <aside className="pm-preview-col">
-          <div className="pm-preview-h">Pré-visualização</div>
-          {previewNode}
+          <div className="pm-prev-tabs">
+            <button type="button" className={prevMode === "post" ? "on" : ""} onClick={() => setPrevMode("post")}>Publicação</button>
+            {feedGridCanal && <button type="button" className={prevMode === "feed" ? "on" : ""} onClick={() => setPrevMode("feed")}>No feed</button>}
+          </div>
+          {prevMode === "feed" && feedGridCanal ? (
+            <FeedGridPreview newMedia={f.media[0]} recent={feedRecent || []} loading={feedLoading} cor={(canais.find((c) => c.nome === f.canal)?.cor) || "var(--ink)"} />
+          ) : (
+            previewNode
+          )}
         </aside>
         </div>
         <div className="pm-foot">

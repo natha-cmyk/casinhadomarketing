@@ -33,7 +33,11 @@ function aspecto(canalLabel: string, formato: string): number {
 function MediaFrame({ media, ratio, cor }: { media?: PostMedia; ratio: number; cor: string }) {
   return (
     <div style={{ position: "relative", width: "100%", aspectRatio: String(ratio), background: "#0d0d0f", overflow: "hidden", display: "grid", placeItems: "center" }}>
-      {media?.url && media.type === "video" ? (
+      {media?.type === "video" && media.thumbnail ? (
+        // capa definida → mostra a capa (como o vídeo aparece no feed)
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={media.thumbnail} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : media?.url && media.type === "video" ? (
         // eslint-disable-next-line jsx-a11y/media-has-caption
         <video src={media.url} style={{ width: "100%", height: "100%", objectFit: "cover" }} muted playsInline />
       ) : media?.url ? (
