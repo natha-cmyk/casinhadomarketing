@@ -895,7 +895,10 @@ export function SocialInsights({ rede }: { rede: string }) {
                 </>
               ) : (
                 <div style={{ fontSize: 11.5, color: "var(--label-3)", lineHeight: 1.45 }}>
-                  Nenhum canal de CRM detectado ainda. Conecte e sincronize seu CRM em <b>Geração por Canais</b> — depois volte aqui pra escolher qual canal representa <b>{label}</b>.
+                  Nenhum canal de CRM conectado ainda. Conecte seu CRM (ClickUp ou webhook) pra puxar os leads e vincular a <b>{label}</b>.
+                  <div style={{ marginTop: 10 }}>
+                    <Link href="/geracao?crm=1" className="btn-link ig" style={{ fontSize: 12.5, fontWeight: 700 }}>Conectar CRM →</Link>
+                  </div>
                 </div>
               )}
             </div>
