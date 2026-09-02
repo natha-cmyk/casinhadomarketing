@@ -274,16 +274,28 @@ export function CalendarioView() {
   // ── modo apresentação (cronograma de produção por período) ──
   const [apOpen, setApOpen] = useState(false);
   const [apPeriodo, setApPeriodo] = useState<ApPeriodo>("mes");
-  const [apCustom, setApCustom] = useState<[number, number]>([1, 15]); // range [de, até] no mês (modo custom)
+  // range custom em DATAS ISO (yyyy-mm-dd) — pode CRUZAR meses (ex.: 20/ago a 05/set)
+  const isoDia = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const [apCustom, setApCustom] = useState<[string, string]>([isoDia(year, month, 1), isoDia(year, month, Math.min(15, daysInMonth(year, month)))]);
   const [apOff, setApOff] = useState(0);
   const [apHidden, setApHidden] = useState<Set<string>>(new Set()); // canais desligados nos chips
   const [apModo, setApModo] = useState<"lista" | "grade" | "dia">("lista"); // como exibir os dias da janela
   const [apDia, setApDia] = useState(0); // índice do dia no modo "dia a dia"
 
-  // janelas da apresentação (custom = uma janela [de, até] no mês)
-  const apWins = (): [number, number][] => apPeriodo === "custom"
-    ? [[Math.min(apCustom[0], apCustom[1]), Math.max(apCustom[0], apCustom[1])]]
-    : apWindows(apPeriodo, year, month);
+  // janelas da apresentação. Custom = 1 janela única (as datas vêm de apCustom, podem cruzar meses).
+  const apWins = (): [number, number][] => apPeriodo === "custom" ? [[1, 1]] : apWindows(apPeriodo, year, month);
+  // lista de datas {y,m,d,dow} da janela atual (custom cruza meses via apCustom ISO)
+  const apDatas = (win: [number, number]): { y: number; m: number; d: number; dow: number }[] => {
+    const out: { y: number; m: number; d: number; dow: number }[] = [];
+    if (apPeriodo === "custom") {
+      const a = new Date(apCustom[0] + "T00:00:00"), b = new Date(apCustom[1] + "T00:00:00");
+      const start = a <= b ? a : b, end = a <= b ? b : a;
+      for (const dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) out.push({ y: dt.getFullYear(), m: dt.getMonth(), d: dt.getDate(), dow: dt.getDay() });
+    } else {
+      for (let d = win[0]; d <= win[1]; d++) out.push({ y: year, m: month, d, dow: new Date(year, month, d).getDay() });
+    }
+    return out;
+  };
 
   const abrirApresentacao = () => {
     // abre na janela que contém "hoje" (se o mês exibido for o atual)
@@ -647,27 +659,19 @@ export function CalendarioView() {
           const off = Math.min(apOff, wins.length - 1);
           const win = wins[off] || [1, daysInMonth(year, month)];
           const canaisVisiveis = (nome: string) => !apHidden.has(nome);
-          // dias da janela com posts visíveis (só canais ligados)
-          const dias: { d: number; dow: number; posts: PostItem[] }[] = [];
-          for (let d = win[0]; d <= win[1]; d++) {
-            const dp = posts
-              .filter((p) => p.y === year && p.m === month && p.d === d && canaisVisiveis(p.canal))
-              .sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
-            if (dp.length) dias.push({ d, dow: new Date(year, month, d).getDay(), posts: dp });
-          }
+          const datasJanela = apDatas(win);
+          const postsDoDia = (x: { y: number; m: number; d: number }) => posts
+            .filter((p) => p.y === x.y && p.m === x.m && p.d === x.d && canaisVisiveis(p.canal))
+            .sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+          // TODOS os dias da janela (inclusive vazios) — pra semana lado a lado e dia a dia
+          const diasGrade = datasJanela.map((x) => ({ ...x, posts: postsDoDia(x) }));
+          // dias COM posts (visão lista)
+          const dias = diasGrade.filter((x) => x.posts.length);
           const totalPosts = dias.reduce((n, x) => n + x.posts.length, 0);
-          // canais COM ativação nesta janela (independe do que está oculto) → topo preenchido; resto cinza
+          // canais COM ativação nesta janela (independe do oculto) → topo preenchido; resto cinza
           const canaisAtivos = new Set<string>();
-          for (let d = win[0]; d <= win[1]; d++)
-            for (const p of posts) if (p.y === year && p.m === month && p.d === d) canaisAtivos.add(p.canal);
-          // TODOS os dias da janela (inclusive vazios) — pra visão semana lado a lado e dia a dia
-          const diasGrade: { d: number; dow: number; posts: PostItem[] }[] = [];
-          for (let d = win[0]; d <= win[1]; d++) {
-            const dp = posts
-              .filter((p) => p.y === year && p.m === month && p.d === d && canaisVisiveis(p.canal))
-              .sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
-            diasGrade.push({ d, dow: new Date(year, month, d).getDay(), posts: dp });
-          }
+          for (const x of datasJanela)
+            for (const p of posts) if (p.y === x.y && p.m === x.m && p.d === x.d) canaisAtivos.add(p.canal);
           const diaIdx = Math.min(apDia, Math.max(0, diasGrade.length - 1));
           const diaCur = diasGrade[diaIdx];
           const renderCard = (p: PostItem) => {
@@ -704,7 +708,9 @@ export function CalendarioView() {
                 <header className="ap-head">
                   <div className="ap-head-l">
                     <div className="ap-eyebrow">Cronograma de produção · {MONTHS_FULL[month]} {year}</div>
-                    <h2 className="ap-title">{apWindowLabel(apPeriodo, win, month)}</h2>
+                    <h2 className="ap-title">{apPeriodo === "custom"
+                      ? `${apCustom[0].slice(8, 10)}/${apCustom[0].slice(5, 7)} a ${apCustom[1].slice(8, 10)}/${apCustom[1].slice(5, 7)}`
+                      : apWindowLabel(apPeriodo, win, month)}</h2>
                     <div className="ap-sub">
                       {totalPosts} {totalPosts === 1 ? "publicação planejada" : "publicações planejadas"}
                     </div>
@@ -732,15 +738,11 @@ export function CalendarioView() {
                     )}
                   </div>
                   {apPeriodo === "custom" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--label-2)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--label-2)", flexWrap: "wrap" }}>
                       <span>de</span>
-                      <select className="field-edit" style={{ width: 64, padding: "5px 8px" }} value={apCustom[0]} onChange={(e) => { setApCustom(([, b]) => [Number(e.target.value), b]); setApOff(0); }}>
-                        {Array.from({ length: daysInMonth(year, month) }).map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
-                      </select>
+                      <input type="date" className="field-edit" style={{ width: 150, padding: "5px 8px" }} value={apCustom[0]} onChange={(e) => { setApCustom(([, b]) => [e.target.value, b]); setApOff(0); }} />
                       <span>até</span>
-                      <select className="field-edit" style={{ width: 64, padding: "5px 8px" }} value={apCustom[1]} onChange={(e) => { setApCustom(([a]) => [a, Number(e.target.value)]); setApOff(0); }}>
-                        {Array.from({ length: daysInMonth(year, month) }).map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
-                      </select>
+                      <input type="date" className="field-edit" style={{ width: 150, padding: "5px 8px" }} value={apCustom[1]} onChange={(e) => { setApCustom(([a]) => [a, e.target.value]); setApOff(0); }} />
                     </div>
                   )}
                   <div className="ap-seg">
@@ -801,10 +803,10 @@ export function CalendarioView() {
                 <div className={`ap-body${apModo === "grade" ? " ap-body-grade" : ""}`}>
                   {apModo === "grade" ? (
                     <div className="ap-grade">
-                      {diasGrade.map(({ d, dow, posts: dp }) => (
-                        <div className="ap-col" key={d}>
+                      {diasGrade.map(({ y, m, d, dow, posts: dp }) => (
+                        <div className="ap-col" key={`${y}-${m}-${d}`}>
                           <div className="ap-col-h">
-                            <b>{String(d).padStart(2, "0")}</b>
+                            <b>{String(d).padStart(2, "0")}{apPeriodo === "custom" ? "/" + String(m + 1).padStart(2, "0") : ""}</b>
                             <span>{H[dow]}</span>
                             <em>{dp.length}</em>
                           </div>
@@ -821,8 +823,8 @@ export function CalendarioView() {
                           <button aria-label="Dia anterior" disabled={diaIdx <= 0} onClick={() => setApDia((i) => Math.max(0, i - 1))}>‹</button>
                           <select className="ap-dia-sel" value={diaIdx} onChange={(e) => setApDia(Number(e.target.value))} aria-label="Escolher dia">
                             {diasGrade.map((x, i) => (
-                              <option key={x.d} value={i}>
-                                {String(x.d).padStart(2, "0")} · {WD_FULL[x.dow]} · {x.posts.length} {x.posts.length === 1 ? "post" : "posts"}
+                              <option key={`${x.y}-${x.m}-${x.d}`} value={i}>
+                                {String(x.d).padStart(2, "0")}{apPeriodo === "custom" ? "/" + String(x.m + 1).padStart(2, "0") : ""} · {WD_FULL[x.dow]} · {x.posts.length} {x.posts.length === 1 ? "post" : "posts"}
                               </option>
                             ))}
                           </select>
@@ -836,13 +838,13 @@ export function CalendarioView() {
                       <div className="ap-empty">Sem dias nesta janela.</div>
                     )
                   ) : dias.length ? (
-                    dias.map(({ d, dow, posts: dp }) => (
-                      <section className="ap-day" key={d}>
+                    dias.map(({ y, m, d, dow, posts: dp }) => (
+                      <section className="ap-day" key={`${y}-${m}-${d}`}>
                         <div className="ap-day-h">
                           <span className="ap-day-num">{String(d).padStart(2, "0")}</span>
                           <div>
                             <div className="ap-day-wd">{WD_FULL[dow]}</div>
-                            <div className="ap-day-meta">{d} de {MONTHS_FULL[month]}</div>
+                            <div className="ap-day-meta">{d} de {MONTHS_FULL[m]}</div>
                           </div>
                           <span className="ap-day-count">{dp.length}</span>
                         </div>
