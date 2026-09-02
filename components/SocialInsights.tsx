@@ -221,7 +221,8 @@ const SI_CARD_LABELS: Record<string, string> = {
 // desvincular. Persistido em manualStats[rede].crmCanal.
 function VincularCrm({ rede, atual, opcoes, loading, onReload }: { rede: string; atual?: string; opcoes: { canal?: string }[]; loading: boolean; onReload: () => void }) {
   const setStat = useStore((s) => s.setManualStat);
-  const canais = Array.from(new Set(opcoes.map((o) => String(o.canal || "").trim()).filter(Boolean)));
+  // canais do período + o vínculo atual (pra não sumir num mês sem leads daquele canal)
+  const canais = Array.from(new Set([...(atual ? [atual.trim()] : []), ...opcoes.map((o) => String(o.canal || "").trim())].filter(Boolean)));
 
   if (loading && !canais.length) return <div style={{ fontSize: 12, color: "var(--label-3)" }}>Carregando canais do CRM…</div>;
   if (!canais.length) return (
@@ -510,20 +511,25 @@ export function SocialInsights({ rede }: { rede: string }) {
     setCrmLoading(true);
     const ac = new AbortController();
     const to = setTimeout(() => ac.abort(), 12_000); // não fica "carregando canais" pra sempre
-    // endpoint LEVE (groupBy na coluna channel) — não reinterpreta os leads (perf: não satura o pool).
-    fetch("/api/crm/channels", { cache: "no-store", signal: ac.signal })
+    // Mesma FONTE da Geração (channelHealth, interpretado ao vivo) + escopo do PERÍODO do painel:
+    // agosto → leads de agosto por canal; julho → julho; etc. Rota cacheada 45s.
+    const cur = dateRange(s);
+    fetch(`/api/crm/leads?since=${cur.since}&until=${cur.until}`, { cache: "no-store", signal: ac.signal })
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
-        const rows = Array.isArray(d?.channels) ? d.channels : [];
+        const rows = Array.isArray(d?.channelHealth) ? d.channelHealth : [];
         setCrmHealth(rows
-          .map((c: { canal?: string; total?: number }) => ({ canal: (c.canal ?? "").trim(), total: c.total ?? 0, ganho: 0 }))
+          .map((c: { key?: string; canal?: string; total?: number; won?: number; ganho?: number }) => ({
+            canal: (c.canal ?? c.key ?? "").trim(), total: c.total ?? 0, ganho: c.ganho ?? c.won ?? 0,
+          }))
           .filter((c: { canal: string }) => c.canal));
       })
       .catch(() => {})
       .finally(() => { clearTimeout(to); if (alive) setCrmLoading(false); });
     return () => { alive = false; clearTimeout(to); ac.abort(); };
-  }, [crmReload]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crmReload, s.period, s.year, s.month, s.quarter, s.week]);
   // ASSINATURA: métricas selecionadas do card "Desempenho no tempo" (multi-seleção, cruza indicadores)
   const [perfMetrics, setPerfMetrics] = useState<string[]>(["reach"]);
   // ENTREGA 2: tipo de visualização do card "Desempenho no tempo" (linha / barras)
