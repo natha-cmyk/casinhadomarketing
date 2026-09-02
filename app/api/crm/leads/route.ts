@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { interpretTask, type ClickUpTask, type Interpreted } from "@/lib/crm-sync";
+import { cached } from "@/lib/ttl-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,7 @@ export async function GET(req: Request) {
     if (since) createdAt.gte = new Date(since + "T00:00:00");
     if (until) createdAt.lte = new Date(until + "T23:59:59.999");
 
+    const payload = await cached(`crmleads:${ws}:${since}:${until}`, 45_000, async () => {
     const [cfg, leadsAll] = await Promise.all([
       prisma.crmConfig.findUnique({ where: { workspaceId: ws } }),
       prisma.lead.findMany({
@@ -187,7 +189,7 @@ export async function GET(req: Request) {
       .map(([name, v]) => ({ name, type: v.type, filled: v.filled, sample: v.sample }))
       .sort((a, b) => b.filled - a.filled);
 
-    return NextResponse.json({
+    return {
       ok: true,
       total: leads.length,
       totalValue, pipelineValue, wonValue, won, lost, open,
@@ -214,7 +216,9 @@ export async function GET(req: Request) {
       mapping, // { dimensão: nome do campo ClickUp que alimentou }
       availableFields, // todos os campos personalizados vistos (p/ diagnóstico)
       leads: rows.slice(0, 500),
+    };
     });
+    return NextResponse.json(payload);
   } catch (e) {
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
   }
