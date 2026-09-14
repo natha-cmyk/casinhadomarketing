@@ -13,9 +13,12 @@ function apiKey(): string {
 // até a Vercel derrubar (o que zerava TODAS as métricas do painel de uma vez).
 const ZERNIO_TIMEOUT_MS = 8_000;
 
-async function zernio<T>(path: string, init?: RequestInit): Promise<T> {
+// timeoutMs opcional: leituras de dashboard usam o default curto (falha rápido); ações pesadas
+// (publicar/upload) passam um timeout maior. Mensagens de erro são NEUTRAS de propósito — nunca
+// citam o provedor de integração (regra de marca: a plataforma nunca menciona o nome do provedor).
+async function zernio<T>(path: string, init?: RequestInit, timeoutMs = ZERNIO_TIMEOUT_MS): Promise<T> {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), ZERNIO_TIMEOUT_MS);
+  const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
     const res = await fetch(BASE + path, {
       ...init,
@@ -29,11 +32,11 @@ async function zernio<T>(path: string, init?: RequestInit): Promise<T> {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      throw new Error(`Zernio ${res.status}: ${body.slice(0, 300)}`);
+      throw new Error(`upstream ${res.status}: ${body.slice(0, 300)}`);
     }
     return res.json() as Promise<T>;
   } catch (e) {
-    if (e instanceof Error && e.name === "AbortError") throw new Error(`Zernio timeout apos ${ZERNIO_TIMEOUT_MS}ms: ${path}`);
+    if (e instanceof Error && e.name === "AbortError") throw new Error(`ETIMEDOUT ${timeoutMs}ms ${path}`);
     throw e;
   } finally {
     clearTimeout(t);
@@ -473,11 +476,14 @@ export interface ZernioPost {
   [k: string]: unknown;
 }
 // Cria/agenda/publica um post. Uma chamada cobre N plataformas.
+// Timeout GENEROSO (45s): publicar com mídia é pesado e o provedor processa de forma assíncrona —
+// o default curto de dashboard dava "timeout" mesmo com a publicação indo adiante. A rota trata
+// o timeout como ENFILEIRADO (aceito), não como falha.
 export function publishPost(input: ZernioPublishInput) {
   return zernio<{ post: ZernioPost; message?: string; existingPost?: ZernioPost }>("/posts", {
     method: "POST",
     body: JSON.stringify(input),
-  });
+  }, 45_000);
 }
 
 // ── Mídia (presign) ────────────────────────────────────────────────────────
