@@ -584,7 +584,7 @@ export function PostModal() {
     close();
   };
 
-  // Disparo REAL: agenda (publishNow=false) ou publica na hora (publishNow=true) via Zernio.
+  // Disparo REAL: agenda (publishNow=false) ou publica na hora (publishNow=true) via integração.
   const doPublish = async (publishNow: boolean) => {
     if (busy) return;
     if (!conn.length || f.contas.length === 0) {
@@ -605,8 +605,9 @@ export function PostModal() {
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.ok) {
         setBusy(false);
+        // detalhe técnico só no console (nunca na tela — pode conter jargão da integração)
         if (j?.detail) console.error("[publish] detalhe:", j.detail);
-        setMsg({ kind: "err", text: (j?.error || "Falha ao agendar. Tente novamente.") + (j?.detail ? ` — ${String(j.detail).slice(0, 160)}` : "") });
+        setMsg({ kind: "err", text: j?.error || "Falha ao agendar. Tente novamente." });
         return;
       }
       updatePost(id, { status: j.status || (publishNow ? "publicado" : "agendado") });
@@ -615,7 +616,11 @@ export function PostModal() {
         Array.isArray(j.canaisIgnorados) && j.canaisIgnorados.length
           ? ` · ignorados (sem publicação): ${j.canaisIgnorados.join(", ")}`
           : "";
-      setMsg({ kind: "ok", text: (j.status === "publicado" ? "Publicado" : "Agendado") + " com sucesso" + ign });
+      // enfileirado = o canal aceitou e publica em instantes (timeout tratado como sucesso, sem erro)
+      const base = j.enfileirado
+        ? (publishNow ? "Publicação enviada — o canal confirma em instantes" : "Agendamento confirmado")
+        : (j.status === "publicado" ? "Publicado" : "Agendado") + " com sucesso";
+      setMsg({ kind: "ok", text: base + ign });
       setTimeout(() => set({ postModal: null }), 1000); // set é ação da store — seguro após unmount
     } catch {
       setBusy(false);

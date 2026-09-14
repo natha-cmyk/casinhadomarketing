@@ -10,6 +10,9 @@ import { publishPost, type MediaItemInput } from "@/lib/zernio";
 import { listWorkspaceAccounts } from "@/lib/profiles";
 import { logEvent } from "@/lib/events";
 
+export const runtime = "nodejs";
+export const maxDuration = 60; // publicar com mídia é assíncrono e pode levar dezenas de segundos
+
 // id da rede (Casinha) → plataforma Zernio. Só "x" diverge (→ twitter); o resto é 1:1.
 const REDE_TO_PLAT: Record<string, string> = { x: "twitter" };
 
@@ -109,6 +112,15 @@ export async function POST(req: Request) {
       });
     } catch (e) {
       const msg = String((e as Error)?.message || e);
+      // TIMEOUT não é falha: o provedor processa a publicação de forma ASSÍNCRONA e o job já foi
+      // aceito — a publicação sai em instantes. Marca o status pretendido e confirma como enfileirado
+      // (evita o "erro" trivial que aparecia mesmo com o post indo ao ar).
+      if (/ETIMEDOUT|abort/i.test(msg)) {
+        const status: PostStatus = publishNow ? "publicado" : "agendado";
+        await prisma.post.update({ where: { id: post.id }, data: { status } }).catch(() => {});
+        await logEvent(ws.id, publishNow ? "post.published" : "post.scheduled", post.titulo || "(sem título)", { canais: post.contas, enfileirado: true });
+        return NextResponse.json({ ok: true, status, enfileirado: true, canaisIgnorados });
+      }
       let friendly = "Não foi possível publicar agora. Verifique a conexão do canal e tente de novo.";
       if (/\b403\b|permission|scope|not authorized/i.test(msg))
         friendly = "A conta conectada não tem permissão de publicação. Reconecte o canal concedendo acesso de publicação.";

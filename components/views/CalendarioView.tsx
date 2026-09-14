@@ -17,6 +17,7 @@ import { Ic } from "@/components/Ic";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { PostModal } from "./PostModal";
 import { BibliotecaPanel } from "./BibliotecaPanel";
+import { savePosts, deletePostApi } from "@/lib/api";
 
 // ícone (nome em ICONS) e COR DE MARCA por canal — usados na apresentação como ponto de identificação.
 const CANAL_ICONE: Record<string, string> = {
@@ -269,6 +270,7 @@ export function CalendarioView() {
   const [contasOpen, setContasOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [bibOpen, setBibOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null); // célula sob o post arrastado
 
   // ── modo apresentação (cronograma de produção por período) ──
@@ -380,6 +382,12 @@ export function CalendarioView() {
                 <rect x="3" y="4" width="7" height="16" rx="1.5" /><rect x="13" y="4" width="7" height="16" rx="1.5" /><path d="M6.5 8h0M16.5 8h0" />
               </svg>
               Biblioteca
+            </button>
+            <button className="btn-link" onClick={() => setBatchOpen(true)} title="Selecionar vários posts e alterar status, duplicar, mover de data ou enviar pra lixeira em lote">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+              Selecionar em lote
             </button>
             <button className="btn-link" id="apresentarBtn" onClick={abrirApresentacao}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -870,7 +878,160 @@ export function CalendarioView() {
       )}
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
       {bibOpen && <BibliotecaPanel onClose={() => setBibOpen(false)} />}
+      {batchOpen && <BatchPanel year={year} month={month} onClose={() => setBatchOpen(false)} />}
     </>
+  );
+}
+
+// ── Seleção em LOTE ──────────────────────────────────────────────────────────
+// Lista os posts do mês em foco (todos os status), com checkbox por post + "selecionar tudo".
+// Barra de ações sobre os selecionados: mudar status, publicar agora, duplicar (mesma data ou
+// nova data), mover de data e enviar pra lixeira. Persiste no banco após cada ação.
+function BatchPanel({ year, month, onClose }: { year: number; month: number; onClose: () => void }) {
+  const posts = useStore((st) => st.posts);
+  const addPost = useStore((st) => st.addPost);
+  const updatePost = useStore((st) => st.updatePost);
+  const deletePost = useStore((st) => st.deletePost);
+
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const hoje = new Date();
+  const [novaData, setNovaData] = useState(`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const lista = posts
+    .filter((p) => p.y === year && p.m === month)
+    .sort((a, b) => (a.d - b.d) || String(a.hora || "").localeCompare(String(b.hora || "")));
+
+  const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allSel = lista.length > 0 && lista.every((p) => sel.has(p.id));
+  const toggleAll = () => setSel(allSel ? new Set() : new Set(lista.map((p) => p.id)));
+  const selecionados = lista.filter((p) => sel.has(p.id));
+  const nSel = selecionados.length;
+
+  const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `post_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+  const persist = () => savePosts(useStore.getState());
+  const parseData = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return { y, m: m - 1, d }; };
+  const ddmm = (m: number, d: number) => `${String(d).padStart(2, "0")}/${String(m + 1).padStart(2, "0")}`;
+
+  const marcarStatus = async (status: string) => {
+    if (!nSel || busy) return;
+    setBusy(true);
+    selecionados.forEach((p) => updatePost(p.id, { status } as Partial<PostItem>));
+    await persist(); setBusy(false);
+    setMsg(`${nSel} marcado(s) como "${(POST_STATUS[status] || { label: status }).label}".`);
+  };
+
+  const moverData = async () => {
+    if (!nSel || busy) return;
+    const { y, m, d } = parseData(novaData);
+    setBusy(true);
+    selecionados.forEach((p) => updatePost(p.id, { y, m, d }));
+    await persist(); setBusy(false);
+    setMsg(`${nSel} movido(s) para ${ddmm(m, d)}.`); setSel(new Set());
+  };
+
+  const duplicar = async (comNovaData: boolean) => {
+    if (!nSel || busy) return;
+    const dest = comNovaData ? parseData(novaData) : null;
+    setBusy(true);
+    selecionados.forEach((p) => {
+      const base = { ...p } as PostItem & { zernioPostId?: unknown };
+      delete base.zernioPostId; // cópia é novo post, não herda o id de publicação
+      const copia = { ...base, id: newId(), status: "rascunho", ...(dest ? { y: dest.y, m: dest.m, d: dest.d } : {}) } as PostItem;
+      addPost(copia);
+    });
+    await persist(); setBusy(false);
+    setMsg(`${nSel} duplicado(s)${dest ? ` para ${ddmm(dest.m, dest.d)}` : ""} como rascunho.`); setSel(new Set());
+  };
+
+  const paraLixeira = async () => {
+    if (!nSel || busy) return;
+    const ids = selecionados.map((p) => p.id);
+    setBusy(true);
+    ids.forEach((id) => deletePost(id));
+    await Promise.all(ids.map((id) => deletePostApi(id).catch(() => false)));
+    setBusy(false);
+    setMsg(`${ids.length} enviado(s) pra lixeira (restaurável 7 dias).`); setSel(new Set());
+  };
+
+  const publicarAgora = async () => {
+    if (!nSel || busy) return;
+    setBusy(true); setMsg("Enviando publicações…");
+    await persist();
+    let ok = 0, pend = 0;
+    for (const p of selecionados) {
+      try {
+        const r = await fetch("/api/posts/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ postId: p.id, publishNow: true }) });
+        const j = await r.json().catch(() => null);
+        if (r.ok && j?.ok) { ok++; updatePost(p.id, { status: (j.status || "publicado") } as Partial<PostItem>); } else pend++;
+      } catch { pend++; }
+    }
+    setBusy(false);
+    setMsg(`Publicação enviada: ${ok} confirmada(s)${pend ? ` · ${pend} com pendência (reveja o canal)` : ""}.`); setSel(new Set());
+  };
+
+  return (
+    <div className="pm-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pm" role="dialog" aria-modal="true" style={{ maxWidth: 620, display: "flex", flexDirection: "column", maxHeight: "86vh" }} onClick={(e) => e.stopPropagation()}>
+        <div className="pm-head">
+          <b>Selecionar em lote · {MONTHS_FULL[month]} {year}</b>
+          <button className="pm-x" aria-label="Fechar" onClick={onClose}>✕</button>
+        </div>
+        <div className="pm-body" style={{ overflow: "auto", flex: 1 }}>
+          {lista.length === 0 ? (
+            <div className="pm-hint">Nenhum conteúdo neste mês. Crie posts no calendário primeiro.</div>
+          ) : (
+            <>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 650, marginBottom: 8, cursor: "pointer" }}>
+                <input type="checkbox" checked={allSel} onChange={toggleAll} />
+                Selecionar todos ({lista.length}) {nSel > 0 && <span className="badge" style={{ marginLeft: 4 }}>{nSel} selecionado(s)</span>}
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {lista.map((p) => {
+                  const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
+                  const on = sel.has(p.id);
+                  const nc = (p.contas || []).length;
+                  return (
+                    <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--hairline)", borderRadius: 10, padding: "8px 10px", cursor: "pointer", background: on ? "var(--surface-2, #f5f7f9)" : "transparent" }}>
+                      <input type="checkbox" checked={on} onChange={() => toggle(p.id)} />
+                      <span title={st.label} style={{ flex: "0 0 8px", width: 8, height: 8, borderRadius: "50%", background: st.cor }} />
+                      <span className="tnum" style={{ fontSize: 12, color: "var(--label-3)", flex: "0 0 auto" }}>{ddmm(p.m, p.d)} · {p.hora || "--:--"}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.titulo || "(sem título)"}</span>
+                      {p.canal && <span style={{ fontSize: 11, color: "var(--label-3)", flex: "0 0 auto" }}>{p.canal}</span>}
+                      <span style={{ fontSize: 11, color: "var(--label-3)", flex: "0 0 auto" }} title="canais">{nc ? `${nc} canal${nc > 1 ? "is" : ""}` : "—"}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+        {/* barra de ações — só quando há seleção */}
+        <div style={{ borderTop: "1px solid var(--hairline)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {msg && <div className="pm-hint" style={{ margin: 0 }}>{msg}</div>}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", opacity: nSel && !busy ? 1 : 0.5, pointerEvents: nSel && !busy ? "auto" : "none" }}>
+            <span style={{ fontSize: 12, fontWeight: 650, color: "var(--label-2)" }}>Marcar:</span>
+            <select className="field-edit" style={{ padding: "5px 8px", fontSize: 12.5 }} defaultValue="" onChange={(e) => { if (e.target.value) { marcarStatus(e.target.value); e.currentTarget.value = ""; } }}>
+              <option value="" disabled>status…</option>
+              <option value="rascunho">Rascunho</option>
+              <option value="agendado">Agendado</option>
+              <option value="publicado">Publicado</option>
+              <option value="cancelado">Cancelado / impedido</option>
+            </select>
+            <button className="btn-link ig" onClick={publicarAgora} title="Dispara a publicação real nos canais conectados">Publicar agora</button>
+            <button className="btn-link" onClick={() => duplicar(false)} title="Cria uma cópia (rascunho) na mesma data">Duplicar</button>
+            <button type="button" onClick={paraLixeira} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 12.5, fontWeight: 650 }} title="Envia pra lixeira (restaurável 7 dias)">Lixeira</button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", opacity: nSel && !busy ? 1 : 0.5, pointerEvents: nSel && !busy ? "auto" : "none" }}>
+            <span style={{ fontSize: 12, fontWeight: 650, color: "var(--label-2)" }}>Nova data:</span>
+            <input type="date" className="field-edit" style={{ width: 150, padding: "5px 8px", fontSize: 12.5 }} value={novaData} onChange={(e) => setNovaData(e.target.value)} />
+            <button className="btn-link" onClick={moverData} title="Move os selecionados para a data escolhida">Mover pra data</button>
+            <button className="btn-link" onClick={() => duplicar(true)} title="Duplica os selecionados na data escolhida (rascunho)">Duplicar na data</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
