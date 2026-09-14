@@ -178,6 +178,8 @@ export function CalendarioView() {
     calYear: year,
     set,
     updatePost,
+    addPost,
+    deletePost,
   } = s;
 
   // Fonte única (auto-sincroniza quando novas contas conectam) + manuais do usuário:
@@ -228,19 +230,27 @@ export function CalendarioView() {
     // norteador (hover): canal · pilar · funil · título completo
     const norteador = [p.canal, p.pilar, p.funil].filter(Boolean).join(" · ");
     const fBadge = p.funil ? p.funil[0].toUpperCase() : ""; // T/M/F
+    const marcado = batchMode && sel.has(p.id);
     return (
       <button
         key={p.id}
         className={`post-chip st-${p.status}`}
         data-post={p.id}
-        draggable
+        draggable={!batchMode}
+        style={marcado ? { boxShadow: "0 0 0 2px var(--cyan)", background: "color-mix(in srgb, var(--cyan) 12%, transparent)" } : undefined}
         onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData("text/plain", p.id); e.dataTransfer.effectAllowed = "move"; }}
-        title={`${p.titulo || "(sem título)"}\n${norteador} · ${st.label}${acc}\n(arraste pra outro dia pra remarcar)`}
+        title={batchMode
+          ? `${p.titulo || "(sem título)"} — clique pra ${marcado ? "desmarcar" : "marcar"}`
+          : `${p.titulo || "(sem título)"}\n${norteador} · ${st.label}${acc}\n(arraste pra outro dia pra remarcar)`}
         onClick={(e) => {
           e.stopPropagation();
+          if (batchMode) { toggleSel(p.id); return; }
           set({ postModal: { mode: "edit", id: p.id, y: p.y, m: p.m, d: p.d } });
         }}
       >
+        {batchMode && (
+          <span aria-hidden style={{ flex: "0 0 auto", width: 13, height: 13, borderRadius: 4, border: `1.5px solid ${marcado ? "var(--cyan)" : "var(--label-3)"}`, background: marcado ? "var(--cyan)" : "transparent", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, lineHeight: 1 }}>{marcado ? "✓" : ""}</span>
+        )}
         {ico ? (
           <span className="pc-ic" style={{ color: c }}><Ic name={ico} /></span>
         ) : (
@@ -270,7 +280,61 @@ export function CalendarioView() {
   const [contasOpen, setContasOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [bibOpen, setBibOpen] = useState(false);
-  const [batchOpen, setBatchOpen] = useState(false);
+  // ── seleção em LOTE dentro da própria grade (marca chips por dia) ──
+  const [batchMode, setBatchMode] = useState(false);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const hojeIso = (() => { const x = new Date(); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; })();
+  const [batchData, setBatchData] = useState(hojeIso);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchMsg, setBatchMsg] = useState<string | null>(null);
+  const selPosts = posts.filter((p) => sel.has(p.id));
+  const nSel = selPosts.length;
+  const toggleSel = (id: string) => setSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const selDia = (ids: string[]) => setSel((prev) => { const n = new Set(prev); const todos = ids.every((i) => n.has(i)); ids.forEach((i) => (todos ? n.delete(i) : n.add(i))); return n; });
+  const sairLote = () => { setBatchMode(false); setSel(new Set()); setBatchMsg(null); };
+  const newPostId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `post_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+  const parseIso = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return { y, m: m - 1, d }; };
+  const ddmm = (m: number, d: number) => `${String(d).padStart(2, "0")}/${String(m + 1).padStart(2, "0")}`;
+  const persistPosts = () => savePosts(useStore.getState());
+  const bMarcar = async (status: string) => {
+    if (!nSel || batchBusy) return; setBatchBusy(true);
+    selPosts.forEach((p) => updatePost(p.id, { status } as Partial<PostItem>));
+    await persistPosts(); setBatchBusy(false);
+    setBatchMsg(`${nSel} marcado(s) como "${(POST_STATUS[status] || { label: status }).label}".`);
+  };
+  const bMover = async () => {
+    if (!nSel || batchBusy) return; const { y, m, d } = parseIso(batchData); setBatchBusy(true);
+    selPosts.forEach((p) => updatePost(p.id, { y, m, d }));
+    await persistPosts(); setBatchBusy(false); setBatchMsg(`${nSel} movido(s) para ${ddmm(m, d)}.`); setSel(new Set());
+  };
+  const bDuplicar = async (comData: boolean) => {
+    if (!nSel || batchBusy) return; const dest = comData ? parseIso(batchData) : null; setBatchBusy(true);
+    selPosts.forEach((p) => {
+      const base = { ...p } as PostItem & { zernioPostId?: unknown };
+      delete base.zernioPostId;
+      addPost({ ...base, id: newPostId(), status: "rascunho", ...(dest ? { y: dest.y, m: dest.m, d: dest.d } : {}) } as PostItem);
+    });
+    await persistPosts(); setBatchBusy(false);
+    setBatchMsg(`${nSel} duplicado(s)${dest ? ` para ${ddmm(dest.m, dest.d)}` : ""} como rascunho.`); setSel(new Set());
+  };
+  const bLixeira = async () => {
+    if (!nSel || batchBusy) return; const ids = selPosts.map((p) => p.id); setBatchBusy(true);
+    ids.forEach((id) => deletePost(id));
+    await Promise.all(ids.map((id) => deletePostApi(id).catch(() => false)));
+    setBatchBusy(false); setBatchMsg(`${ids.length} enviado(s) pra lixeira (restaurável 7 dias).`); setSel(new Set());
+  };
+  const bPublicar = async () => {
+    if (!nSel || batchBusy) return; setBatchBusy(true); setBatchMsg("Enviando publicações…");
+    await persistPosts(); let ok = 0, pend = 0;
+    for (const p of selPosts) {
+      try {
+        const r = await fetch("/api/posts/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ postId: p.id, publishNow: true }) });
+        const j = await r.json().catch(() => null);
+        if (r.ok && j?.ok) { ok++; updatePost(p.id, { status: (j.status || "publicado") } as Partial<PostItem>); } else pend++;
+      } catch { pend++; }
+    }
+    setBatchBusy(false); setBatchMsg(`Publicação enviada: ${ok} confirmada(s)${pend ? ` · ${pend} com pendência` : ""}.`); setSel(new Set());
+  };
   const [dragOverKey, setDragOverKey] = useState<string | null>(null); // célula sob o post arrastado
 
   // ── modo apresentação (cronograma de produção por período) ──
@@ -383,11 +447,12 @@ export function CalendarioView() {
               </svg>
               Biblioteca
             </button>
-            <button className="btn-link" onClick={() => setBatchOpen(true)} title="Selecionar vários posts e alterar status, duplicar, mover de data ou enviar pra lixeira em lote">
+            <button className="btn-link" onClick={() => (batchMode ? sairLote() : setBatchMode(true))} title="Marcar vários posts direto na grade e alterar status, publicar, duplicar, mover de data ou enviar pra lixeira em lote"
+              style={batchMode ? { background: "var(--cyan)", color: "#fff", borderColor: "var(--cyan)" } : undefined}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
               </svg>
-              Selecionar em lote
+              {batchMode ? "Sair da seleção" : "Selecionar em lote"}
             </button>
             <button className="btn-link" id="apresentarBtn" onClick={abrirApresentacao}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -511,7 +576,7 @@ export function CalendarioView() {
                 className={`cc-cell ${dow === 0 || dow === 6 ? "cc-we" : ""}${dragOverKey === key ? " cc-drop" : ""}`}
                 data-newpost={`${year}-${month}-${d}`}
                 key={d}
-                onClick={() => set({ postModal: { mode: "new", y: year, m: month, d } })}
+                onClick={() => { if (batchMode) return; set({ postModal: { mode: "new", y: year, m: month, d } }); }}
                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dragOverKey !== key) setDragOverKey(key); }}
                 onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
                 onDrop={(e) => { e.preventDefault(); setDragOverKey(null); const id = e.dataTransfer.getData("text/plain"); if (id) updatePost(id, { y: year, m: month, d }); }}
@@ -532,17 +597,24 @@ export function CalendarioView() {
                 <div className="cc-posts">{dp.map(postChip)}</div>
                 {dp.length > 0 && (
                   <div className="cc-daypop" onClick={(e) => e.stopPropagation()}>
-                    <div className="cc-daypop-h">{String(d).padStart(2, "0")} · {WD_FULL[dow]} · {dp.length} {dp.length === 1 ? "post" : "posts"}</div>
+                    <div className="cc-daypop-h" style={batchMode ? { cursor: "pointer", color: "var(--cyan)" } : undefined}
+                      onClick={batchMode ? (e) => { e.stopPropagation(); selDia(dp.map((p) => p.id)); } : undefined}
+                      title={batchMode ? "Marcar/desmarcar todos deste dia" : undefined}>
+                      {String(d).padStart(2, "0")} · {WD_FULL[dow]} · {dp.length} {dp.length === 1 ? "post" : "posts"}{batchMode ? " · marcar dia" : ""}
+                    </div>
                     {dp.map((p) => {
                       const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
                       const marca = corMarca(p.canal, canalCor(p.canal));
                       const ic = iconeCanal(p.canal);
+                      const on = batchMode && sel.has(p.id);
                       return (
                         <button
                           key={p.id}
                           className="cc-daypop-row"
-                          onClick={(e) => { e.stopPropagation(); set({ postModal: { mode: "edit", id: p.id, y: p.y, m: p.m, d: p.d } }); }}
+                          style={on ? { boxShadow: "inset 0 0 0 2px var(--cyan)", borderRadius: 6 } : undefined}
+                          onClick={(e) => { e.stopPropagation(); if (batchMode) { toggleSel(p.id); return; } set({ postModal: { mode: "edit", id: p.id, y: p.y, m: p.m, d: p.d } }); }}
                         >
+                          {batchMode && <span aria-hidden style={{ flex: "0 0 auto", width: 12, height: 12, borderRadius: 3, border: `1.5px solid ${on ? "var(--cyan)" : "var(--label-3)"}`, background: on ? "var(--cyan)" : "transparent", color: "#fff", fontSize: 9, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{on ? "✓" : ""}</span>}
                           <span className="cc-dp-st" style={{ background: st.cor }} title={st.label} />
                           {ic ? <span className="pc-ic" style={{ color: marca }}><Ic name={ic} /></span> : <span className="pc-dot" style={{ background: marca }} />}
                           {p.pilar && <span className="pc-pilar">{p.pilar}</span>}
@@ -878,160 +950,34 @@ export function CalendarioView() {
       )}
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
       {bibOpen && <BibliotecaPanel onClose={() => setBibOpen(false)} />}
-      {batchOpen && <BatchPanel year={year} month={month} onClose={() => setBatchOpen(false)} />}
-    </>
-  );
-}
-
-// ── Seleção em LOTE ──────────────────────────────────────────────────────────
-// Lista os posts do mês em foco (todos os status), com checkbox por post + "selecionar tudo".
-// Barra de ações sobre os selecionados: mudar status, publicar agora, duplicar (mesma data ou
-// nova data), mover de data e enviar pra lixeira. Persiste no banco após cada ação.
-function BatchPanel({ year, month, onClose }: { year: number; month: number; onClose: () => void }) {
-  const posts = useStore((st) => st.posts);
-  const addPost = useStore((st) => st.addPost);
-  const updatePost = useStore((st) => st.updatePost);
-  const deletePost = useStore((st) => st.deletePost);
-
-  const [sel, setSel] = useState<Set<string>>(new Set());
-  const hoje = new Date();
-  const [novaData, setNovaData] = useState(`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  const lista = posts
-    .filter((p) => p.y === year && p.m === month)
-    .sort((a, b) => (a.d - b.d) || String(a.hora || "").localeCompare(String(b.hora || "")));
-
-  const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const allSel = lista.length > 0 && lista.every((p) => sel.has(p.id));
-  const toggleAll = () => setSel(allSel ? new Set() : new Set(lista.map((p) => p.id)));
-  const selecionados = lista.filter((p) => sel.has(p.id));
-  const nSel = selecionados.length;
-
-  const newId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `post_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
-  const persist = () => savePosts(useStore.getState());
-  const parseData = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return { y, m: m - 1, d }; };
-  const ddmm = (m: number, d: number) => `${String(d).padStart(2, "0")}/${String(m + 1).padStart(2, "0")}`;
-
-  const marcarStatus = async (status: string) => {
-    if (!nSel || busy) return;
-    setBusy(true);
-    selecionados.forEach((p) => updatePost(p.id, { status } as Partial<PostItem>));
-    await persist(); setBusy(false);
-    setMsg(`${nSel} marcado(s) como "${(POST_STATUS[status] || { label: status }).label}".`);
-  };
-
-  const moverData = async () => {
-    if (!nSel || busy) return;
-    const { y, m, d } = parseData(novaData);
-    setBusy(true);
-    selecionados.forEach((p) => updatePost(p.id, { y, m, d }));
-    await persist(); setBusy(false);
-    setMsg(`${nSel} movido(s) para ${ddmm(m, d)}.`); setSel(new Set());
-  };
-
-  const duplicar = async (comNovaData: boolean) => {
-    if (!nSel || busy) return;
-    const dest = comNovaData ? parseData(novaData) : null;
-    setBusy(true);
-    selecionados.forEach((p) => {
-      const base = { ...p } as PostItem & { zernioPostId?: unknown };
-      delete base.zernioPostId; // cópia é novo post, não herda o id de publicação
-      const copia = { ...base, id: newId(), status: "rascunho", ...(dest ? { y: dest.y, m: dest.m, d: dest.d } : {}) } as PostItem;
-      addPost(copia);
-    });
-    await persist(); setBusy(false);
-    setMsg(`${nSel} duplicado(s)${dest ? ` para ${ddmm(dest.m, dest.d)}` : ""} como rascunho.`); setSel(new Set());
-  };
-
-  const paraLixeira = async () => {
-    if (!nSel || busy) return;
-    const ids = selecionados.map((p) => p.id);
-    setBusy(true);
-    ids.forEach((id) => deletePost(id));
-    await Promise.all(ids.map((id) => deletePostApi(id).catch(() => false)));
-    setBusy(false);
-    setMsg(`${ids.length} enviado(s) pra lixeira (restaurável 7 dias).`); setSel(new Set());
-  };
-
-  const publicarAgora = async () => {
-    if (!nSel || busy) return;
-    setBusy(true); setMsg("Enviando publicações…");
-    await persist();
-    let ok = 0, pend = 0;
-    for (const p of selecionados) {
-      try {
-        const r = await fetch("/api/posts/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ postId: p.id, publishNow: true }) });
-        const j = await r.json().catch(() => null);
-        if (r.ok && j?.ok) { ok++; updatePost(p.id, { status: (j.status || "publicado") } as Partial<PostItem>); } else pend++;
-      } catch { pend++; }
-    }
-    setBusy(false);
-    setMsg(`Publicação enviada: ${ok} confirmada(s)${pend ? ` · ${pend} com pendência (reveja o canal)` : ""}.`); setSel(new Set());
-  };
-
-  return (
-    <div className="pm-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="pm" role="dialog" aria-modal="true" style={{ maxWidth: 620, display: "flex", flexDirection: "column", maxHeight: "86vh" }} onClick={(e) => e.stopPropagation()}>
-        <div className="pm-head">
-          <b>Selecionar em lote · {MONTHS_FULL[month]} {year}</b>
-          <button className="pm-x" aria-label="Fechar" onClick={onClose}>✕</button>
-        </div>
-        <div className="pm-body" style={{ overflow: "auto", flex: 1 }}>
-          {lista.length === 0 ? (
-            <div className="pm-hint">Nenhum conteúdo neste mês. Crie posts no calendário primeiro.</div>
-          ) : (
-            <>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 650, marginBottom: 8, cursor: "pointer" }}>
-                <input type="checkbox" checked={allSel} onChange={toggleAll} />
-                Selecionar todos ({lista.length}) {nSel > 0 && <span className="badge" style={{ marginLeft: 4 }}>{nSel} selecionado(s)</span>}
-              </label>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {lista.map((p) => {
-                  const st = POST_STATUS[p.status] || POST_STATUS.rascunho;
-                  const on = sel.has(p.id);
-                  const nc = (p.contas || []).length;
-                  return (
-                    <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--hairline)", borderRadius: 10, padding: "8px 10px", cursor: "pointer", background: on ? "var(--surface-2, #f5f7f9)" : "transparent" }}>
-                      <input type="checkbox" checked={on} onChange={() => toggle(p.id)} />
-                      <span title={st.label} style={{ flex: "0 0 8px", width: 8, height: 8, borderRadius: "50%", background: st.cor }} />
-                      <span className="tnum" style={{ fontSize: 12, color: "var(--label-3)", flex: "0 0 auto" }}>{ddmm(p.m, p.d)} · {p.hora || "--:--"}</span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.titulo || "(sem título)"}</span>
-                      {p.canal && <span style={{ fontSize: 11, color: "var(--label-3)", flex: "0 0 auto" }}>{p.canal}</span>}
-                      <span style={{ fontSize: 11, color: "var(--label-3)", flex: "0 0 auto" }} title="canais">{nc ? `${nc} canal${nc > 1 ? "is" : ""}` : "—"}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-        {/* barra de ações — só quando há seleção */}
-        <div style={{ borderTop: "1px solid var(--hairline)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {msg && <div className="pm-hint" style={{ margin: 0 }}>{msg}</div>}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", opacity: nSel && !busy ? 1 : 0.5, pointerEvents: nSel && !busy ? "auto" : "none" }}>
+      {batchMode && (
+        <div style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 18, zIndex: 60, background: "var(--white, #fff)", border: "1px solid var(--hairline)", borderRadius: 14, boxShadow: "0 8px 30px rgba(0,0,0,.16)", padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8, maxWidth: "min(940px, 94vw)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <b style={{ fontSize: 13 }}>{nSel} selecionado(s)</b>
+            <span className="pm-hint" style={{ margin: 0 }}>{batchMsg || (nSel ? "Escolha uma ação" : "Clique nos posts na grade pra marcar")}</span>
+            <button className="btn-link" style={{ marginLeft: "auto" }} onClick={sairLote}>Sair da seleção</button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", opacity: nSel && !batchBusy ? 1 : 0.5, pointerEvents: nSel && !batchBusy ? "auto" : "none" }}>
             <span style={{ fontSize: 12, fontWeight: 650, color: "var(--label-2)" }}>Marcar:</span>
-            <select className="field-edit" style={{ padding: "5px 8px", fontSize: 12.5 }} defaultValue="" onChange={(e) => { if (e.target.value) { marcarStatus(e.target.value); e.currentTarget.value = ""; } }}>
+            <select className="field-edit" style={{ padding: "5px 8px", fontSize: 12.5 }} defaultValue="" onChange={(e) => { if (e.target.value) { bMarcar(e.target.value); e.currentTarget.value = ""; } }}>
               <option value="" disabled>status…</option>
               <option value="rascunho">Rascunho</option>
               <option value="agendado">Agendado</option>
               <option value="publicado">Publicado</option>
               <option value="cancelado">Cancelado / impedido</option>
             </select>
-            <button className="btn-link ig" onClick={publicarAgora} title="Dispara a publicação real nos canais conectados">Publicar agora</button>
-            <button className="btn-link" onClick={() => duplicar(false)} title="Cria uma cópia (rascunho) na mesma data">Duplicar</button>
-            <button type="button" onClick={paraLixeira} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 12.5, fontWeight: 650 }} title="Envia pra lixeira (restaurável 7 dias)">Lixeira</button>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", opacity: nSel && !busy ? 1 : 0.5, pointerEvents: nSel && !busy ? "auto" : "none" }}>
-            <span style={{ fontSize: 12, fontWeight: 650, color: "var(--label-2)" }}>Nova data:</span>
-            <input type="date" className="field-edit" style={{ width: 150, padding: "5px 8px", fontSize: 12.5 }} value={novaData} onChange={(e) => setNovaData(e.target.value)} />
-            <button className="btn-link" onClick={moverData} title="Move os selecionados para a data escolhida">Mover pra data</button>
-            <button className="btn-link" onClick={() => duplicar(true)} title="Duplica os selecionados na data escolhida (rascunho)">Duplicar na data</button>
+            <button className="btn-link ig" onClick={bPublicar} title="Dispara a publicação real nos canais conectados">Publicar agora</button>
+            <button className="btn-link" onClick={() => bDuplicar(false)} title="Cria cópia (rascunho) na mesma data">Duplicar</button>
+            <button type="button" onClick={bLixeira} style={{ border: 0, background: "transparent", color: "var(--red)", cursor: "pointer", fontSize: 12.5, fontWeight: 650 }} title="Envia pra lixeira (restaurável 7 dias)">Lixeira</button>
+            <span style={{ width: 1, height: 20, background: "var(--hairline)" }} />
+            <span style={{ fontSize: 12, fontWeight: 650, color: "var(--label-2)" }}>Data:</span>
+            <input type="date" className="field-edit" style={{ width: 148, padding: "5px 8px", fontSize: 12.5 }} value={batchData} onChange={(e) => setBatchData(e.target.value)} />
+            <button className="btn-link" onClick={bMover} title="Move os selecionados pra essa data">Mover</button>
+            <button className="btn-link" onClick={() => bDuplicar(true)} title="Duplica os selecionados nessa data (rascunho)">Duplicar na data</button>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
