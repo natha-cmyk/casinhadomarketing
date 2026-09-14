@@ -287,44 +287,88 @@ export function CalendarioView() {
   const [batchData, setBatchData] = useState(hojeIso);
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchMsg, setBatchMsg] = useState<string | null>(null);
+  // DESFAZER a última ação de lote (1 nível): restaura o estado anterior, remove as cópias criadas,
+  // ou tira da lixeira. "Publicar" real não entra (não dá pra despublicar).
+  type BatchUndo =
+    | { kind: "restore"; label: string; snaps: PostItem[] }
+    | { kind: "removeCreated"; label: string; ids: string[] }
+    | { kind: "untrash"; label: string; ids: string[] };
+  const [undo, setUndo] = useState<BatchUndo | null>(null);
   const selPosts = posts.filter((p) => sel.has(p.id));
   const nSel = selPosts.length;
   const toggleSel = (id: string) => setSel((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const selDia = (ids: string[]) => setSel((prev) => { const n = new Set(prev); const todos = ids.every((i) => n.has(i)); ids.forEach((i) => (todos ? n.delete(i) : n.add(i))); return n; });
-  const sairLote = () => { setBatchMode(false); setSel(new Set()); setBatchMsg(null); };
+  const sairLote = () => { setBatchMode(false); setSel(new Set()); setBatchMsg(null); setUndo(null); };
   const newPostId = () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `post_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
   const parseIso = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return { y, m: m - 1, d }; };
   const ddmm = (m: number, d: number) => `${String(d).padStart(2, "0")}/${String(m + 1).padStart(2, "0")}`;
   const persistPosts = () => savePosts(useStore.getState());
+  const snapshot = (list: PostItem[]): PostItem[] => list.map((p) => JSON.parse(JSON.stringify(p)) as PostItem);
   const bMarcar = async (status: string) => {
     if (!nSel || batchBusy) return; setBatchBusy(true);
+    setUndo({ kind: "restore", label: `status de ${nSel}`, snaps: snapshot(selPosts) });
     selPosts.forEach((p) => updatePost(p.id, { status } as Partial<PostItem>));
     await persistPosts(); setBatchBusy(false);
     setBatchMsg(`${nSel} marcado(s) como "${(POST_STATUS[status] || { label: status }).label}".`);
   };
   const bMover = async () => {
     if (!nSel || batchBusy) return; const { y, m, d } = parseIso(batchData); setBatchBusy(true);
+    setUndo({ kind: "restore", label: `data de ${nSel}`, snaps: snapshot(selPosts) });
     selPosts.forEach((p) => updatePost(p.id, { y, m, d }));
     await persistPosts(); setBatchBusy(false); setBatchMsg(`${nSel} movido(s) para ${ddmm(m, d)}.`); setSel(new Set());
   };
   const bDuplicar = async (comData: boolean) => {
     if (!nSel || batchBusy) return; const dest = comData ? parseIso(batchData) : null; setBatchBusy(true);
+    const novos: string[] = [];
     selPosts.forEach((p) => {
       const base = { ...p } as PostItem & { zernioPostId?: unknown };
       delete base.zernioPostId;
-      addPost({ ...base, id: newPostId(), status: "rascunho", ...(dest ? { y: dest.y, m: dest.m, d: dest.d } : {}) } as PostItem);
+      const id = newPostId(); novos.push(id);
+      addPost({ ...base, id, status: "rascunho", ...(dest ? { y: dest.y, m: dest.m, d: dest.d } : {}) } as PostItem);
     });
+    setUndo({ kind: "removeCreated", label: `${novos.length} cópia(s)`, ids: novos });
     await persistPosts(); setBatchBusy(false);
     setBatchMsg(`${nSel} duplicado(s)${dest ? ` para ${ddmm(dest.m, dest.d)}` : ""} como rascunho.`); setSel(new Set());
+  };
+  // Replicar os selecionados PARA OUTRO CANAL (multicanal): cria cópias com o canal alvo + a conta
+  // (rede) correspondente, mesma data, como rascunho. Ex.: conteúdo do Instagram replicado no TikTok.
+  const bReplicarCanal = async (canalNome: string) => {
+    if (!nSel || batchBusy || !canalNome) return; setBatchBusy(true);
+    const rede = REDES.find((r) => r.label === canalNome);
+    const novos: string[] = [];
+    selPosts.forEach((p) => {
+      const base = { ...p } as PostItem & { zernioPostId?: unknown };
+      delete base.zernioPostId;
+      const id = newPostId(); novos.push(id);
+      addPost({ ...base, id, status: "rascunho", canal: canalNome, contas: rede ? [rede.id] : [], perfil: "", overrides: {} } as PostItem);
+    });
+    setUndo({ kind: "removeCreated", label: `${novos.length} réplica(s)`, ids: novos });
+    await persistPosts(); setBatchBusy(false);
+    setBatchMsg(`${nSel} replicado(s) para ${canalNome} como rascunho.`); setSel(new Set());
   };
   const bLixeira = async () => {
     if (!nSel || batchBusy) return; const ids = selPosts.map((p) => p.id); setBatchBusy(true);
     ids.forEach((id) => deletePost(id));
     await Promise.all(ids.map((id) => deletePostApi(id).catch(() => false)));
+    setUndo({ kind: "untrash", label: `${ids.length} da lixeira`, ids });
     setBatchBusy(false); setBatchMsg(`${ids.length} enviado(s) pra lixeira (restaurável 7 dias).`); setSel(new Set());
   };
+  const desfazer = async () => {
+    if (!undo || batchBusy) return; setBatchBusy(true);
+    if (undo.kind === "restore") {
+      undo.snaps.forEach((snap) => updatePost(snap.id, snap));
+      await persistPosts();
+    } else if (undo.kind === "removeCreated") {
+      undo.ids.forEach((id) => deletePost(id));
+      await Promise.all(undo.ids.map((id) => deletePostApi(id).catch(() => false)));
+    } else if (undo.kind === "untrash") {
+      await Promise.all(undo.ids.map((id) => fetch("/api/posts/trash", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, action: "restore" }) }).catch(() => null)));
+      await fetch("/api/posts").then((r) => r.json()).then((d) => { if (Array.isArray(d?.posts)) set({ posts: d.posts }); }).catch(() => {});
+    }
+    setBatchBusy(false); setBatchMsg("Ação desfeita."); setUndo(null);
+  };
   const bPublicar = async () => {
-    if (!nSel || batchBusy) return; setBatchBusy(true); setBatchMsg("Enviando publicações…");
+    if (!nSel || batchBusy) return; setBatchBusy(true); setBatchMsg("Enviando publicações…"); setUndo(null);
     await persistPosts(); let ok = 0, pend = 0;
     for (const p of selPosts) {
       try {
@@ -955,7 +999,13 @@ export function CalendarioView() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <b style={{ fontSize: 13 }}>{nSel} selecionado(s)</b>
             <span className="pm-hint" style={{ margin: 0 }}>{batchMsg || (nSel ? "Escolha uma ação" : "Clique nos posts na grade pra marcar")}</span>
-            <button className="btn-link" style={{ marginLeft: "auto" }} onClick={sairLote}>Sair da seleção</button>
+            {undo && (
+              <button className="btn-link" onClick={desfazer} disabled={batchBusy} title={`Desfazer: ${undo.label}`} style={{ marginLeft: "auto", fontWeight: 700, color: "var(--cyan)" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4, verticalAlign: "-2px" }}><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-1" /></svg>
+                Desfazer
+              </button>
+            )}
+            <button className="btn-link" style={{ marginLeft: undo ? 0 : "auto" }} onClick={sairLote}>Sair da seleção</button>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", opacity: nSel && !batchBusy ? 1 : 0.5, pointerEvents: nSel && !batchBusy ? "auto" : "none" }}>
             <span style={{ fontSize: 12, fontWeight: 650, color: "var(--label-2)" }}>Marcar:</span>
@@ -974,6 +1024,12 @@ export function CalendarioView() {
             <input type="date" className="field-edit" style={{ width: 148, padding: "5px 8px", fontSize: 12.5 }} value={batchData} onChange={(e) => setBatchData(e.target.value)} />
             <button className="btn-link" onClick={bMover} title="Move os selecionados pra essa data">Mover</button>
             <button className="btn-link" onClick={() => bDuplicar(true)} title="Duplica os selecionados nessa data (rascunho)">Duplicar na data</button>
+            <span style={{ width: 1, height: 20, background: "var(--hairline)" }} />
+            <span style={{ fontSize: 12, fontWeight: 650, color: "var(--label-2)" }}>Replicar p/ canal:</span>
+            <select className="field-edit" style={{ padding: "5px 8px", fontSize: 12.5 }} defaultValue="" onChange={(e) => { if (e.target.value) { bReplicarCanal(e.target.value); e.currentTarget.value = ""; } }} title="Cria cópias dos selecionados em outro canal (multicanal), como rascunho">
+              <option value="" disabled>canal…</option>
+              {canais.map((c) => <option key={c.nome} value={c.nome}>{c.nome}</option>)}
+            </select>
           </div>
         </div>
       )}
