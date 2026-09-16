@@ -59,9 +59,12 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams;
     const since = q.get("since");
     const until = q.get("until");
+    // Corte do mês ANCORADO no fuso de Natal/RN (America/Fortaleza, UTC−3) — igual ao que o usuário vê
+    // no ClickUp. Sem o −03:00, a borda caía em meia-noite UTC e um lead da virada do mês contava no mês
+    // errado (dava ±1 nas bordas). Com o fuso certo, os meses batem exatos com o ClickUp.
     const createdAt: { gte?: Date; lte?: Date } = {};
-    if (since) createdAt.gte = new Date(since + "T00:00:00");
-    if (until) createdAt.lte = new Date(until + "T23:59:59.999");
+    if (since) createdAt.gte = new Date(since + "T00:00:00-03:00");
+    if (until) createdAt.lte = new Date(until + "T23:59:59.999-03:00");
 
     // o carimbo do último sync entra na CHAVE: sincronizar de novo invalida o cache na hora, então a
     // contagem corrigida (ex.: arquivados removidos) aparece já. Leitura leve (1 linha) por request.
