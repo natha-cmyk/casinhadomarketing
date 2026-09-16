@@ -9,6 +9,8 @@ import { syncClickupLeads } from "@/lib/crm-sync";
 import { logEvent } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60; // "Ressincronizar tudo" busca e reprocessa a lista inteira
 
 interface ClickUpOption { name?: string; label?: string }
 interface ClickUpCustomField { name: string; type: string; type_config?: { options?: ClickUpOption[] } }

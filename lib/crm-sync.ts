@@ -231,21 +231,21 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
   // Precisa do conjunto ATIVO COMPLETO. No full, `active` já é ele; no incremental (rápido), busca o
   // conjunto completo à parte (sem filtro de data). Só apaga se veio um conjunto NÃO-VAZIO — fetch
   // vazio/erro NÃO dispara o delete (trava anti-zeramento: nunca esvazia a base por um erro de rede).
-  let fullActive: ClickUpTask[] = active; // sync completo: `active` já é o conjunto ativo inteiro
-  if (incremental) {
-    const full = await fetchClickupTasks(listId, cfg.clickupToken, null);
-    fullActive = "error" in full ? [] : full.tasks.filter((t) => t.archived !== true);
+  // RECONCILIAÇÃO só no sync COMPLETO (regra: arquivado/deletado no ClickUp não conta em NADA). No
+  // completo, `active` já é o conjunto ativo inteiro. No incremental (rápido) NÃO reconcilia — buscar
+  // a lista toda a cada clique deixava o "rápido" LENTO/travado; a limpeza vem do "Ressincronizar
+  // tudo" (sob demanda) e do cron diário (usa este mesmo núcleo com full=true).
+  let activeCount: number | undefined, staleRemoved: number | undefined, subtasks: number | undefined;
+  if (!incremental) {
+    const activeIds = active.map((t) => t.id);
+    if (activeIds.length > 0) {
+      const del = await prisma.lead.deleteMany({ where: { workspaceId, source: "clickup", extId: { notIn: activeIds } } });
+      staleRemoved = del.count;
+    }
+    activeCount = activeIds.length;
+    subtasks = active.filter((t) => t.parent != null).length; // diagnóstico: quantas são subtarefas
   }
-  const activeIdsFull = fullActive.map((t) => t.id);
-  let staleRemoved = 0;
-  if (activeIdsFull.length > 0) {
-    const del = await prisma.lead.deleteMany({
-      where: { workspaceId, source: "clickup", extId: { notIn: activeIdsFull } },
-    });
-    staleRemoved = del.count;
-  }
-  const subtasks = fullActive.filter((t) => t.parent != null).length; // diagnóstico: quantas são subtarefas
 
   await prisma.crmConfig.update({ where: { workspaceId }, data: { lastSyncAt: startedAt } });
-  return { ok: true, imported: ops.length, incremental, activeCount: activeIdsFull.length, staleRemoved, subtasks };
+  return { ok: true, imported: ops.length, incremental, activeCount, staleRemoved, subtasks };
 }
