@@ -18,13 +18,24 @@ const clampX = (x: number, w: number) => Math.max(0, Math.min(COLS - w, Math.rou
 const fracLabel = (w: number) => (w >= 6 ? "inteiro" : w >= 4 ? "2/3" : w === 3 ? "metade" : "1/3");
 
 type Cell = { x: number; y: number; w: number; h: number };
-const coll = (a: Cell, b: Cell) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-function compact(grid: Record<string, Cell>, ids: string[]): Record<string, Cell> {
-  const items = ids.filter((id) => grid[id]).map((id) => ({ id, ...grid[id] })).sort((a, b) => a.y - b.y || a.x - b.x);
-  const placed: (Cell & { id: string })[] = [];
-  for (const it of items) { let y = 0; while (placed.some((p) => coll({ ...it, y }, p))) y++; placed.push({ ...it, y }); }
+// MASONRY (tipo Pinterest): empacota os cards NA ORDEM, cada um na posição x que dá o menor y
+// (coluna mais curta que comporta a largura), empate = mais à esquerda. Fecha os buracos verticais —
+// sem espaço morto. A "organização" do usuário é a ORDEM (dada pelo y/x atual); o x final é automático.
+function masonry(order: string[], cells: Record<string, Cell>, cols = COLS): Record<string, Cell> {
+  const colTops = new Array(cols).fill(0);
   const out: Record<string, Cell> = {};
-  for (const p of placed) out[p.id] = { x: p.x, y: p.y, w: p.w, h: p.h };
+  for (const id of order) {
+    const c = cells[id]; if (!c) continue;
+    const w = clampW(c.w), h = c.h;
+    let bestX = 0, bestY = Infinity;
+    for (let x = 0; x <= cols - w; x++) {
+      let y = 0;
+      for (let k = x; k < x + w; k++) y = Math.max(y, colTops[k]);
+      if (y < bestY) { bestY = y; bestX = x; }
+    }
+    out[id] = { x: bestX, y: bestY, w, h };
+    for (let k = bestX; k < bestX + w; k++) colTops[k] = bestY + h;
+  }
   return out;
 }
 
@@ -83,7 +94,7 @@ export function WidgetBoard({ panel, widgets, mode = "grid" }: { panel: string; 
   // barra fina só no modo edição (dica + restaurar). O toggle "Organizar" fica no topo (WidgetEditButton).
   const header = editing ? (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-      <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>{mode === "grid" ? "Arraste ⠿ pra qualquer lugar · puxe a borda ↔ pra largura · 👁 oculta (altura automática)" : "Arraste ⠿ pra reposicionar · puxe a borda ↔ pra largura · 👁 oculta"}</span>
+      <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>{mode === "grid" ? "Arraste ⠿ pra reordenar · puxe a borda ↔ pra largura · 👁 oculta (altura automática, encaixa sozinho)" : "Arraste ⠿ pra reposicionar · puxe a borda ↔ pra largura · 👁 oculta"}</span>
       <button className="btn-link" type="button" onClick={() => setLayout(panel, { hidden: [], grid: undefined, order: widgets.map((w) => w.id), size: {}, height: {} })}>Restaurar padrão</button>
     </div>
   ) : null;
@@ -135,11 +146,13 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
   const base = { ...buildGrid(), ...(live ?? {}) };
   const withH: Record<string, Cell> = {};
   for (const id of visible) if (base[id]) withH[id] = { ...base[id], h: measured[id] ?? base[id].h };
-  // fora do arraste, recompacta pra fechar buracos (masonry) mantendo o x escolhido; no arraste, não.
-  const grid = live ? withH : compact(withH, visible);
+  // ORDEM = posições atuais (y depois x). Arrastar muda o y do card = reordena; o masonry fecha os
+  // buracos escolhendo a coluna mais curta (x automático). Zero espaço morto entre os cards.
+  const order = (visible as string[]).slice().sort((a, b) => ((base[a]?.y ?? 0) - (base[b]?.y ?? 0)) || ((base[a]?.x ?? 0) - (base[b]?.x ?? 0)));
+  const grid = masonry(order, withH);
   const persistGrid = (g: Record<string, Cell>) => {
-    const compacted = compact(g, visible);
-    setLayout(panel, { ...(useStore.getState().widgetLayout[panel] ?? { hidden: [] }), hidden: [...(layout?.hidden ?? [])], grid: { ...(layout?.grid ?? {}), ...compacted } });
+    // guarda as posições do masonry (preservam a ORDEM); no próximo render o masonry recomputa o x.
+    setLayout(panel, { ...(useStore.getState().widgetLayout[panel] ?? { hidden: [] }), hidden: [...(layout?.hidden ?? [])], grid: { ...(layout?.grid ?? {}), ...g } });
   };
   const setW = (id: string, w: number) => persistGrid({ ...grid, [id]: { ...grid[id], w: clampW(w), x: clampX(grid[id].x, clampW(w)) } });
 
