@@ -1583,11 +1583,11 @@ export function SocialInsights({ rede }: { rede: string }) {
             </div>
           )}
 
-          {/* Cards organizáveis via WidgetBoard (arrasta/reposiciona + largura; altura automática). */}
+          {/* Cards organizáveis via WidgetBoard — grid masonry: arrasta pra reordenar + largura, altura
+              automática por conteúdo, sem espaço morto (mesmo padrão do CRM, agora em todo painel). */}
           {cards.length > 0 && (
             <WidgetBoard
               panel={`rede:${rede}`}
-              mode="flow"
               widgets={cards.map((c) => ({ id: c.id, label: SI_CARD_LABELS[c.id] || c.id, defaultSpan: c.full ? 6 : 3, node: c.node }))}
             />
           )}

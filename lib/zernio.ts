@@ -198,15 +198,18 @@ export interface AdInsightRow {
   [k: string]: unknown;
 }
 const AD_FIELDS = "impressions,spend,clicks,ctr,cpc,cpm,reach,frequency,inline_link_clicks,actions";
-// GET /ads/insights?accountId=<zernio>&objectId=<act_>&level=&fields= — desempenho de mídia paga
+// GET /ads/insights?accountId=<zernio>&objectId=<act_>&level=&fields= — desempenho de mídia paga.
+// DATAS: este endpoint IGNORA since/until (testado: janela de 7 dias devolvia o mesmo total que 16 dias
+// → devolvia janela padrão, inflando o gasto ~2x pegando o mês anterior). A convenção que ELE respeita é
+// fromDate/toDate (igual daily-metrics/analytics). Mandamos as duas por garantia.
 export function adsInsights(
   accountId: string,
   objectId: string,
   opts?: { since?: string; until?: string; level?: "account" | "campaign" | "adset" | "ad"; fields?: string }
 ) {
   const q = new URLSearchParams({ accountId, objectId, fields: opts?.fields ?? AD_FIELDS });
-  if (opts?.since) q.set("since", opts.since);
-  if (opts?.until) q.set("until", opts.until);
+  if (opts?.since) { q.set("since", opts.since); q.set("fromDate", opts.since); }
+  if (opts?.until) { q.set("until", opts.until); q.set("toDate", opts.until); }
   if (opts?.level) q.set("level", opts.level);
   return zernio<{ objectId: string; data: AdInsightRow[]; paging?: unknown }>(`/ads/insights?${q.toString()}`);
 }
