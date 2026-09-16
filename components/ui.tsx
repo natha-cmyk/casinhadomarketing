@@ -126,13 +126,15 @@ export function Insight({ color = "var(--cyan)", icon, children }: { color?: str
 
 export function BarRow({ k, v, max, color, formatted, after }: { k: string; v: number; max: number; color: string; formatted?: string; after?: ReactNode }) {
   return (
-    <div className="bar-row">
+    // com delta (after), a grade ganha uma 4ª coluna pra ele — assim NÃO quebra pra a linha de baixo.
+    // rótulo encolhe em cards estreitos (minmax) e a variação fica na ponta direita, na mesma linha.
+    <div className="bar-row" style={after ? { gridTemplateColumns: "minmax(64px,132px) 1fr auto auto" } : undefined}>
       <div className="k">{k}</div>
       <div className="bar-track">
         <div className="bar-fill" style={{ width: `${(v / max) * 100 || 0}%`, background: color }} />
       </div>
       <div className="v tnum">{formatted ?? v.toLocaleString("pt-BR")}</div>
-      {after ? <div style={{ flex: "0 0 auto", marginLeft: 6 }}>{after}</div> : null}
+      {after ? <div style={{ justifySelf: "end" }}>{after}</div> : null}
     </div>
   );
 }

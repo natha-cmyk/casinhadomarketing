@@ -975,9 +975,11 @@ function Dashboard({ data, cmpData }: { data: LeadsData; cmpData: LeadsData | nu
         <button className="btn-link" type="button" onClick={() => setBuilderOpen(true)}>+ Novo gráfico</button>
       </div>
 
-      {/* Widgets organizáveis (arrasta, redimensiona, oculta) + gráficos criados pelo usuário */}
+      {/* Widgets organizáveis (arrasta, largura, oculta). Modo FLUXO = altura automática por conteúdo
+          (sem espaço em branco quando é curto, sem scroll interno quando é longo). */}
       <WidgetBoard
         panel="crm"
+        mode="flow"
         widgets={[
           { id: "canal", label: "Por canal", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por canal" rows={data.byChannel} cmpRows={cmpData?.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" /> },
           { id: "categoria", label: "Por categoria de produto", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por categoria de produto" rows={data.byCategory} cmpRows={cmpData?.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} /> },
