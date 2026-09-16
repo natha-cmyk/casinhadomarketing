@@ -144,10 +144,22 @@ export async function GET(req: Request) {
         }
         return { _id: a._id, adsStatus: status, conectado, customers, gaqlSample };
       }));
+      // META: mostra CADA conexão Meta (facebook/instagram) + as ad accounts que ela resolve + o gasto
+      // cru de cada uma. Se o mesmo act_XXX aparece em 2 conexões, confirma a contagem em dobro.
+      const metaConns = accounts.filter((a) => ADS_PLATFORMS.has(a.platform) && (a.adsStatus === "connected" || a.adsStatus === "active"));
+      const metaDetail = await Promise.all(metaConns.map(async (a) => {
+        const adAccts = await listAdAccounts(a._id).then((d) => d.accounts).catch(() => [] as { id: string; name?: string }[]);
+        const accts = (since && until) ? await Promise.all(adAccts.map(async (act) => {
+          const tot = await adsInsights(a._id, act.id, { since, until }).then((d) => d.data?.[0]).catch(() => undefined);
+          return { adAccountId: act.id, name: act.name, gastoCru: tot?.spend, impressoesCru: tot?.impressions };
+        })) : adAccts.map((act) => ({ adAccountId: act.id, name: act.name }));
+        return { platform: a.platform, connId: a._id, adsStatus: a.adsStatus, adAccounts: accts };
+      }));
       return NextResponse.json({
         ok: true, debug: true,
         totalContas: accounts.length,
         plataformas: accounts.map((a) => ({ platform: a.platform, adsStatus: (a as { adsStatus?: string }).adsStatus })),
+        metaAds: metaDetail,
         googleAds: gDetail,
       });
     }
