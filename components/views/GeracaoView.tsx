@@ -210,11 +210,14 @@ export function GeracaoView() {
       }
       if (!silent) {
         const tipo = d.incremental ? "atualizados" : "importados";
-        setMsg(
-          d.imported === 0
-            ? "Tudo em dia — nenhuma mudança desde o último sync."
-            : `${d.imported} ${d.imported === 1 ? "lead" : "leads"} ${tipo} do ClickUp.`
-        );
+        // resumo em número claro: quantos ativos no ClickUp, quantos arquivados foram removidos e
+        // quantas subtarefas existem (pra fechar a conta com o ClickUp).
+        const partes: string[] = [];
+        partes.push(d.imported === 0 ? "Tudo em dia" : `${d.imported} ${d.imported === 1 ? "lead" : "leads"} ${tipo}`);
+        if (typeof d.activeCount === "number") partes.push(`${d.activeCount} ativos no ClickUp`);
+        if (d.staleRemoved > 0) partes.push(`${d.staleRemoved} arquivados removidos`);
+        if (d.subtasks > 0) partes.push(`${d.subtasks} subtarefas`);
+        setMsg(partes.join(" · "));
       }
       // atualiza carimbo de última sync na config local
       setConfig((c) => (c ? { ...c, lastSyncAt: new Date().toISOString() } : c));

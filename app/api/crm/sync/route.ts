@@ -9,6 +9,8 @@ import { syncClickupLeads } from "@/lib/crm-sync";
 import { logEvent } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60; // "Ressincronizar tudo" busca e reprocessa a lista inteira
 
 interface ClickUpOption { name?: string; label?: string }
 interface ClickUpCustomField { name: string; type: string; type_config?: { options?: ClickUpOption[] } }
@@ -60,8 +62,8 @@ export async function POST(req: Request) {
     const full = new URL(req.url).searchParams.get("full") === "1";
     const r = await syncClickupLeads(ws, { full });
     if (!r.ok) return NextResponse.json({ ok: false, error: r.error }, { status: r.status });
-    void logEvent(ws, "crm.synced", `${r.imported} lead(s)`, { incremental: r.incremental, full });
-    return NextResponse.json({ ok: true, imported: r.imported, incremental: r.incremental });
+    void logEvent(ws, "crm.synced", `${r.imported} lead(s)`, { incremental: r.incremental, full, activeCount: r.activeCount, staleRemoved: r.staleRemoved, subtasks: r.subtasks });
+    return NextResponse.json({ ok: true, imported: r.imported, incremental: r.incremental, activeCount: r.activeCount, staleRemoved: r.staleRemoved, subtasks: r.subtasks });
   } catch (e) {
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
   }

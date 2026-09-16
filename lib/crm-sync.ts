@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 interface ClickUpOption { id: string; name?: string; label?: string; orderindex?: unknown }
 interface ClickUpCustomField { id: string; name: string; type: string; value?: unknown; type_config?: { options?: ClickUpOption[] } }
-interface ClickUpTask { id: string; name?: string; status?: { status?: string; type?: string }; date_created?: string; custom_fields?: ClickUpCustomField[] }
+interface ClickUpTask { id: string; name?: string; status?: { status?: string; type?: string }; date_created?: string; custom_fields?: ClickUpCustomField[]; parent?: string | null; archived?: boolean }
 
 type Dim = "channel" | "category" | "product" | "qualification" | "stage" | "status" | "value" | "lossReason" | "campaign";
 const DIMS: Dim[] = ["channel", "category", "product", "qualification", "stage", "status", "value", "lossReason", "campaign"];
@@ -157,8 +157,33 @@ export function interpretTask(t: ClickUpTask, fm: Record<string, string>): Inter
 }
 export type { ClickUpTask };
 
-export interface CrmSyncResult { ok: true; imported: number; incremental: boolean }
+export interface CrmSyncResult { ok: true; imported: number; incremental: boolean; activeCount?: number; staleRemoved?: number; subtasks?: number }
 export type CrmSyncError = { ok: false; status: number; error: string };
+
+// Busca as tasks de uma lista do ClickUp, paginado. O ClickUp já EXCLUI arquivadas por padrão
+// (não passamos archived=true), então isto devolve só o conjunto ATIVO. sinceMs != null = só as
+// alteradas desde então (incremental). Devolve { tasks } ou { error }.
+async function fetchClickupTasks(listId: string, token: string, sinceMs: number | null): Promise<{ tasks: ClickUpTask[] } | { error: CrmSyncError }> {
+  const tasks: ClickUpTask[] = [];
+  const MAX_PAGES = 50;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    let url = `https://api.clickup.com/api/v2/list/${listId}/task?include_closed=true&subtasks=true&page=${page}`;
+    if (sinceMs != null) url += `&date_updated_gt=${sinceMs}`;
+    let res: Response;
+    try {
+      res = await fetch(url, { headers: { Authorization: token }, cache: "no-store" });
+    } catch {
+      return { error: { ok: false, status: 502, error: "Não foi possível falar com o ClickUp." } };
+    }
+    if (res.status === 401) return { error: { ok: false, status: 400, error: "Token do ClickUp inválido ou sem acesso." } };
+    if (!res.ok) return { error: { ok: false, status: 400, error: `ClickUp respondeu ${res.status}. Verifique o List ID.` } };
+    const body = (await res.json()) as { tasks?: ClickUpTask[]; last_page?: boolean };
+    const pageTasks = Array.isArray(body?.tasks) ? body.tasks : [];
+    tasks.push(...pageTasks);
+    if (body?.last_page === true || pageTasks.length === 0) break;
+  }
+  return { tasks };
+}
 
 // Sincroniza os leads (tasks ClickUp) de UM workspace. `full` força re-sync completo.
 export async function syncClickupLeads(workspaceId: string, opts?: { full?: boolean }): Promise<CrmSyncResult | CrmSyncError> {
@@ -172,24 +197,9 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
   const startedAt = new Date();
 
   const listId = encodeURIComponent(cfg.clickupListId);
-  const tasks: ClickUpTask[] = [];
-  const MAX_PAGES = 50;
-  for (let page = 0; page < MAX_PAGES; page++) {
-    let url = `https://api.clickup.com/api/v2/list/${listId}/task?include_closed=true&subtasks=true&page=${page}`;
-    if (sinceMs != null) url += `&date_updated_gt=${sinceMs}`;
-    let res: Response;
-    try {
-      res = await fetch(url, { headers: { Authorization: cfg.clickupToken }, cache: "no-store" });
-    } catch {
-      return { ok: false, status: 502, error: "Não foi possível falar com o ClickUp." };
-    }
-    if (res.status === 401) return { ok: false, status: 400, error: "Token do ClickUp inválido ou sem acesso." };
-    if (!res.ok) return { ok: false, status: 400, error: `ClickUp respondeu ${res.status}. Verifique o List ID.` };
-    const body = (await res.json()) as { tasks?: ClickUpTask[]; last_page?: boolean };
-    const pageTasks = Array.isArray(body?.tasks) ? body.tasks : [];
-    tasks.push(...pageTasks);
-    if (body?.last_page === true || pageTasks.length === 0) break;
-  }
+  const fetched = await fetchClickupTasks(listId, cfg.clickupToken, sinceMs);
+  if ("error" in fetched) return fetched.error;
+  const tasks = fetched.tasks;
 
   const fm = (cfg.fieldMap ?? {}) as Record<string, string>;
   // Ignora tasks ARQUIVADAS — não entram na contagem (ClickUp já exclui por padrão no fetch,
@@ -217,15 +227,25 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
   const BATCH = 20;
   for (let i = 0; i < ops.length; i += BATCH) await Promise.all(ops.slice(i, i + BATCH));
 
-  // RECONCILIAÇÃO (só no sync COMPLETO): remove da base os leads que não vieram mais do ClickUp
-  // — tasks arquivadas ou deletadas. No incremental não dá (não busca tudo), então só no full.
+  // RECONCILIAÇÃO em TODO sync (regra universal: task ARQUIVADA/deletada no ClickUp não conta em NADA).
+  // Precisa do conjunto ATIVO COMPLETO. No full, `active` já é ele; no incremental (rápido), busca o
+  // conjunto completo à parte (sem filtro de data). Só apaga se veio um conjunto NÃO-VAZIO — fetch
+  // vazio/erro NÃO dispara o delete (trava anti-zeramento: nunca esvazia a base por um erro de rede).
+  // RECONCILIAÇÃO só no sync COMPLETO (regra: arquivado/deletado no ClickUp não conta em NADA). No
+  // completo, `active` já é o conjunto ativo inteiro. No incremental (rápido) NÃO reconcilia — buscar
+  // a lista toda a cada clique deixava o "rápido" LENTO/travado; a limpeza vem do "Ressincronizar
+  // tudo" (sob demanda) e do cron diário (usa este mesmo núcleo com full=true).
+  let activeCount: number | undefined, staleRemoved: number | undefined, subtasks: number | undefined;
   if (!incremental) {
     const activeIds = active.map((t) => t.id);
-    await prisma.lead.deleteMany({
-      where: { workspaceId, source: "clickup", extId: { notIn: activeIds.length ? activeIds : ["__none__"] } },
-    });
+    if (activeIds.length > 0) {
+      const del = await prisma.lead.deleteMany({ where: { workspaceId, source: "clickup", extId: { notIn: activeIds } } });
+      staleRemoved = del.count;
+    }
+    activeCount = activeIds.length;
+    subtasks = active.filter((t) => t.parent != null).length; // diagnóstico: quantas são subtarefas
   }
 
   await prisma.crmConfig.update({ where: { workspaceId }, data: { lastSyncAt: startedAt } });
-  return { ok: true, imported: ops.length, incremental };
+  return { ok: true, imported: ops.length, incremental, activeCount, staleRemoved, subtasks };
 }
