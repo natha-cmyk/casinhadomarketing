@@ -3,7 +3,7 @@
 // Conecta via ClickUp nativo (API REST) ou webhook genérico e mostra leads/oportunidades
 // por canal, categoria, produto, qualificação, status/etapa e motivo de perda, respeitando
 // o período da toolbar. O usuário mapeia os campos personalizados do ClickUp por dimensão.
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { PageHead, BarRow, IconBtn } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
@@ -1160,66 +1160,56 @@ function CampaignPerfCard({ rows, cmpRows }: { rows: NonNullable<LeadsData["camp
         <div className="t">Performance por campanha</div>
         <span className="badge">{rows.length}</span>
       </div>
-      <div className="rel-scroll">
-        <table className="rel-tbl" style={{ width: "100%", tableLayout: "auto" }}>
-          <thead>
-            <tr>
-              <th style={{ width: 24 }} aria-hidden />
-              <th style={{ textAlign: "left" }}>Campanha</th>
-              <th>Oportunidades</th>
-              <th>Ganhos</th>
-              <th>Perdidos</th>
-              <th>Conversão</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((c) => {
-              const isOpen = !!open[c.key];
-              const semDado = !c.key || !c.key.trim();
-              return (
-                <Fragment key={c.key || "__none__"}>
-                  <tr onClick={() => setOpen((o) => ({ ...o, [c.key]: !o[c.key] }))} style={{ cursor: "pointer" }}>
-                    <td style={{ textAlign: "center" }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
-                        style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: ".18s", color: "var(--label-3)", verticalAlign: "middle" }}>
-                        <path d="M6 9l6 6 6-6" />
-                      </svg>
-                    </td>
-                    <td style={{ textAlign: "left", fontWeight: 600, fontStyle: semDado ? "italic" : "normal", color: semDado ? "var(--label-3)" : "var(--label)" }}>{nome(c.key)}</td>
-                    <td className="tnum"><span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>{fmt(c.total)}{cmp && <CmpChip cur={c.total} prev={cmp.get(c.key)} />}</span></td>
-                    <td className="tnum" style={{ color: "var(--excelente)" }}>{fmt(c.won)}</td>
-                    <td className="tnum" style={{ color: "var(--red)" }}>{fmt(c.lost)}</td>
-                    <td className="tnum" style={{ fontWeight: 700, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)" }}>{(c.conv * 100).toFixed(0)}%</td>
-                  </tr>
-                  {isOpen && (
-                    <tr>
-                      <td colSpan={6} style={{ padding: 0, background: "rgba(0,0,0,.02)" }}>
-                        <div style={{ padding: "12px 16px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 18 }}>
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)", marginBottom: 6 }}>Top motivos de perda</div>
-                            {c.lossTop.length ? c.lossTop.map((l) => (
-                              <div key={l.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "2px 0" }}>
-                                <span style={{ color: "var(--label-1)" }}>{l.key}</span><span className="tnum" style={{ color: "var(--label-2)" }}>{fmt(l.count)}</span>
-                              </div>
-                            )) : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem perdas com motivo registrado.</div>}
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)", marginBottom: 6 }}>Por qualificação</div>
-                            {c.byQualification.length ? c.byQualification.map((q) => (
-                              <div key={q.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "2px 0" }}>
-                                <span style={{ color: "var(--label-1)" }}>{q.key}</span><span className="tnum" style={{ color: "var(--label-2)" }}>{fmt(q.count)}</span>
-                              </div>
-                            )) : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem qualificação informada.</div>}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {rows.map((c, idx) => {
+          const isOpen = !!open[c.key];
+          const semDado = !c.key || !c.key.trim();
+          const pct = (n: number) => (c.total ? (n / c.total) * 100 : 0);
+          return (
+            <div key={c.key || "__none__"} style={{ borderTop: idx ? "1px solid var(--hairline)" : undefined }}>
+              {/* linha principal: nome + oportunidades + conversão em destaque, e a BARRA de desfecho */}
+              <div onClick={() => setOpen((o) => ({ ...o, [c.key]: !o[c.key] }))} style={{ cursor: "pointer", padding: "11px 2px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: ".18s", color: "var(--label-3)", flex: "0 0 12px" }}><path d="M6 9l6 6 6-6" /></svg>
+                  <span style={{ flex: 1, minWidth: 0, fontWeight: 650, fontSize: 13.5, fontStyle: semDado ? "italic" : "normal", color: semDado ? "var(--label-3)" : "var(--label)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nome(c.key)}</span>
+                  <span className="tnum" style={{ fontSize: 12.5, color: "var(--label-2)", flex: "0 0 auto" }}>{fmt(c.total)} op.</span>
+                  {cmp && <CmpChip cur={c.total} prev={cmp.get(c.key)} />}
+                  <span className="tnum" style={{ fontWeight: 750, fontSize: 15, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)", width: 48, textAlign: "right", flex: "0 0 auto" }}>{(c.conv * 100).toFixed(0)}%</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, paddingLeft: 22 }}>
+                  <span style={{ flex: 1, display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "var(--cream)" }}>
+                    {c.won > 0 && <span style={{ width: `${pct(c.won)}%`, background: "var(--excelente)" }} title={`Ganhos: ${c.won}`} />}
+                    {c.open > 0 && <span style={{ width: `${pct(c.open)}%`, background: "var(--cyan)" }} title={`Em aberto: ${c.open}`} />}
+                    {c.lost > 0 && <span style={{ width: `${pct(c.lost)}%`, background: "var(--red)" }} title={`Perdidos: ${c.lost}`} />}
+                  </span>
+                  <span style={{ fontSize: 11.5, color: "var(--label-3)", flex: "0 0 auto", whiteSpace: "nowrap" }}>
+                    <b className="tnum" style={{ color: "var(--excelente)" }}>{fmt(c.won)}</b> ganho · <b className="tnum">{fmt(c.open)}</b> aberto · <b className="tnum" style={{ color: "var(--red)" }}>{fmt(c.lost)}</b> perdido
+                  </span>
+                </div>
+              </div>
+              {isOpen && (
+                <div style={{ padding: "2px 0 14px 22px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 18 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)", marginBottom: 6 }}>Top motivos de perda</div>
+                    {c.lossTop.length ? c.lossTop.map((l) => (
+                      <div key={l.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "2px 0" }}>
+                        <span style={{ color: "var(--label-1)" }}>{l.key}</span><span className="tnum" style={{ color: "var(--label-2)" }}>{fmt(l.count)}</span>
+                      </div>
+                    )) : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem perdas com motivo registrado.</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)", marginBottom: 6 }}>Por qualificação</div>
+                    {c.byQualification.length ? c.byQualification.map((q) => (
+                      <div key={q.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "2px 0" }}>
+                        <span style={{ color: "var(--label-1)" }}>{q.key}</span><span className="tnum" style={{ color: "var(--label-2)" }}>{fmt(q.count)}</span>
+                      </div>
+                    )) : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem qualificação informada.</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 10 }}>
         Conversão = ganhos ÷ oportunidades da campanha. Clique numa linha pra ver motivos de perda e qualificação.

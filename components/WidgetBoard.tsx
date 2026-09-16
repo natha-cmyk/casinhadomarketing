@@ -12,7 +12,9 @@ import { IconBtn } from "@/components/ui";
 
 export interface WidgetDef { id: string; label: string; node: ReactNode; defaultSpan?: number; defaultH?: number }
 
-const COLS = 6, GAP = 12, ROWH = 28, MINW = 2, MINH = 5, DEFH = 9;
+// ROWH pequeno (8px) = grid FINO: o card ocupa quase exatamente a altura do conteúdo (pouca sobra de
+// arredondamento). rowGap fica 0 (o espaço entre cards entra na própria medição, +GAP); columnGap = GAP.
+const COLS = 6, GAP = 12, ROWH = 8, MINW = 2, MINH = 4, DEFH = 30;
 const clampW = (n: number) => Math.max(MINW, Math.min(COLS, Math.round(n)));
 const clampX = (x: number, w: number) => Math.max(0, Math.min(COLS - w, Math.round(x)));
 const fracLabel = (w: number) => (w >= 6 ? "inteiro" : w >= 4 ? "2/3" : w === 3 ? "metade" : "1/3");
@@ -117,7 +119,7 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
     if (prev) { prev.disconnect(); obs.current.delete(id); }
     if (!el) return;
     const calc = () => {
-      const rows = Math.max(MINH, Math.ceil((el.scrollHeight + GAP) / (ROWH + GAP)));
+      const rows = Math.max(MINH, Math.ceil((el.scrollHeight + GAP) / ROWH)); // +GAP = folga entre cards (rowGap=0)
       setMeasured((m) => (m[id] === rows ? m : { ...m, [id]: rows }));
     };
     const ro = new ResizeObserver(calc);
@@ -128,7 +130,7 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
   const genDefault = (ids: string[]): Record<string, Cell> => {
     const g: Record<string, Cell> = {}; let x = 0, y = 0, rowH = 0;
     for (const id of ids) {
-      const w = clampW(byId.get(id)?.defaultSpan ?? 3); const h = byId.get(id)?.defaultH ?? DEFH;
+      const w = clampW(byId.get(id)?.defaultSpan ?? 3); const h = DEFH; // altura só inicial; medição ajusta
       if (x + w > COLS) { x = 0; y += rowH; rowH = 0; }
       g[id] = { x, y, w, h }; x += w; rowH = Math.max(rowH, h);
     }
@@ -139,7 +141,7 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
     if (!stored) return genDefault(visible);
     const g: Record<string, Cell> = {}; let maxY = 0;
     for (const id of visible) if (stored[id]) { g[id] = stored[id]; maxY = Math.max(maxY, stored[id].y + stored[id].h); }
-    for (const id of visible) if (!g[id]) { g[id] = { x: 0, y: maxY, w: clampW(byId.get(id)?.defaultSpan ?? 3), h: byId.get(id)?.defaultH ?? DEFH }; maxY += g[id].h; }
+    for (const id of visible) if (!g[id]) { g[id] = { x: 0, y: maxY, w: clampW(byId.get(id)?.defaultSpan ?? 3), h: DEFH }; maxY += g[id].h; }
     return g;
   };
   // posições (x,y,w) do layout + live durante o arraste; ALTURA (h) sempre a MEDIDA do conteúdo.
@@ -161,7 +163,7 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
     const onMove = (e: PointerEvent) => {
       if (!gridRef.current) return;
       const rect = gridRef.current.getBoundingClientRect();
-      const colStep = (rect.width - GAP * (COLS - 1)) / COLS + GAP, rowStep = ROWH + GAP;
+      const colStep = (rect.width - GAP * (COLS - 1)) / COLS + GAP, rowStep = ROWH;
       if (drag.current) {
         const id = drag.current.id, cur = grid[id];
         const x = clampX((e.clientX - rect.left) / colStep - cur.w / 2 + 0.5, cur.w);
@@ -182,7 +184,7 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
   return (
     <div>
       {header}
-      <div ref={gridRef} className="wb-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gridAutoRows: `${ROWH}px`, gap: GAP, marginBottom: 16 }}>
+      <div ref={gridRef} className="wb-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gridAutoRows: `${ROWH}px`, columnGap: GAP, rowGap: 0, marginBottom: 16 }}>
         {visible.map((id: string) => {
           const c = grid[id]; if (!c) return null; const w = byId.get(id)!;
           return (
