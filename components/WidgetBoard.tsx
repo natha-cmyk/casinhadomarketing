@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { PanelBoundary } from "@/components/PanelBoundary";
+import { IconBtn } from "@/components/ui";
 
 export interface WidgetDef { id: string; label: string; node: ReactNode; defaultSpan?: number; defaultH?: number }
 
@@ -31,9 +32,18 @@ const sbtn: React.CSSProperties = { cursor: "pointer", border: "none", backgroun
 const barCol = (active: boolean) => (active ? "var(--cyan)" : "color-mix(in srgb, var(--cyan) 50%, transparent)");
 
 // Botão "Organizar" pra colocar no TOPO da página (PageHead), junto dos outros botões.
-export function WidgetEditButton({ panel, className = "btn-link" }: { panel: string; className?: string }) {
+export function WidgetEditButton({ panel, className = "btn-link", icon }: { panel: string; className?: string; icon?: boolean }) {
   const editing = useStore((s) => s.widgetEdit) === panel;
   const toggle = useStore((s) => s.toggleWidgetEdit);
+  if (icon) {
+    return (
+      <IconBtn label={editing ? "Concluir organização" : "Organizar widgets — arrastar e redimensionar"} onClick={() => toggle(panel)} active={editing}>
+        {editing
+          ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+          : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></svg>}
+      </IconBtn>
+    );
+  }
   return (
     <button className={`${className}${editing ? " on" : ""}`} type="button" onClick={() => toggle(panel)} title="Organizar widgets (arrastar/redimensionar)">
       {editing ? "✓ Concluir" : "✎ Organizar"}

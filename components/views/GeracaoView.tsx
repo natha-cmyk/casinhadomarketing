@@ -3,13 +3,12 @@
 // Conecta via ClickUp nativo (API REST) ou webhook genérico e mostra leads/oportunidades
 // por canal, categoria, produto, qualificação, status/etapa e motivo de perda, respeitando
 // o período da toolbar. O usuário mapeia os campos personalizados do ClickUp por dimensão.
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
-import { PageHead, BarRow } from "@/components/ui";
+import { PageHead, BarRow, IconBtn, DeltaChip } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
-import { Ic } from "@/components/Ic";
 import { fmt, money } from "@/lib/format";
-import { daysInMonth, type Period } from "@/lib/scope";
+import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
 import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { CRM_PROVIDERS, crmProvider } from "@/lib/crm/providers";
 
@@ -127,6 +126,7 @@ export function GeracaoView() {
   const [editing, setEditing] = useState(false);
 
   const [data, setData] = useState<LeadsData | null>(null);
+  const [cmpData, setCmpData] = useState<LeadsData | null>(null); // período B (comparação)
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -176,6 +176,18 @@ export function GeracaoView() {
       alive = false;
     };
   }, [connected, range.since, range.until]);
+
+  // COMPARAÇÃO: carrega os leads do período B quando o comparativo está ligado (s.scenario).
+  const cmpRange = useMemo(() => dateRange(s.cmp), [s.cmp.period, s.cmp.year, s.cmp.month, s.cmp.quarter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!connected || !s.scenario) { setCmpData(null); return; }
+    let alive = true;
+    fetch(`/api/crm/leads?since=${cmpRange.since}&until=${cmpRange.until}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (alive && d?.ok) setCmpData(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [connected, s.scenario, cmpRange.since, cmpRange.until]);
 
   async function saveConfig(patch: Partial<CrmConfig>) {
     setErr(null);
@@ -284,18 +296,21 @@ export function GeracaoView() {
               {config?.provider === "clickup" && (
                 <>
                   <span style={{ fontSize: 11.5, color: "var(--label-3)" }}>{lastSyncLabel(config?.lastSyncAt)}</span>
-                  <button className="btn-link ig" onClick={() => sync(false)} disabled={syncing} type="button" title="Rápido: puxa só os leads que mudaram desde o último sync.">
-                    <Ic name="leads" /> {syncing ? "Sincronizando…" : "Sincronizar (rápido)"}
-                  </button>
-                  <button className="btn-link" onClick={() => sync(true)} disabled={syncing} type="button" title="Completo: reprocessa TODOS os leads do zero e remove os arquivados. Use quando arquivar/mudar campos no ClickUp.">
-                    Ressincronizar tudo
-                  </button>
+                  <IconBtn label={syncing ? "Sincronizando…" : "Sincronizar rápido — puxa só o que mudou"} onClick={() => sync(false)} disabled={syncing} busy={syncing} variant="ig">
+                    {/* raio: sincronização rápida */}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" /></svg>
+                  </IconBtn>
+                  <IconBtn label="Ressincronizar tudo — reprocessa e remove os arquivados" onClick={() => sync(true)} disabled={syncing} busy={syncing}>
+                    {/* setas circulares: recarga completa */}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
+                  </IconBtn>
                 </>
               )}
-              <WidgetEditButton panel="crm" />
-              <button className="btn-link" onClick={() => setEditing(true)} type="button">
-                Reconfigurar
-              </button>
+              <WidgetEditButton panel="crm" icon />
+              <IconBtn label="Reconfigurar conexão do CRM" onClick={() => setEditing(true)}>
+                {/* engrenagem */}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>
+              </IconBtn>
             </div>
           ) : undefined
         }
@@ -320,7 +335,7 @@ export function GeracaoView() {
       {connected && (
         <>
           {loadingLeads && <Spinner texto="Carregando leads…" />}
-          {!loadingLeads && data && <Dashboard data={data} />}
+          {!loadingLeads && data && <Dashboard data={data} cmpData={cmpData} />}
         </>
       )}
     </>
@@ -634,8 +649,24 @@ function OutcomeBar({ won, lost, open }: { won: number; lost: number; open: numb
 const PIE_COLORS = ["var(--cyan)", "var(--red)", "var(--excelente)", "var(--atencao)", "#8E5BE0", "var(--ink)", "#1877F2", "#E1306C", "#00A884", "#FF6B35"];
 const pieColor = (i: number) => PIE_COLORS[i % PIE_COLORS.length];
 
+// chip de comparação período A vs B: "▲12% · +63" (número absoluto + %). Neutro de propósito — em CRM
+// "mais" nem sempre é bom (ex.: mais perdidos). Some quando não há período B ou faltam os dois valores.
+function CmpChip({ cur, prev, pctOnly }: { cur?: number | null; prev?: number | null; pctOnly?: boolean }) {
+  if (cur == null || prev == null) return null;
+  if (prev === 0 && cur === 0) return null;
+  if (prev === 0 && !pctOnly) return <span className="chip scn">novo · +{fmt(cur)}</span>;
+  // pctOnly (taxas em %): só a variação relativa, sem número absoluto (que seria uma fração sem sentido)
+  return <DeltaChip delta={computeDelta(cur, prev, !pctOnly)} scn />;
+}
+// mapa key→count de uma dimensão do período B (pra achar o valor anterior de cada linha)
+function cmpMapOf(rows?: Row[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rows ?? []) m.set(r.key, r.count);
+  return m;
+}
+
 // ── Pizza (donut) SVG + legenda ──
-function PieChart({ rows }: { rows: Row[] }) {
+function PieChart({ rows, cmp }: { rows: Row[]; cmp?: Map<string, number> }) {
   const total = rows.reduce((a, r) => a + r.count, 0);
   if (total === 0) return null;
   const top = rows.slice(0, 9);
@@ -670,6 +701,7 @@ function PieChart({ rows }: { rows: Row[] }) {
             <span style={{ flex: 1, color: "var(--label)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.key === "outros" ? "Outros" : fill(a.key)}</span>
             <span className="tnum" style={{ color: "var(--label-2)", fontWeight: 600 }}>{fmt(a.count)}</span>
             <span className="tnum" style={{ color: "var(--label-3)", width: 38, textAlign: "right" }}>{Math.round(a.frac * 100)}%</span>
+            {a.key !== "outros" && cmp && <CmpChip cur={a.count} prev={cmp.get(a.key)} />}
           </div>
         ))}
       </div>
@@ -683,7 +715,7 @@ function starsOf(key: string): number | null {
   return m ? Number(m[1]) : null;
 }
 // ── Qualificação por estrelas: uma linha por nível, com ★ ──
-function StarBars({ rows }: { rows: Row[] }) {
+function StarBars({ rows, cmp }: { rows: Row[]; cmp?: Map<string, number> }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   // ordena por nº de estrelas desc quando aplicável
   const sorted = [...rows].sort((a, b) => (starsOf(b.key) ?? -1) - (starsOf(a.key) ?? -1));
@@ -700,6 +732,7 @@ function StarBars({ rows }: { rows: Row[] }) {
               <span style={{ display: "block", height: "100%", width: `${(r.count / max) * 100}%`, background: pieColor(i) }} />
             </span>
             <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700, width: 28, textAlign: "right" }}>{fmt(r.count)}</span>
+            {cmp && <CmpChip cur={r.count} prev={cmp.get(r.key)} />}
           </div>
         );
       })}
@@ -716,6 +749,7 @@ function GroupCard({
   defaultViz = "list",
   stars = false,
   showValue = true,
+  cmpRows,
 }: {
   title: string;
   rows: Row[];
@@ -724,14 +758,19 @@ function GroupCard({
   defaultViz?: "list" | "pizza";
   stars?: boolean; // qualificação: mostra ★ em vez de texto
   showValue?: boolean; // false = só contagem (sem R$)
+  cmpRows?: Row[]; // mesma dimensão no período B (comparação) — habilita delta por linha
 }) {
   const [viz, setViz] = useState<"list" | "pizza">(defaultViz);
   const max = Math.max(1, ...rows.map((r) => r.count));
+  const cmp = cmpRows ? cmpMapOf(cmpRows) : undefined;
+  const total = rows.reduce((a, r) => a + r.count, 0);
+  const cmpTotal = cmpRows ? cmpRows.reduce((a, r) => a + r.count, 0) : undefined;
   return (
     <div className="card">
       <div className="card-head">
         <div className="t">{title}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {cmp && <CmpChip cur={total} prev={cmpTotal} />}
           {rows.length > 0 && (
             <div className="seg" style={{ transform: "scale(.86)", transformOrigin: "right center" }}>
               <button className={viz === "list" ? "on" : ""} onClick={() => setViz("list")} type="button" title="Lista">☰</button>
@@ -744,9 +783,9 @@ function GroupCard({
       {!rows.length ? (
         <div className="sub" style={{ color: "var(--label-3)" }}>{empty}</div>
       ) : viz === "pizza" ? (
-        <PieChart rows={rows} />
+        <PieChart rows={rows} cmp={cmp} />
       ) : stars ? (
-        <StarBars rows={rows} />
+        <StarBars rows={rows} cmp={cmp} />
       ) : (
         rows.map((r, i) => (
           <BarRow
@@ -756,6 +795,7 @@ function GroupCard({
             max={max}
             color={typeof color === "function" ? color(i) : color}
             formatted={showValue && r.value > 0 ? `${fmt(r.count)} · ${money(r.value)}` : fmt(r.count)}
+            after={cmp ? <CmpChip cur={r.count} prev={cmp.get(r.key)} /> : undefined}
           />
         ))
       )}
@@ -849,7 +889,7 @@ const CRM_DIMS: { dim: string; label: string }[] = [
 ];
 
 // ── Dashboard de leads ──
-function Dashboard({ data }: { data: LeadsData }) {
+function Dashboard({ data, cmpData }: { data: LeadsData; cmpData: LeadsData | null }) {
   const custom = useStore((s) => s.widgetLayout["crm"]?.custom) ?? [];
   const addCustomWidget = useStore((s) => s.addCustomWidget);
   const removeCustomWidget = useStore((s) => s.removeCustomWidget);
@@ -874,11 +914,21 @@ function Dashboard({ data }: { data: LeadsData }) {
     channel: data.byChannel, category: data.byCategory, product: data.byProduct,
     qualification: data.byQualification, stage: data.byStage, status: data.byStatus, lossReason: data.lossReasons,
   };
+  // mesma coisa pro período B (comparação) — undefined quando não está comparando
+  const cmpDimRows: Record<string, Row[] | undefined> = cmpData ? {
+    channel: cmpData.byChannel, category: cmpData.byCategory, product: cmpData.byProduct,
+    qualification: cmpData.byQualification, stage: cmpData.byStage, status: cmpData.byStatus, lossReason: cmpData.lossReasons,
+  } : {};
   // indicadores derivados (inteligência de marketing) — só do que já temos, sem inventar
   const ticket = data.won ? data.wonValue / data.won : 0; // ticket médio do ganho
   const lossRate = data.total ? data.lost / data.total : 0; // taxa de perda
   const openRate = data.total ? data.open / data.total : 0; // % em aberto
   const avgLead = data.total ? data.totalValue / data.total : 0; // valor médio por lead
+  // derivados do período B (comparação) — undefined quando não está comparando
+  const cmpTicket = cmpData && cmpData.won ? cmpData.wonValue / cmpData.won : undefined;
+  const cmpLossRate = cmpData && cmpData.total ? cmpData.lost / cmpData.total : undefined;
+  const cmpOpenRate = cmpData && cmpData.total ? cmpData.open / cmpData.total : undefined;
+  const cmpAvgLead = cmpData && cmpData.total ? cmpData.totalValue / cmpData.total : undefined;
 
   return (
     <>
@@ -892,22 +942,22 @@ function Dashboard({ data }: { data: LeadsData }) {
         <OutcomeBar won={data.won} lost={data.lost} open={data.open} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 14, marginTop: 16 }}>
           <StatGroup title="Volume" items={[
-            { l: "Total de leads", n: fmt(data.total) },
-            { l: "Em aberto", n: fmt(data.open) },
-            { l: "Ganhos", n: fmt(data.won), c: "var(--excelente)" },
-            { l: "Perdidos", n: fmt(data.lost), c: "var(--red)" },
+            { l: "Total de leads", n: fmt(data.total), d: <CmpChip cur={data.total} prev={cmpData?.total} /> },
+            { l: "Em aberto", n: fmt(data.open), d: <CmpChip cur={data.open} prev={cmpData?.open} /> },
+            { l: "Ganhos", n: fmt(data.won), c: "var(--excelente)", d: <CmpChip cur={data.won} prev={cmpData?.won} /> },
+            { l: "Perdidos", n: fmt(data.lost), c: "var(--red)", d: <CmpChip cur={data.lost} prev={cmpData?.lost} /> },
           ]} />
           <StatGroup title="Valores" items={[
-            { l: "Valor total", n: money(data.totalValue) },
-            { l: "Valor ganho", n: money(data.wonValue), c: "var(--excelente)" },
-            { l: "Em pipeline", n: money(data.pipelineValue) },
-            { l: "Ticket médio (ganho)", n: money(ticket) },
+            { l: "Valor total", n: money(data.totalValue), d: <CmpChip cur={data.totalValue} prev={cmpData?.totalValue} /> },
+            { l: "Valor ganho", n: money(data.wonValue), c: "var(--excelente)", d: <CmpChip cur={data.wonValue} prev={cmpData?.wonValue} /> },
+            { l: "Em pipeline", n: money(data.pipelineValue), d: <CmpChip cur={data.pipelineValue} prev={cmpData?.pipelineValue} /> },
+            { l: "Ticket médio (ganho)", n: money(ticket), d: <CmpChip cur={ticket} prev={cmpTicket} /> },
           ]} />
           <StatGroup title="Taxas" items={[
-            { l: "Conversão", n: conv, c: "var(--excelente)" },
-            { l: "Taxa de perda", n: `${(lossRate * 100).toFixed(1)}%`, c: "var(--red)" },
-            { l: "Em negociação", n: `${(openRate * 100).toFixed(1)}%` },
-            { l: "Valor médio / lead", n: money(avgLead) },
+            { l: "Conversão", n: conv, c: "var(--excelente)", d: <CmpChip cur={data.convRate} prev={cmpData?.convRate} pctOnly /> },
+            { l: "Taxa de perda", n: `${(lossRate * 100).toFixed(1)}%`, c: "var(--red)", d: <CmpChip cur={lossRate} prev={cmpLossRate} pctOnly /> },
+            { l: "Em negociação", n: `${(openRate * 100).toFixed(1)}%`, d: <CmpChip cur={openRate} prev={cmpOpenRate} pctOnly /> },
+            { l: "Valor médio / lead", n: money(avgLead), d: <CmpChip cur={avgLead} prev={cmpAvgLead} /> },
           ]} />
         </div>
       </div>
@@ -921,22 +971,22 @@ function Dashboard({ data }: { data: LeadsData }) {
       <WidgetBoard
         panel="crm"
         widgets={[
-          { id: "canal", label: "Por canal", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por canal" rows={data.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" /> },
-          { id: "categoria", label: "Por categoria de produto", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por categoria de produto" rows={data.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} /> },
-          { id: "produto", label: "Por tipo de produto", defaultSpan: 3, defaultH: 14, node: <GroupCard title="Por tipo de produto" rows={data.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} /> },
-          { id: "qualificacao", label: "Por qualificação", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por qualificação" rows={data.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
-          { id: "funil", label: "Por funil / etapa", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por funil / etapa" rows={data.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
-          { id: "status", label: "Por status", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por status" rows={data.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
-          { id: "campanha", label: "Performance por campanha", defaultSpan: 6, defaultH: 13, node: <CampaignPerfCard rows={data.campaignHealth || []} /> },
-          ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, defaultH: 9, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
-          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Performance por canal", defaultSpan: 6, defaultH: 9, node: <ChannelHealthCard rows={data.channelHealth} /> }] : []),
+          { id: "canal", label: "Por canal", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por canal" rows={data.byChannel} cmpRows={cmpData?.byChannel} color={cycle} empty="Sem canal informado." defaultViz="pizza" /> },
+          { id: "categoria", label: "Por categoria de produto", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por categoria de produto" rows={data.byCategory} cmpRows={cmpData?.byCategory} color={cycle} empty="Sem categoria informada." defaultViz="list" showValue={false} /> },
+          { id: "produto", label: "Por tipo de produto", defaultSpan: 3, defaultH: 14, node: <GroupCard title="Por tipo de produto" rows={data.byProduct} cmpRows={cmpData?.byProduct} color={cycle} empty="Sem produto informado." defaultViz="list" showValue={false} /> },
+          { id: "qualificacao", label: "Por qualificação", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por qualificação" rows={data.byQualification} cmpRows={cmpData?.byQualification} color={cycle} empty="Sem qualificação informada." stars /> },
+          { id: "funil", label: "Por funil / etapa", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por funil / etapa" rows={data.byStage} cmpRows={cmpData?.byStage} color="var(--cyan)" empty="Sem etapa informada." defaultViz="pizza" showValue={false} /> },
+          { id: "status", label: "Por status", defaultSpan: 3, defaultH: 10, node: <GroupCard title="Por status" rows={data.byStatus} cmpRows={cmpData?.byStatus} color={cycle} empty="Sem status informado." defaultViz="list" showValue={false} /> },
+          { id: "campanha", label: "Performance por campanha", defaultSpan: 6, defaultH: 13, node: <CampaignPerfCard rows={data.campaignHealth || []} cmpRows={cmpData?.campaignHealth} /> },
+          ...(data.lossReasons.length > 0 ? [{ id: "perda", label: "Motivos de perda", defaultSpan: 3, defaultH: 9, node: <GroupCard title="Motivos de perda" rows={data.lossReasons} cmpRows={cmpData?.lossReasons} color={pieColor} empty="Sem motivo informado." defaultViz="pizza" showValue={false} /> }] : []),
+          ...(data.channelHealth && data.channelHealth.length > 0 ? [{ id: "saude-canal", label: "Performance por canal", defaultSpan: 6, defaultH: 9, node: <ChannelHealthCard rows={data.channelHealth} cmpRows={cmpData?.channelHealth} /> }] : []),
           // gráficos criados pelo usuário (chart builder)
           ...custom.map((cw) => ({
             id: `c-${cw.id}`,
             label: cw.title,
             defaultSpan: 3,
             defaultH: 10,
-            node: <GroupCard title={cw.title} rows={dimRows[cw.dim] || []} color={cw.viz === "pizza" ? pieColor : cycle} empty="Sem dados nesta dimensão." defaultViz={cw.viz} stars={cw.dim === "qualification"} showValue={false} />,
+            node: <GroupCard title={cw.title} rows={dimRows[cw.dim] || []} cmpRows={cmpDimRows[cw.dim]} color={cw.viz === "pizza" ? pieColor : cycle} empty="Sem dados nesta dimensão." defaultViz={cw.viz} stars={cw.dim === "qualification"} showValue={false} />,
           })),
         ]}
       />
@@ -1011,7 +1061,7 @@ function ChartBuilder({ custom, onClose, onCreate, onDelete }: {
 }
 
 // grupo de indicadores (rótulo + coluna de valores) — organiza a Saúde sem virar sopa de quadradinhos
-function StatGroup({ title, items }: { title: string; items: { l: string; n: string; c?: string }[] }) {
+function StatGroup({ title, items }: { title: string; items: { l: string; n: string; c?: string; d?: ReactNode }[] }) {
   return (
     <div style={{ border: "1px solid var(--hairline)", borderRadius: 12, padding: "12px 14px" }}>
       <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".5px", textTransform: "uppercase", color: "var(--label-3)", marginBottom: 8 }}>{title}</div>
@@ -1019,7 +1069,10 @@ function StatGroup({ title, items }: { title: string; items: { l: string; n: str
         {items.map((it) => (
           <div key={it.l} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
             <span style={{ fontSize: 12.5, color: "var(--label-2)" }}>{it.l}</span>
-            <span className="tnum" style={{ fontSize: 15, fontWeight: 700, color: it.c || "var(--label)" }}>{it.n}</span>
+            <span style={{ display: "flex", alignItems: "baseline", gap: 6, flexShrink: 0 }}>
+              <span className="tnum" style={{ fontSize: 15, fontWeight: 700, color: it.c || "var(--label)" }}>{it.n}</span>
+              {it.d}
+            </span>
           </div>
         ))}
       </div>
@@ -1028,9 +1081,10 @@ function StatGroup({ title, items }: { title: string; items: { l: string; n: str
 }
 
 // ── Performance por canal: conversão (ganho/total) por canal, ordenado. Alterna barras/pizza ──
-function ChannelHealthCard({ rows }: { rows: NonNullable<LeadsData["channelHealth"]> }) {
+function ChannelHealthCard({ rows, cmpRows }: { rows: NonNullable<LeadsData["channelHealth"]>; cmpRows?: NonNullable<LeadsData["channelHealth"]> }) {
   const [viz, setViz] = useState<"list" | "pizza">("list");
   const top = rows.slice(0, 8);
+  const cmp = cmpRows ? new Map(cmpRows.map((c) => [c.key, c.total])) : undefined;
   return (
     <div className="card">
       <div className="card-head">
@@ -1061,6 +1115,7 @@ function ChannelHealthCard({ rows }: { rows: NonNullable<LeadsData["channelHealt
                 <span className="tnum" style={{ fontSize: 12.5, fontWeight: 700, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)", width: 62, textAlign: "right" }}>
                   {(c.conv * 100).toFixed(0)}% conv.
                 </span>
+                {cmp && <CmpChip cur={c.total} prev={cmp.get(c.key)} />}
               </div>
             ))}
           </div>
@@ -1075,8 +1130,9 @@ function ChannelHealthCard({ rows }: { rows: NonNullable<LeadsData["channelHealt
 
 // Performance por campanha: por campanha → oportunidades, conversão, e (expandindo) top motivos de
 // perda + qualificação. Campanha vazia = "Não vinculado à campanha" (não "não preenchido").
-function CampaignPerfCard({ rows }: { rows: NonNullable<LeadsData["campaignHealth"]> }) {
+function CampaignPerfCard({ rows, cmpRows }: { rows: NonNullable<LeadsData["campaignHealth"]>; cmpRows?: NonNullable<LeadsData["campaignHealth"]> }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const cmp = cmpRows ? new Map(cmpRows.map((c) => [c.key, c.total])) : undefined;
   const SEMCAMP = "Não vinculado à campanha";
   const nome = (k: string) => (k && k.trim() ? k : SEMCAMP);
   if (!rows.length) {
@@ -1121,7 +1177,7 @@ function CampaignPerfCard({ rows }: { rows: NonNullable<LeadsData["campaignHealt
                       </svg>
                     </td>
                     <td style={{ textAlign: "left", fontWeight: 600, fontStyle: semDado ? "italic" : "normal", color: semDado ? "var(--label-3)" : "var(--label)" }}>{nome(c.key)}</td>
-                    <td className="tnum">{fmt(c.total)}</td>
+                    <td className="tnum"><span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>{fmt(c.total)}{cmp && <CmpChip cur={c.total} prev={cmp.get(c.key)} />}</span></td>
                     <td className="tnum" style={{ color: "var(--excelente)" }}>{fmt(c.won)}</td>
                     <td className="tnum" style={{ color: "var(--red)" }}>{fmt(c.lost)}</td>
                     <td className="tnum" style={{ fontWeight: 700, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)" }}>{(c.conv * 100).toFixed(0)}%</td>

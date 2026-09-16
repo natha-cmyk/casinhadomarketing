@@ -84,6 +84,18 @@ button{font-family:inherit} a{color:inherit}
 .btn-link{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--hairline-2);background:#fff;border-radius:9px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--label);cursor:pointer;text-decoration:none;white-space:nowrap;transition:.12s}
 .btn-link:hover{background:var(--surface)} .btn-link svg{width:16px;height:16px}
 .btn-link.ig{border-color:transparent;background:linear-gradient(120deg,#FF001E,#C13584 60%,#833AB4);color:#fff}
+/* Botão-ícone com dica no hover (reutilizável nas toolbars dos painéis). O rótulo vem em data-tip. */
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;flex:0 0 auto;border:1px solid var(--hairline-2);border-radius:10px;background:#fff;color:var(--label-2);cursor:pointer;position:relative;transition:background .14s,color .14s,border-color .14s}
+.icon-btn svg{width:17px;height:17px}
+.icon-btn:hover:not(:disabled){background:var(--surface);color:var(--label)}
+.icon-btn.on{background:var(--cyan);border-color:var(--cyan);color:#fff}
+.icon-btn.ig{border-color:transparent;background:linear-gradient(120deg,#FF001E,#C13584 60%,#833AB4);color:#fff}
+.icon-btn:disabled{opacity:.5;cursor:default}
+.icon-btn[data-tip]::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-size:11.5px;font-weight:600;letter-spacing:.1px;padding:5px 9px;border-radius:8px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.icon-btn[data-tip]::before{content:"";position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--ink);opacity:0;transition:opacity .12s;z-index:60}
+.icon-btn[data-tip]:hover::after,.icon-btn[data-tip]:hover::before{opacity:1}
+.icon-btn.spin svg{animation:icbspin 1s linear infinite}
+@keyframes icbspin{to{transform:rotate(360deg)}}
 
 .grid{display:grid;gap:16px}
 .card{background:#fff;border:1px solid var(--hairline);border-radius:var(--r-lg);box-shadow:var(--shadow-card);padding:18px 20px}

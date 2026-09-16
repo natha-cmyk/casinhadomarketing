@@ -136,7 +136,7 @@ export function PainelView() {
 
   return (
     <>
-      <PageHead eyebrow="VISÃO GERAL" title="Painel" right={!isEmpty && list.length > 0 ? <WidgetEditButton panel="overview" /> : undefined} />
+      <PageHead eyebrow="VISÃO GERAL" title="Painel" right={!isEmpty && list.length > 0 ? <WidgetEditButton panel="overview" icon /> : undefined} />
 
       {isEmpty ? (
         <div className="empty">

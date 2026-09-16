@@ -53,6 +53,28 @@ export function Chip({ kind = "flat", children }: { kind?: "up" | "down" | "flat
   return <span className={`chip ${kind}`}>{children}</span>;
 }
 
+// Botão só-ícone com dica (tooltip) ao passar o mouse — pra deixar as toolbars dos painéis limpas.
+// `label` vira a dica no hover E o aria-label (acessível). `busy` gira o ícone. `active` realça (ciano).
+export function IconBtn({
+  label, onClick, children, disabled, active, busy, variant, type = "button",
+}: {
+  label: string; onClick?: () => void; children: ReactNode; disabled?: boolean; active?: boolean;
+  busy?: boolean; variant?: "ig"; type?: "button" | "submit";
+}) {
+  return (
+    <button
+      type={type}
+      className={`icon-btn${active ? " on" : ""}${busy ? " spin" : ""}${variant === "ig" ? " ig" : ""}`}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      data-tip={label}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function DeltaChip({ delta, label, scn }: { delta: Delta; label?: string; scn?: boolean }) {
   const kind = scn ? "scn" : delta.kind;
   return (
@@ -102,7 +124,7 @@ export function Insight({ color = "var(--cyan)", icon, children }: { color?: str
   );
 }
 
-export function BarRow({ k, v, max, color, formatted }: { k: string; v: number; max: number; color: string; formatted?: string }) {
+export function BarRow({ k, v, max, color, formatted, after }: { k: string; v: number; max: number; color: string; formatted?: string; after?: ReactNode }) {
   return (
     <div className="bar-row">
       <div className="k">{k}</div>
@@ -110,6 +132,7 @@ export function BarRow({ k, v, max, color, formatted }: { k: string; v: number; 
         <div className="bar-fill" style={{ width: `${(v / max) * 100 || 0}%`, background: color }} />
       </div>
       <div className="v tnum">{formatted ?? v.toLocaleString("pt-BR")}</div>
+      {after ? <div style={{ flex: "0 0 auto", marginLeft: 6 }}>{after}</div> : null}
     </div>
   );
 }
