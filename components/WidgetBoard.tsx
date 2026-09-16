@@ -7,6 +7,7 @@
 // Ambos: arrastar pela alça ⠿, largura em colunas (6), ocultar/mostrar, restaurar. Persiste por painel.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
+import { PanelBoundary } from "@/components/PanelBoundary";
 
 export interface WidgetDef { id: string; label: string; node: ReactNode; defaultSpan?: number; defaultH?: number }
 
@@ -66,7 +67,7 @@ export function WidgetBoard({ panel, widgets, mode = "grid" }: { panel: string; 
 
   // ── modo estreito (mobile): empilha, sem edição ──
   if (narrow) {
-    return <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 16 }}>{visible.map((id) => <div key={id}>{byId.get(id)!.node}</div>)}</div>;
+    return <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 16 }}>{visible.map((id) => <div key={id}><PanelBoundary label={byId.get(id)!.label}>{byId.get(id)!.node}</PanelBoundary></div>)}</div>;
   }
 
   // barra fina só no modo edição (dica + restaurar). O toggle "Organizar" fica no topo (WidgetEditButton).
@@ -153,7 +154,7 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
                   <button type="button" onClick={() => hide(id)} style={{ ...sbtn, fontSize: 13 }} title="Ocultar">👁</button>
                 </div>
               )}
-              <div className="wb-fill" style={{ height: "100%", overflow: "auto", borderRadius: 14, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 2 }}>{w.node}</div>
+              <div className="wb-fill" style={{ height: "100%", overflow: "auto", borderRadius: 14, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 2 }}><PanelBoundary label={w.label}>{w.node}</PanelBoundary></div>
               {editing && (
                 <>
                   <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id, axis: "x" }; document.body.style.userSelect = "none"; }} title="Largura" style={{ position: "absolute", top: 0, right: -3, width: 12, height: "100%", cursor: "ew-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: 4, height: 40, borderRadius: 999, background: barCol(resize.current?.id === id) }} /></span>
@@ -250,7 +251,7 @@ function FlowBoard({ panel, byId, order, visible, hiddenList, hidden, layout, se
                 </div>
               )}
               <div style={{ position: "relative", borderRadius: 14, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 2 }}>
-                {w.node}
+                <PanelBoundary label={w.label}>{w.node}</PanelBoundary>
                 {editing && (
                   <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id }; document.body.style.userSelect = "none"; }} title="Largura" style={{ position: "absolute", top: 0, right: -3, width: 12, height: "100%", cursor: "ew-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: 4, height: 40, borderRadius: 999, background: barCol(resize.current?.id === id) }} /></span>
                 )}
