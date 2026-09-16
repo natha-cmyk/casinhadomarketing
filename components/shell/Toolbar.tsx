@@ -116,6 +116,17 @@ export function Toolbar() {
           return s.setCmp({ period: "mes", year: s.month === 0 ? s.year - 1 : s.year, month: (s.month + 11) % 12 });
         };
         const anoPassado = () => s.setCmp({ period: s.period, year: s.year - 1, month: s.month, week: s.week, quarter: s.quarter });
+        // "mês passado" = recua 1 mês MANTENDO a semana (ex.: semana 2 → semana 2 do mês anterior)
+        const mesPassado = () => s.setCmp({ period: s.period, year: s.month === 0 ? s.year - 1 : s.year, month: (s.month + 11) % 12, week: s.week, quarter: s.quarter });
+        // atalhos CONTEXTUAIS ao período atual (A). Rótulos que dizem exatamente o que fazem.
+        const presets: { label: string; fn: () => void }[] =
+          s.period === "semana"
+            ? [{ label: "semana anterior", fn: anterior }, { label: "mesma semana · mês passado", fn: mesPassado }, { label: "mesma semana · ano passado", fn: anoPassado }]
+            : s.period === "mes"
+              ? [{ label: "mês passado", fn: anterior }, { label: "mesmo mês · ano passado", fn: anoPassado }]
+              : s.period === "trimestre"
+                ? [{ label: "trimestre anterior", fn: anterior }, { label: "mesmo trim. · ano passado", fn: anoPassado }]
+                : [{ label: "ano anterior", fn: anterior }];
         return (
           <div className="scnbar scnbar-flex">
             <b>Comparar com</b>
@@ -142,8 +153,9 @@ export function Toolbar() {
                 {[0, 1, 2, 3].map((q) => <option key={q} value={q}>{"Q" + (q + 1)}</option>)}
               </select>
             )}
-            <button className="scn-preset" type="button" onClick={anterior} title="Período imediatamente anterior ao atual">período anterior</button>
-            <button className="scn-preset" type="button" onClick={anoPassado} title="Mesmo período, um ano atrás">ano passado</button>
+            {presets.map((p) => (
+              <button key={p.label} className="scn-preset" type="button" onClick={p.fn}>{p.label}</button>
+            ))}
             <span className="scn-lbl">{scopeLabelText(scope)} <b>vs</b> {scopeLabelText(cmpScope)}</span>
           </div>
         );

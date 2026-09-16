@@ -1432,7 +1432,7 @@ export function SocialInsights({ rede }: { rede: string }) {
         desc={desc}
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {cards.length > 0 && <WidgetEditButton panel={`rede:${rede}`} />}
+            {cards.length > 0 && <WidgetEditButton panel={`rede:${rede}`} icon />}
             {profileUrl && (
               <a className="btn-link" href={profileUrl} target="_blank" rel="noopener">Abrir perfil ↗</a>
             )}

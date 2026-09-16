@@ -8,22 +8,36 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
 import { PanelBoundary } from "@/components/PanelBoundary";
+import { IconBtn } from "@/components/ui";
 
 export interface WidgetDef { id: string; label: string; node: ReactNode; defaultSpan?: number; defaultH?: number }
 
-const COLS = 6, GAP = 12, ROWH = 28, MINW = 2, MINH = 5, DEFH = 9;
+// ROWH pequeno (8px) = grid FINO: o card ocupa quase exatamente a altura do conteúdo (pouca sobra de
+// arredondamento). rowGap fica 0 (o espaço entre cards entra na própria medição, +GAP); columnGap = GAP.
+const COLS = 6, GAP = 12, ROWH = 8, MINW = 2, MINH = 4, DEFH = 30;
 const clampW = (n: number) => Math.max(MINW, Math.min(COLS, Math.round(n)));
 const clampX = (x: number, w: number) => Math.max(0, Math.min(COLS - w, Math.round(x)));
 const fracLabel = (w: number) => (w >= 6 ? "inteiro" : w >= 4 ? "2/3" : w === 3 ? "metade" : "1/3");
 
 type Cell = { x: number; y: number; w: number; h: number };
-const coll = (a: Cell, b: Cell) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-function compact(grid: Record<string, Cell>, ids: string[]): Record<string, Cell> {
-  const items = ids.filter((id) => grid[id]).map((id) => ({ id, ...grid[id] })).sort((a, b) => a.y - b.y || a.x - b.x);
-  const placed: (Cell & { id: string })[] = [];
-  for (const it of items) { let y = 0; while (placed.some((p) => coll({ ...it, y }, p))) y++; placed.push({ ...it, y }); }
+// MASONRY (tipo Pinterest): empacota os cards NA ORDEM, cada um na posição x que dá o menor y
+// (coluna mais curta que comporta a largura), empate = mais à esquerda. Fecha os buracos verticais —
+// sem espaço morto. A "organização" do usuário é a ORDEM (dada pelo y/x atual); o x final é automático.
+function masonry(order: string[], cells: Record<string, Cell>, cols = COLS): Record<string, Cell> {
+  const colTops = new Array(cols).fill(0);
   const out: Record<string, Cell> = {};
-  for (const p of placed) out[p.id] = { x: p.x, y: p.y, w: p.w, h: p.h };
+  for (const id of order) {
+    const c = cells[id]; if (!c) continue;
+    const w = clampW(c.w), h = c.h;
+    let bestX = 0, bestY = Infinity;
+    for (let x = 0; x <= cols - w; x++) {
+      let y = 0;
+      for (let k = x; k < x + w; k++) y = Math.max(y, colTops[k]);
+      if (y < bestY) { bestY = y; bestX = x; }
+    }
+    out[id] = { x: bestX, y: bestY, w, h };
+    for (let k = bestX; k < bestX + w; k++) colTops[k] = bestY + h;
+  }
   return out;
 }
 
@@ -31,9 +45,18 @@ const sbtn: React.CSSProperties = { cursor: "pointer", border: "none", backgroun
 const barCol = (active: boolean) => (active ? "var(--cyan)" : "color-mix(in srgb, var(--cyan) 50%, transparent)");
 
 // Botão "Organizar" pra colocar no TOPO da página (PageHead), junto dos outros botões.
-export function WidgetEditButton({ panel, className = "btn-link" }: { panel: string; className?: string }) {
+export function WidgetEditButton({ panel, className = "btn-link", icon }: { panel: string; className?: string; icon?: boolean }) {
   const editing = useStore((s) => s.widgetEdit) === panel;
   const toggle = useStore((s) => s.toggleWidgetEdit);
+  if (icon) {
+    return (
+      <IconBtn label={editing ? "Concluir organização" : "Organizar widgets — arrastar e redimensionar"} onClick={() => toggle(panel)} active={editing}>
+        {editing
+          ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+          : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></svg>}
+      </IconBtn>
+    );
+  }
   return (
     <button className={`${className}${editing ? " on" : ""}`} type="button" onClick={() => toggle(panel)} title="Organizar widgets (arrastar/redimensionar)">
       {editing ? "✓ Concluir" : "✎ Organizar"}
@@ -73,7 +96,7 @@ export function WidgetBoard({ panel, widgets, mode = "grid" }: { panel: string; 
   // barra fina só no modo edição (dica + restaurar). O toggle "Organizar" fica no topo (WidgetEditButton).
   const header = editing ? (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-      <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>{mode === "grid" ? "Arraste ⠿ pra qualquer lugar · puxe as bordas ↔ / ↕ · 👁 oculta" : "Arraste ⠿ pra reposicionar · puxe a borda ↔ pra largura · 👁 oculta"}</span>
+      <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>{mode === "grid" ? "Arraste ⠿ pra reordenar · puxe a borda ↔ pra largura · 👁 oculta (altura automática, encaixa sozinho)" : "Arraste ⠿ pra reposicionar · puxe a borda ↔ pra largura · 👁 oculta"}</span>
       <button className="btn-link" type="button" onClick={() => setLayout(panel, { hidden: [], grid: undefined, order: widgets.map((w) => w.id), size: {}, height: {} })}>Restaurar padrão</button>
     </div>
   ) : null;
@@ -85,13 +108,29 @@ export function WidgetBoard({ panel, widgets, mode = "grid" }: { panel: string; 
 // ══════════ MODE GRID (x,y,w,h livre) ══════════
 function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editing, header, hide, show, gridRef }: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
   const [live, setLive] = useState<Record<string, Cell> | null>(null);
+  const [measured, setMeasured] = useState<Record<string, number>>({}); // altura AUTO (em linhas) por card
   const drag = useRef<{ id: string } | null>(null);
-  const resize = useRef<{ id: string; axis: "x" | "y" | "xy" } | null>(null);
+  const resize = useRef<{ id: string } | null>(null); // só LARGURA (altura é automática)
+  const obs = useRef<Map<string, ResizeObserver>>(new Map());
+  // mede a altura NATURAL do conteúdo → nº de linhas do grid (arredonda pra cima). ResizeObserver
+  // remede quando o conteúdo muda (período, largura). Só atualiza o estado quando o nº de linhas muda.
+  const measureRef = (id: string) => (el: HTMLDivElement | null) => {
+    const prev = obs.current.get(id);
+    if (prev) { prev.disconnect(); obs.current.delete(id); }
+    if (!el) return;
+    const calc = () => {
+      const rows = Math.max(MINH, Math.ceil((el.scrollHeight + GAP) / ROWH)); // +GAP = folga entre cards (rowGap=0)
+      setMeasured((m) => (m[id] === rows ? m : { ...m, [id]: rows }));
+    };
+    const ro = new ResizeObserver(calc);
+    ro.observe(el); obs.current.set(id, ro); calc();
+  };
+  useEffect(() => () => { obs.current.forEach((o) => o.disconnect()); obs.current.clear(); }, []);
 
   const genDefault = (ids: string[]): Record<string, Cell> => {
     const g: Record<string, Cell> = {}; let x = 0, y = 0, rowH = 0;
     for (const id of ids) {
-      const w = clampW(byId.get(id)?.defaultSpan ?? 3); const h = byId.get(id)?.defaultH ?? DEFH;
+      const w = clampW(byId.get(id)?.defaultSpan ?? 3); const h = DEFH; // altura só inicial; medição ajusta
       if (x + w > COLS) { x = 0; y += rowH; rowH = 0; }
       g[id] = { x, y, w, h }; x += w; rowH = Math.max(rowH, h);
     }
@@ -102,13 +141,20 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
     if (!stored) return genDefault(visible);
     const g: Record<string, Cell> = {}; let maxY = 0;
     for (const id of visible) if (stored[id]) { g[id] = stored[id]; maxY = Math.max(maxY, stored[id].y + stored[id].h); }
-    for (const id of visible) if (!g[id]) { g[id] = { x: 0, y: maxY, w: clampW(byId.get(id)?.defaultSpan ?? 3), h: byId.get(id)?.defaultH ?? DEFH }; maxY += g[id].h; }
+    for (const id of visible) if (!g[id]) { g[id] = { x: 0, y: maxY, w: clampW(byId.get(id)?.defaultSpan ?? 3), h: DEFH }; maxY += g[id].h; }
     return g;
   };
-  const grid = { ...buildGrid(), ...(live ?? {}) };
+  // posições (x,y,w) do layout + live durante o arraste; ALTURA (h) sempre a MEDIDA do conteúdo.
+  const base = { ...buildGrid(), ...(live ?? {}) };
+  const withH: Record<string, Cell> = {};
+  for (const id of visible) if (base[id]) withH[id] = { ...base[id], h: measured[id] ?? base[id].h };
+  // ORDEM = posições atuais (y depois x). Arrastar muda o y do card = reordena; o masonry fecha os
+  // buracos escolhendo a coluna mais curta (x automático). Zero espaço morto entre os cards.
+  const order = (visible as string[]).slice().sort((a, b) => ((base[a]?.y ?? 0) - (base[b]?.y ?? 0)) || ((base[a]?.x ?? 0) - (base[b]?.x ?? 0)));
+  const grid = masonry(order, withH);
   const persistGrid = (g: Record<string, Cell>) => {
-    const compacted = compact(g, visible);
-    setLayout(panel, { ...(useStore.getState().widgetLayout[panel] ?? { hidden: [] }), hidden: [...(layout?.hidden ?? [])], grid: { ...(layout?.grid ?? {}), ...compacted } });
+    // guarda as posições do masonry (preservam a ORDEM); no próximo render o masonry recomputa o x.
+    setLayout(panel, { ...(useStore.getState().widgetLayout[panel] ?? { hidden: [] }), hidden: [...(layout?.hidden ?? [])], grid: { ...(layout?.grid ?? {}), ...g } });
   };
   const setW = (id: string, w: number) => persistGrid({ ...grid, [id]: { ...grid[id], w: clampW(w), x: clampX(grid[id].x, clampW(w)) } });
 
@@ -117,29 +163,28 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
     const onMove = (e: PointerEvent) => {
       if (!gridRef.current) return;
       const rect = gridRef.current.getBoundingClientRect();
-      const colStep = (rect.width - GAP * (COLS - 1)) / COLS + GAP, rowStep = ROWH + GAP;
+      const colStep = (rect.width - GAP * (COLS - 1)) / COLS + GAP, rowStep = ROWH;
       if (drag.current) {
         const id = drag.current.id, cur = grid[id];
         const x = clampX((e.clientX - rect.left) / colStep - cur.w / 2 + 0.5, cur.w);
         const y = Math.max(0, Math.round((e.clientY - rect.top) / rowStep - cur.h / 2 + 0.5));
         setLive({ [id]: { ...cur, x, y } });
       } else if (resize.current) {
-        const { id, axis } = resize.current, cur = grid[id]; let { w, h } = cur;
-        if (axis !== "y") w = Math.max(MINW, Math.min(COLS - cur.x, Math.round((e.clientX - rect.left) / colStep - cur.x)));
-        if (axis !== "x") h = Math.max(MINH, Math.round((e.clientY - rect.top) / rowStep - cur.y));
-        setLive({ [id]: { ...cur, w, h } });
+        const { id } = resize.current, cur = grid[id];
+        const w = Math.max(MINW, Math.min(COLS - cur.x, Math.round((e.clientX - rect.left) / colStep - cur.x)));
+        setLive({ [id]: { ...cur, w } });
       }
     };
     const onUp = () => { if ((drag.current || resize.current) && live) persistGrid({ ...grid }); drag.current = null; resize.current = null; setLive(null); document.body.style.userSelect = ""; };
     window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp);
     return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing, live, layout]);
+  }, [editing, live, layout, measured]);
 
   return (
     <div>
       {header}
-      <div ref={gridRef} className="wb-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gridAutoRows: `${ROWH}px`, gap: GAP, marginBottom: 16 }}>
+      <div ref={gridRef} className="wb-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gridAutoRows: `${ROWH}px`, columnGap: GAP, rowGap: 0, marginBottom: 16 }}>
         {visible.map((id: string) => {
           const c = grid[id]; if (!c) return null; const w = byId.get(id)!;
           return (
@@ -154,13 +199,9 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
                   <button type="button" onClick={() => hide(id)} style={{ ...sbtn, fontSize: 13 }} title="Ocultar">👁</button>
                 </div>
               )}
-              <div className="wb-fill" style={{ height: "100%", overflow: "auto", borderRadius: 14, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 2 }}><PanelBoundary label={w.label}>{w.node}</PanelBoundary></div>
+              <div ref={measureRef(id)} className="wb-fill" style={{ borderRadius: 14, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 2 }}><PanelBoundary label={w.label}>{w.node}</PanelBoundary></div>
               {editing && (
-                <>
-                  <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id, axis: "x" }; document.body.style.userSelect = "none"; }} title="Largura" style={{ position: "absolute", top: 0, right: -3, width: 12, height: "100%", cursor: "ew-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: 4, height: 40, borderRadius: 999, background: barCol(resize.current?.id === id) }} /></span>
-                  <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id, axis: "y" }; document.body.style.userSelect = "none"; }} title="Altura" style={{ position: "absolute", left: 0, bottom: -3, height: 12, width: "100%", cursor: "ns-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ height: 4, width: 40, borderRadius: 999, background: barCol(resize.current?.id === id) }} /></span>
-                  <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id, axis: "xy" }; document.body.style.userSelect = "none"; }} title="Largura + altura" style={{ position: "absolute", right: -2, bottom: -2, width: 18, height: 18, cursor: "nwse-resize", zIndex: 5, touchAction: "none", borderRight: `3px solid ${barCol(resize.current?.id === id)}`, borderBottom: `3px solid ${barCol(resize.current?.id === id)}`, borderBottomRightRadius: 12 }} />
-                </>
+                <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id }; document.body.style.userSelect = "none"; }} title="Largura" style={{ position: "absolute", top: 0, right: -3, width: 12, height: "100%", cursor: "ew-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: 4, height: 40, borderRadius: 999, background: barCol(resize.current?.id === id) }} /></span>
               )}
             </div>
           );
@@ -227,17 +268,16 @@ function FlowBoard({ panel, byId, order, visible, hiddenList, hidden, layout, se
   return (
     <div>
       {header}
-      <div ref={gridRef} className="wb-grid" style={editing
-        ? { display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gap: GAP, marginBottom: 16, alignItems: "start" }
-        : { columns: "360px", columnGap: GAP, marginBottom: 16 }}>
+      {/* MESMO grid no modo normal E no organizar — antes a visão normal usava colunas CSS (masonry) e
+          a edição usava grid, então "organizar" rearranjava tudo e não batia. Agora a largura (span) e
+          a ordem valem igual nos dois. alignItems:start = cada card com a própria altura (sem esticar). */}
+      <div ref={gridRef} className="wb-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${COLS}, minmax(0,1fr))`, gap: GAP, marginBottom: 16, alignItems: "start" }}>
         {visible.map((id: string) => {
           const w = byId.get(id)!; const span = spanOf(id);
           const isDropL = editing && drop?.id === id && !drop.after && dragId !== id;
           const isDropR = editing && drop?.id === id && drop.after && dragId !== id;
           return (
-            <div key={id} data-wid={id} style={editing
-              ? { gridColumn: `span ${span}`, position: "relative", opacity: dragId === id ? 0.4 : 1 }
-              : { breakInside: "avoid", marginBottom: GAP, position: "relative" }}>
+            <div key={id} data-wid={id} style={{ gridColumn: `span ${span}`, position: "relative", opacity: editing && dragId === id ? 0.4 : 1 }}>
               {isDropL && <span style={{ position: "absolute", top: 24, bottom: 0, left: -9, width: 4, borderRadius: 999, background: "var(--cyan)", zIndex: 3 }} />}
               {isDropR && <span style={{ position: "absolute", top: 24, bottom: 0, right: -9, width: 4, borderRadius: 999, background: "var(--cyan)", zIndex: 3 }} />}
               {editing && (

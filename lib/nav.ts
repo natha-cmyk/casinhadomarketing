@@ -100,7 +100,9 @@ export const TEMPORAL = [
   "threads", "reddit", "pinterest", "bluesky", "snapchat", "googlebusiness",
   "ads", "canais", // Canais Pagos e Geração também usam período
 ];
-export const usesCompare = (v: string) => SOCIAL_IDS.includes(v);
+// comparação disponível nos painéis sociais E na Geração por Canais (CRM) — todos têm série temporal
+// e widgets comparáveis período A vs B.
+export const usesCompare = (v: string) => SOCIAL_IDS.includes(v) || v === "canais";
 
 // redes sociais (grupo "Canais") — itens condicionais no sidebar
 export const SOCIAL_IDS = [
