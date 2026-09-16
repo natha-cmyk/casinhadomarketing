@@ -63,8 +63,14 @@ export async function GET(req: Request) {
     if (since) createdAt.gte = new Date(since + "T00:00:00");
     if (until) createdAt.lte = new Date(until + "T23:59:59.999");
 
+    // o carimbo do último sync entra na CHAVE: sincronizar de novo invalida o cache na hora, então a
+    // contagem corrigida (ex.: arquivados removidos) aparece já. Leitura leve (1 linha) por request.
+    const syncTag = await prisma.crmConfig
+      .findUnique({ where: { workspaceId: ws }, select: { lastSyncAt: true } })
+      .then((c) => c?.lastSyncAt?.getTime() ?? 0)
+      .catch(() => 0);
     // período fechado (passado) é imutável → cache longo (6h); período corrente segue vivo em 45s
-    const payload = await cached(`crmleads:${ws}:${since}:${until}`, periodTtl(until, 45_000), async () => {
+    const payload = await cached(`crmleads:${ws}:${since}:${until}:${syncTag}`, periodTtl(until, 45_000), async () => {
     const [cfg, leadsAll] = await Promise.all([
       prisma.crmConfig.findUnique({ where: { workspaceId: ws } }),
       prisma.lead.findMany({
