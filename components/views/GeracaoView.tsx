@@ -1167,14 +1167,13 @@ function CampaignPerfCard({ rows, cmpRows }: { rows: NonNullable<LeadsData["camp
           const pct = (n: number) => (c.total ? (n / c.total) * 100 : 0);
           return (
             <div key={c.key || "__none__"} style={{ borderTop: idx ? "1px solid var(--hairline)" : undefined }}>
-              {/* linha principal: nome + oportunidades + conversão em destaque, e a BARRA de desfecho */}
+              {/* linha principal: nome + RECEITA (verde) + conversão em destaque, e a BARRA de desfecho */}
               <div onClick={() => setOpen((o) => ({ ...o, [c.key]: !o[c.key] }))} style={{ cursor: "pointer", padding: "11px 2px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: ".18s", color: "var(--label-3)", flex: "0 0 12px" }}><path d="M6 9l6 6 6-6" /></svg>
                   <span style={{ flex: 1, minWidth: 0, fontWeight: 650, fontSize: 13.5, fontStyle: semDado ? "italic" : "normal", color: semDado ? "var(--label-3)" : "var(--label)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nome(c.key)}</span>
-                  <span className="tnum" style={{ fontSize: 12.5, color: "var(--label-2)", flex: "0 0 auto" }}>{fmt(c.total)} op.</span>
-                  {cmp && <CmpChip cur={c.total} prev={cmp.get(c.key)} />}
-                  <span className="tnum" style={{ fontWeight: 750, fontSize: 15, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)", width: 48, textAlign: "right", flex: "0 0 auto" }}>{(c.conv * 100).toFixed(0)}%</span>
+                  {c.value > 0 && <span className="tnum" style={{ fontWeight: 750, fontSize: 13.5, color: "var(--excelente)", flex: "0 0 auto" }} title="Receita gerada (valor dos ganhos)">{money(c.value)}</span>}
+                  <span className="tnum" style={{ fontWeight: 750, fontSize: 15, color: c.conv >= 0.3 ? "var(--excelente)" : c.conv > 0 ? "var(--label)" : "var(--label-3)", width: 48, textAlign: "right", flex: "0 0 auto" }} title="Conversão">{(c.conv * 100).toFixed(0)}%</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, paddingLeft: 22 }}>
                   <span style={{ flex: 1, display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "var(--cream)" }}>
@@ -1182,29 +1181,36 @@ function CampaignPerfCard({ rows, cmpRows }: { rows: NonNullable<LeadsData["camp
                     {c.open > 0 && <span style={{ width: `${pct(c.open)}%`, background: "var(--cyan)" }} title={`Em aberto: ${c.open}`} />}
                     {c.lost > 0 && <span style={{ width: `${pct(c.lost)}%`, background: "var(--red)" }} title={`Perdidos: ${c.lost}`} />}
                   </span>
-                  <span style={{ fontSize: 11.5, color: "var(--label-3)", flex: "0 0 auto", whiteSpace: "nowrap" }}>
-                    <b className="tnum" style={{ color: "var(--excelente)" }}>{fmt(c.won)}</b> ganho · <b className="tnum">{fmt(c.open)}</b> aberto · <b className="tnum" style={{ color: "var(--red)" }}>{fmt(c.lost)}</b> perdido
+                  <span style={{ fontSize: 11.5, color: "var(--label-3)", flex: "0 0 auto", whiteSpace: "nowrap", display: "flex", alignItems: "baseline", gap: 5 }}>
+                    <span><b className="tnum">{fmt(c.total)}</b> op</span>{cmp && <CmpChip cur={c.total} prev={cmp.get(c.key)} />}
+                    <span>· <b className="tnum" style={{ color: "var(--excelente)" }}>{fmt(c.won)}</b> ganho · <b className="tnum">{fmt(c.open)}</b> aberto · <b className="tnum" style={{ color: "var(--red)" }}>{fmt(c.lost)}</b> perdido</span>
                   </span>
                 </div>
               </div>
               {isOpen && (
-                <div style={{ padding: "2px 0 14px 22px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 18 }}>
+                <div style={{ padding: "4px 0 16px 22px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 24 }}>
+                  {(() => { const subLbl = { fontSize: 10.5, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".4px", color: "var(--label-3)", marginBottom: 8 }; return (<>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)", marginBottom: 6 }}>Top motivos de perda</div>
-                    {c.lossTop.length ? c.lossTop.map((l) => (
-                      <div key={l.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "2px 0" }}>
-                        <span style={{ color: "var(--label-1)" }}>{l.key}</span><span className="tnum" style={{ color: "var(--label-2)" }}>{fmt(l.count)}</span>
+                    <div style={subLbl}>Top motivos de perda</div>
+                    {c.lossTop.length ? (() => { const mx = Math.max(1, ...c.lossTop.map((l) => l.count)); return c.lossTop.map((l) => (
+                      <div key={l.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                        <span style={{ width: 118, fontSize: 12.5, color: "var(--label-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: "0 0 auto" }}>{l.key}</span>
+                        <span style={{ flex: 1, height: 7, borderRadius: 999, background: "var(--cream)", overflow: "hidden" }}><span style={{ display: "block", height: "100%", width: `${(l.count / mx) * 100}%`, background: "var(--red)" }} /></span>
+                        <span className="tnum" style={{ fontSize: 12, color: "var(--label-2)", width: 22, textAlign: "right", flex: "0 0 auto" }}>{fmt(l.count)}</span>
                       </div>
-                    )) : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem perdas com motivo registrado.</div>}
+                    )); })() : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem perdas com motivo registrado.</div>}
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".3px", color: "var(--label-3)", marginBottom: 6 }}>Por qualificação</div>
-                    {c.byQualification.length ? c.byQualification.map((q) => (
-                      <div key={q.key} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "2px 0" }}>
-                        <span style={{ color: "var(--label-1)" }}>{q.key}</span><span className="tnum" style={{ color: "var(--label-2)" }}>{fmt(q.count)}</span>
+                    <div style={subLbl}>Por qualificação</div>
+                    {c.byQualification.length ? (() => { const mx = Math.max(1, ...c.byQualification.map((q) => q.count)); return c.byQualification.map((q) => { const n = starsOf(q.key); return (
+                      <div key={q.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                        <span style={{ width: 84, fontSize: 13, color: n ? "var(--atencao)" : "var(--label-1)", letterSpacing: 1, flex: "0 0 auto" }}>{n ? "★".repeat(n) + "☆".repeat(Math.max(0, 5 - n)) : q.key}</span>
+                        <span style={{ flex: 1, height: 7, borderRadius: 999, background: "var(--cream)", overflow: "hidden" }}><span style={{ display: "block", height: "100%", width: `${(q.count / mx) * 100}%`, background: "var(--cyan)" }} /></span>
+                        <span className="tnum" style={{ fontSize: 12, color: "var(--label-2)", width: 22, textAlign: "right", flex: "0 0 auto" }}>{fmt(q.count)}</span>
                       </div>
-                    )) : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem qualificação informada.</div>}
+                    ); }); })() : <div style={{ fontSize: 12, color: "var(--label-3)" }}>Sem qualificação informada.</div>}
                   </div>
+                  </>); })()}
                 </div>
               )}
             </div>
@@ -1212,7 +1218,7 @@ function CampaignPerfCard({ rows, cmpRows }: { rows: NonNullable<LeadsData["camp
         })}
       </div>
       <div style={{ fontSize: 11, color: "var(--label-3)", marginTop: 10 }}>
-        Conversão = ganhos ÷ oportunidades da campanha. Clique numa linha pra ver motivos de perda e qualificação.
+        Valor em <b style={{ color: "var(--excelente)" }}>verde</b> = receita gerada (ganhos). Conversão = ganhos ÷ oportunidades. Clique numa linha pra ver motivos de perda e qualificação.
       </div>
     </div>
   );
