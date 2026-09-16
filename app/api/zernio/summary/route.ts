@@ -11,7 +11,8 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { listWorkspaceAccounts } from "@/lib/profiles";
-import { cached } from "@/lib/ttl-cache";
+import { cached, periodClosed } from "@/lib/ttl-cache";
+import { cachedImmutable } from "@/lib/analytics-cache";
 import {
   accountInsightsFull, youtubeChannelInsights, linkedinAggregate,
   gbpPerformance, gbpLocations, postAnalytics,
@@ -126,8 +127,10 @@ export async function GET(req: Request) {
     const since = q.get("since") || iso(new Date(now.getTime() - 30 * 864e5));
     const range = { since, until };
 
-    // cache 45s por (workspace + período) — colapsa reloads/idas-e-vindas do overview
-    const summaries = await cached(`summary:${ws.id}:${since}:${until}`, 45_000, async () => {
+    // cache por (workspace + período): período FECHADO (passado) é imutável → PERSISTENTE no banco
+    // (sobrevive a reinício); período corrente segue vivo em 45s (memória).
+    const sumKey = `summary:${ws.id}:${since}:${until}`;
+    const sumCompute = async () => {
       const accounts = await listWorkspaceAccounts(ws); // agrega todos os profiles (multi-conta)
       // conta conectada = social (posting habilitado) OU com analytics própria.
       const connected = accounts.filter(
@@ -145,7 +148,8 @@ export async function GET(req: Request) {
           }))
         )
       );
-    });
+    };
+    const summaries = periodClosed(until) ? await cachedImmutable(sumKey, sumCompute) : await cached(sumKey, 45_000, sumCompute);
 
     return NextResponse.json({ accounts: summaries });
   } catch (e) {
