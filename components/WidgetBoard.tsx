@@ -83,7 +83,7 @@ export function WidgetBoard({ panel, widgets, mode = "grid" }: { panel: string; 
   // barra fina só no modo edição (dica + restaurar). O toggle "Organizar" fica no topo (WidgetEditButton).
   const header = editing ? (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-      <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>{mode === "grid" ? "Arraste ⠿ pra qualquer lugar · puxe as bordas ↔ / ↕ · 👁 oculta" : "Arraste ⠿ pra reposicionar · puxe a borda ↔ pra largura · 👁 oculta"}</span>
+      <span style={{ fontSize: 12, color: "var(--label-3)", marginRight: "auto" }}>{mode === "grid" ? "Arraste ⠿ pra qualquer lugar · puxe a borda ↔ pra largura · 👁 oculta (altura automática)" : "Arraste ⠿ pra reposicionar · puxe a borda ↔ pra largura · 👁 oculta"}</span>
       <button className="btn-link" type="button" onClick={() => setLayout(panel, { hidden: [], grid: undefined, order: widgets.map((w) => w.id), size: {}, height: {} })}>Restaurar padrão</button>
     </div>
   ) : null;
@@ -95,8 +95,24 @@ export function WidgetBoard({ panel, widgets, mode = "grid" }: { panel: string; 
 // ══════════ MODE GRID (x,y,w,h livre) ══════════
 function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editing, header, hide, show, gridRef }: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
   const [live, setLive] = useState<Record<string, Cell> | null>(null);
+  const [measured, setMeasured] = useState<Record<string, number>>({}); // altura AUTO (em linhas) por card
   const drag = useRef<{ id: string } | null>(null);
-  const resize = useRef<{ id: string; axis: "x" | "y" | "xy" } | null>(null);
+  const resize = useRef<{ id: string } | null>(null); // só LARGURA (altura é automática)
+  const obs = useRef<Map<string, ResizeObserver>>(new Map());
+  // mede a altura NATURAL do conteúdo → nº de linhas do grid (arredonda pra cima). ResizeObserver
+  // remede quando o conteúdo muda (período, largura). Só atualiza o estado quando o nº de linhas muda.
+  const measureRef = (id: string) => (el: HTMLDivElement | null) => {
+    const prev = obs.current.get(id);
+    if (prev) { prev.disconnect(); obs.current.delete(id); }
+    if (!el) return;
+    const calc = () => {
+      const rows = Math.max(MINH, Math.ceil((el.scrollHeight + GAP) / (ROWH + GAP)));
+      setMeasured((m) => (m[id] === rows ? m : { ...m, [id]: rows }));
+    };
+    const ro = new ResizeObserver(calc);
+    ro.observe(el); obs.current.set(id, ro); calc();
+  };
+  useEffect(() => () => { obs.current.forEach((o) => o.disconnect()); obs.current.clear(); }, []);
 
   const genDefault = (ids: string[]): Record<string, Cell> => {
     const g: Record<string, Cell> = {}; let x = 0, y = 0, rowH = 0;
@@ -115,7 +131,12 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
     for (const id of visible) if (!g[id]) { g[id] = { x: 0, y: maxY, w: clampW(byId.get(id)?.defaultSpan ?? 3), h: byId.get(id)?.defaultH ?? DEFH }; maxY += g[id].h; }
     return g;
   };
-  const grid = { ...buildGrid(), ...(live ?? {}) };
+  // posições (x,y,w) do layout + live durante o arraste; ALTURA (h) sempre a MEDIDA do conteúdo.
+  const base = { ...buildGrid(), ...(live ?? {}) };
+  const withH: Record<string, Cell> = {};
+  for (const id of visible) if (base[id]) withH[id] = { ...base[id], h: measured[id] ?? base[id].h };
+  // fora do arraste, recompacta pra fechar buracos (masonry) mantendo o x escolhido; no arraste, não.
+  const grid = live ? withH : compact(withH, visible);
   const persistGrid = (g: Record<string, Cell>) => {
     const compacted = compact(g, visible);
     setLayout(panel, { ...(useStore.getState().widgetLayout[panel] ?? { hidden: [] }), hidden: [...(layout?.hidden ?? [])], grid: { ...(layout?.grid ?? {}), ...compacted } });
@@ -134,17 +155,16 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
         const y = Math.max(0, Math.round((e.clientY - rect.top) / rowStep - cur.h / 2 + 0.5));
         setLive({ [id]: { ...cur, x, y } });
       } else if (resize.current) {
-        const { id, axis } = resize.current, cur = grid[id]; let { w, h } = cur;
-        if (axis !== "y") w = Math.max(MINW, Math.min(COLS - cur.x, Math.round((e.clientX - rect.left) / colStep - cur.x)));
-        if (axis !== "x") h = Math.max(MINH, Math.round((e.clientY - rect.top) / rowStep - cur.y));
-        setLive({ [id]: { ...cur, w, h } });
+        const { id } = resize.current, cur = grid[id];
+        const w = Math.max(MINW, Math.min(COLS - cur.x, Math.round((e.clientX - rect.left) / colStep - cur.x)));
+        setLive({ [id]: { ...cur, w } });
       }
     };
     const onUp = () => { if ((drag.current || resize.current) && live) persistGrid({ ...grid }); drag.current = null; resize.current = null; setLive(null); document.body.style.userSelect = ""; };
     window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", onUp);
     return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing, live, layout]);
+  }, [editing, live, layout, measured]);
 
   return (
     <div>
@@ -164,13 +184,9 @@ function GridBoard({ panel, byId, visible, hiddenList, layout, setLayout, editin
                   <button type="button" onClick={() => hide(id)} style={{ ...sbtn, fontSize: 13 }} title="Ocultar">👁</button>
                 </div>
               )}
-              <div className="wb-fill" style={{ height: "100%", overflow: "auto", borderRadius: 14, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 2 }}><PanelBoundary label={w.label}>{w.node}</PanelBoundary></div>
+              <div ref={measureRef(id)} className="wb-fill" style={{ borderRadius: 14, outline: editing ? "1.5px dashed color-mix(in srgb, var(--cyan) 40%, transparent)" : undefined, outlineOffset: 2 }}><PanelBoundary label={w.label}>{w.node}</PanelBoundary></div>
               {editing && (
-                <>
-                  <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id, axis: "x" }; document.body.style.userSelect = "none"; }} title="Largura" style={{ position: "absolute", top: 0, right: -3, width: 12, height: "100%", cursor: "ew-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: 4, height: 40, borderRadius: 999, background: barCol(resize.current?.id === id) }} /></span>
-                  <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id, axis: "y" }; document.body.style.userSelect = "none"; }} title="Altura" style={{ position: "absolute", left: 0, bottom: -3, height: 12, width: "100%", cursor: "ns-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ height: 4, width: 40, borderRadius: 999, background: barCol(resize.current?.id === id) }} /></span>
-                  <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id, axis: "xy" }; document.body.style.userSelect = "none"; }} title="Largura + altura" style={{ position: "absolute", right: -2, bottom: -2, width: 18, height: 18, cursor: "nwse-resize", zIndex: 5, touchAction: "none", borderRight: `3px solid ${barCol(resize.current?.id === id)}`, borderBottom: `3px solid ${barCol(resize.current?.id === id)}`, borderBottomRightRadius: 12 }} />
-                </>
+                <span onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); resize.current = { id }; document.body.style.userSelect = "none"; }} title="Largura" style={{ position: "absolute", top: 0, right: -3, width: 12, height: "100%", cursor: "ew-resize", zIndex: 4, touchAction: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: 4, height: 40, borderRadius: 999, background: barCol(resize.current?.id === id) }} /></span>
               )}
             </div>
           );
