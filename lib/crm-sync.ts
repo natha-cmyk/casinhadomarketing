@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 interface ClickUpOption { id: string; name?: string; label?: string; orderindex?: unknown }
 interface ClickUpCustomField { id: string; name: string; type: string; value?: unknown; type_config?: { options?: ClickUpOption[] } }
-interface ClickUpTask { id: string; name?: string; status?: { status?: string; type?: string }; date_created?: string; custom_fields?: ClickUpCustomField[] }
+interface ClickUpTask { id: string; name?: string; status?: { status?: string; type?: string }; date_created?: string; custom_fields?: ClickUpCustomField[]; parent?: string | null; archived?: boolean }
 
 type Dim = "channel" | "category" | "product" | "qualification" | "stage" | "status" | "value" | "lossReason" | "campaign";
 const DIMS: Dim[] = ["channel", "category", "product", "qualification", "stage", "status", "value", "lossReason", "campaign"];
@@ -157,7 +157,7 @@ export function interpretTask(t: ClickUpTask, fm: Record<string, string>): Inter
 }
 export type { ClickUpTask };
 
-export interface CrmSyncResult { ok: true; imported: number; incremental: boolean }
+export interface CrmSyncResult { ok: true; imported: number; incremental: boolean; activeCount?: number; staleRemoved?: number; subtasks?: number }
 export type CrmSyncError = { ok: false; status: number; error: string };
 
 // Busca as tasks de uma lista do ClickUp, paginado. O ClickUp já EXCLUI arquivadas por padrão
@@ -231,21 +231,21 @@ export async function syncClickupLeads(workspaceId: string, opts?: { full?: bool
   // Precisa do conjunto ATIVO COMPLETO. No full, `active` já é ele; no incremental (rápido), busca o
   // conjunto completo à parte (sem filtro de data). Só apaga se veio um conjunto NÃO-VAZIO — fetch
   // vazio/erro NÃO dispara o delete (trava anti-zeramento: nunca esvazia a base por um erro de rede).
-  let activeIdsFull: string[] = [];
-  if (!incremental) {
-    activeIdsFull = active.map((t) => t.id);
-  } else {
+  let fullActive: ClickUpTask[] = active; // sync completo: `active` já é o conjunto ativo inteiro
+  if (incremental) {
     const full = await fetchClickupTasks(listId, cfg.clickupToken, null);
-    if (!("error" in full)) {
-      activeIdsFull = full.tasks.filter((t) => (t as unknown as { archived?: boolean }).archived !== true).map((t) => t.id);
-    }
+    fullActive = "error" in full ? [] : full.tasks.filter((t) => t.archived !== true);
   }
+  const activeIdsFull = fullActive.map((t) => t.id);
+  let staleRemoved = 0;
   if (activeIdsFull.length > 0) {
-    await prisma.lead.deleteMany({
+    const del = await prisma.lead.deleteMany({
       where: { workspaceId, source: "clickup", extId: { notIn: activeIdsFull } },
     });
+    staleRemoved = del.count;
   }
+  const subtasks = fullActive.filter((t) => t.parent != null).length; // diagnóstico: quantas são subtarefas
 
   await prisma.crmConfig.update({ where: { workspaceId }, data: { lastSyncAt: startedAt } });
-  return { ok: true, imported: ops.length, incremental };
+  return { ok: true, imported: ops.length, incremental, activeCount: activeIdsFull.length, staleRemoved, subtasks };
 }
