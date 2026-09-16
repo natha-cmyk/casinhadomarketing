@@ -5,7 +5,7 @@
 // o período da toolbar. O usuário mapeia os campos personalizados do ClickUp por dimensão.
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/store";
-import { PageHead, BarRow, IconBtn, DeltaChip } from "@/components/ui";
+import { PageHead, BarRow, IconBtn } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { fmt, money } from "@/lib/format";
 import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
@@ -651,12 +651,22 @@ const pieColor = (i: number) => PIE_COLORS[i % PIE_COLORS.length];
 
 // chip de comparação período A vs B: "▲12% · +63" (número absoluto + %). Neutro de propósito — em CRM
 // "mais" nem sempre é bom (ex.: mais perdidos). Some quando não há período B ou faltam os dois valores.
+// comparação período A vs B — LEVE de propósito (texto pequeno, não um pill pesado, pra não competir
+// com o número principal). Número absoluto na frente, % apagado ao lado. Cor por DIREÇÃO (subiu/desceu),
+// não por juízo. pctOnly (taxas): só o %. Some sem período B ou sem os dois valores.
 function CmpChip({ cur, prev, pctOnly }: { cur?: number | null; prev?: number | null; pctOnly?: boolean }) {
   if (cur == null || prev == null) return null;
   if (prev === 0 && cur === 0) return null;
-  if (prev === 0 && !pctOnly) return <span className="chip scn">novo · +{fmt(cur)}</span>;
-  // pctOnly (taxas em %): só a variação relativa, sem número absoluto (que seria uma fração sem sentido)
-  return <DeltaChip delta={computeDelta(cur, prev, !pctOnly)} scn />;
+  if (prev === 0 && !pctOnly) return <span style={{ fontSize: 11, fontWeight: 650, color: "var(--excelente)", whiteSpace: "nowrap" }}>novo +{fmt(cur)}</span>;
+  const d = computeDelta(cur, prev, !pctOnly);
+  const color = d.kind === "up" ? "var(--excelente)" : d.kind === "down" ? "var(--red)" : "var(--label-3)";
+  const pct = d.pctLabel.replace(/[▲▼]\s*/, ""); // tira a seta (fica no número)
+  return (
+    <span style={{ fontSize: 11, fontWeight: 650, color, whiteSpace: "nowrap", display: "inline-flex", alignItems: "baseline", gap: 4 }}>
+      {d.numLabel && <span>{d.numLabel}</span>}
+      <span style={{ opacity: 0.6, fontWeight: 500 }}>{pct}</span>
+    </span>
+  );
 }
 // mapa key→count de uma dimensão do período B (pra achar o valor anterior de cada linha)
 function cmpMapOf(rows?: Row[]): Map<string, number> {
@@ -700,7 +710,8 @@ function PieChart({ rows, cmp }: { rows: Row[]; cmp?: Map<string, number> }) {
             <span style={{ width: 9, height: 9, borderRadius: 3, background: a.color, flex: "0 0 9px" }} />
             <span style={{ flex: 1, color: "var(--label)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.key === "outros" ? "Outros" : fill(a.key)}</span>
             <span className="tnum" style={{ color: "var(--label-2)", fontWeight: 600 }}>{fmt(a.count)}</span>
-            <span className="tnum" style={{ color: "var(--label-3)", width: 38, textAlign: "right" }}>{Math.round(a.frac * 100)}%</span>
+            {/* comparando: a variação substitui o % da fatia (evita dois percentuais colados) */}
+            {(!cmp || a.key === "outros") && <span className="tnum" style={{ color: "var(--label-3)", width: 38, textAlign: "right" }}>{Math.round(a.frac * 100)}%</span>}
             {a.key !== "outros" && cmp && <CmpChip cur={a.count} prev={cmp.get(a.key)} />}
           </div>
         ))}
@@ -763,14 +774,11 @@ function GroupCard({
   const [viz, setViz] = useState<"list" | "pizza">(defaultViz);
   const max = Math.max(1, ...rows.map((r) => r.count));
   const cmp = cmpRows ? cmpMapOf(cmpRows) : undefined;
-  const total = rows.reduce((a, r) => a + r.count, 0);
-  const cmpTotal = cmpRows ? cmpRows.reduce((a, r) => a + r.count, 0) : undefined;
   return (
     <div className="card">
       <div className="card-head">
         <div className="t">{title}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {cmp && <CmpChip cur={total} prev={cmpTotal} />}
           {rows.length > 0 && (
             <div className="seg" style={{ transform: "scale(.86)", transformOrigin: "right center" }}>
               <button className={viz === "list" ? "on" : ""} onClick={() => setViz("list")} type="button" title="Lista">☰</button>
