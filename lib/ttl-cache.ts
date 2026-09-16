@@ -14,6 +14,10 @@ export function periodTtl(until: string | null | undefined, liveMs: number, clos
   if (!until) return liveMs;
   return until < hojeFortaleza() ? closedMs : liveMs;
 }
+// true quando o período JÁ FECHOU (until estritamente no passado, fuso Natal/RN) → dados imutáveis.
+export function periodClosed(until: string | null | undefined): boolean {
+  return !!until && until < hojeFortaleza();
+}
 
 export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const hit = store.get(key);

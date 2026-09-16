@@ -466,3 +466,14 @@ model HistoricalMetric {
   @@unique([workspaceId, platform, metric, ano, mes])
   @@index([workspaceId, platform])
 }
+
+// Cache PERSISTENTE de analytics de período FECHADO (imutável). Sobrevive a reinício do servidor:
+// mês/semana passados não mudam, então grava o resultado calculado e devolve na hora, sempre.
+// `key` já embute workspace + conta + período + parte. Sem FK (é cache derivado, descartável).
+model AnalyticsCache {
+  key       String   @id
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
