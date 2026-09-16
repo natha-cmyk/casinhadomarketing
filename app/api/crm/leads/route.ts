@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { interpretTask, type ClickUpTask, type Interpreted } from "@/lib/crm-sync";
-import { cached } from "@/lib/ttl-cache";
+import { cached, periodTtl } from "@/lib/ttl-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +63,8 @@ export async function GET(req: Request) {
     if (since) createdAt.gte = new Date(since + "T00:00:00");
     if (until) createdAt.lte = new Date(until + "T23:59:59.999");
 
-    const payload = await cached(`crmleads:${ws}:${since}:${until}`, 45_000, async () => {
+    // período fechado (passado) é imutável → cache longo (6h); período corrente segue vivo em 45s
+    const payload = await cached(`crmleads:${ws}:${since}:${until}`, periodTtl(until, 45_000), async () => {
     const [cfg, leadsAll] = await Promise.all([
       prisma.crmConfig.findUnique({ where: { workspaceId: ws } }),
       prisma.lead.findMany({

@@ -10,7 +10,7 @@
 // daily, top, content, linkTaps, stories, bestTime, demographics }.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
-import { cached } from "@/lib/ttl-cache";
+import { cached, periodTtl } from "@/lib/ttl-cache";
 import {
   accountInsightsFull, followerHistory, keyMetricSeries, dailyMetrics,
   postAnalytics, profileLinkTaps, listStories, bestTime, demographics,
@@ -145,8 +145,9 @@ export async function GET(req: Request) {
     const wantCore = part !== "extras";
     const wantExtras = part !== "core";
 
-    // cache 30s por (workspace + conta + período + parte) — reloads e trocas de card ficam instantâneos
-    const payload = await cached(`insights:${ws.id}:${platform}:${accountId}:${since}:${until}:${part}`, 30_000, async () => {
+    // cache por (workspace + conta + período + parte). Período FECHADO (mês/semana passados) é imutável
+    // → cache longo (6h): agosto carrega 1x e fica instantâneo. Período corrente segue em 30s (vivo).
+    const payload = await cached(`insights:${ws.id}:${platform}:${accountId}:${since}:${until}:${part}`, periodTtl(until, 30_000), async () => {
     const isIG = platform === "instagram";
     const hasPosting = platform === "instagram" || platform === "facebook" || platform === "tiktok";
     const hasContent = hasPosting || platform === "youtube" || platform === "linkedin";

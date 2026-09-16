@@ -11,7 +11,7 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { listWorkspaceAccounts } from "@/lib/profiles";
-import { cached } from "@/lib/ttl-cache";
+import { cached, periodTtl } from "@/lib/ttl-cache";
 import {
   accountInsightsFull, youtubeChannelInsights, linkedinAggregate,
   gbpPerformance, gbpLocations, postAnalytics,
@@ -126,8 +126,8 @@ export async function GET(req: Request) {
     const since = q.get("since") || iso(new Date(now.getTime() - 30 * 864e5));
     const range = { since, until };
 
-    // cache 45s por (workspace + período) — colapsa reloads/idas-e-vindas do overview
-    const summaries = await cached(`summary:${ws.id}:${since}:${until}`, 45_000, async () => {
+    // cache por (workspace + período): período fechado (passado) é imutável → 6h; corrente → 45s
+    const summaries = await cached(`summary:${ws.id}:${since}:${until}`, periodTtl(until, 45_000), async () => {
       const accounts = await listWorkspaceAccounts(ws); // agrega todos os profiles (multi-conta)
       // conta conectada = social (posting habilitado) OU com analytics própria.
       const connected = accounts.filter(
