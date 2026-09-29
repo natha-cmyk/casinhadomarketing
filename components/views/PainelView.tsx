@@ -11,6 +11,7 @@ import { PageHead, KpiCard } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { ChannelSummaryCard, ChannelBrandIcon } from "@/components/ChannelSummaryCard";
 import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
+import { PlanilhaPanel } from "@/components/planilha/PlanilhaPanel";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { daysInMonth, type Period } from "@/lib/scope";
 
@@ -62,6 +63,7 @@ const SUMMARY_CACHE = new Map<string, AccountSummary[]>();
 export function PainelView() {
   const s = useStore();
   const storeAccounts = useStore((st) => st.zernioAccounts);
+  const [mode, setMode] = useState<"rica" | "planilha">("rica");
   const range = dateRange(s);
   const cacheKey = `${range.since}|${range.until}`;
 
@@ -134,11 +136,33 @@ export function PainelView() {
 
   const isEmpty = !loading && list.length === 0 && !hasStoreConnected;
 
+  const modeToggle = (
+    <div className="seg" role="tablist" aria-label="Modo de visualização">
+      <button role="tab" aria-selected={mode === "rica"} className={"seg-b" + (mode === "rica" ? " on" : "")} onClick={() => setMode("rica")}>
+        Visão rica
+      </button>
+      <button role="tab" aria-selected={mode === "planilha"} className={"seg-b" + (mode === "planilha" ? " on" : "")} onClick={() => setMode("planilha")}>
+        Planilha anual
+      </button>
+    </div>
+  );
+  const headRight =
+    mode === "rica" && !isEmpty && list.length > 0 ? (
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {modeToggle}
+        <WidgetEditButton panel="overview" icon />
+      </div>
+    ) : (
+      modeToggle
+    );
+
   return (
     <>
-      <PageHead eyebrow="VISÃO GERAL" title="Painel" right={!isEmpty && list.length > 0 ? <WidgetEditButton panel="overview" icon /> : undefined} />
+      <PageHead eyebrow="VISÃO GERAL" title="Painel" right={headRight} />
 
-      {isEmpty ? (
+      {mode === "planilha" ? (
+        <PlanilhaPanel />
+      ) : isEmpty ? (
         <div className="empty">
           <div className="e-ico" style={{ fontSize: 22 }}>📡</div>
           <h3>Ambiente sem contas conectadas</h3>
