@@ -6,11 +6,13 @@
 import { useMemo, type ReactNode } from "react";
 import { MONTHS_FULL } from "@/lib/scope";
 import { fmt, money, pct } from "@/lib/format";
-import type { PTab, CellKind } from "@/lib/planilha/spec";
+import type { PSection, CellKind } from "@/lib/planilha/spec";
 import type { Cell, TabData } from "@/lib/planilha/types";
 
 interface Props {
-  spec: PTab;
+  sections: PSection[]; // ESTRUTURA vinda do servidor
+  weekly: boolean; // regime de colunas da aba/ano
+  sub: string; // rótulo da célula-canto (nome da aba)
   data: TabData;
   year: number;
   scope: { period: "semana" | "mes" | "trimestre" | "ano"; month: number; quarter: number; week: number; year: number };
@@ -39,8 +41,8 @@ function fmtCell(v: Cell, kind: CellKind): string {
   return fmt(v, 0);
 }
 
-export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
-  const effWeeks = spec.weekly && showWeeks; // semanas só quando a aba é semanal E o toggle está ligado
+export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWeeks }: Props) {
+  const effWeeks = weekly && showWeeks; // semanas só quando a aba é semanal E o toggle está ligado
   const monthSpan = effWeeks ? 5 : 1;
 
   const cols = useMemo<Col[]>(() => {
@@ -89,7 +91,7 @@ export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
         <thead>
           {/* linha 1 — grupos de mês + Q + ano */}
           <tr>
-            <th className="pl-corner" rowSpan={headSpan}>{spec.sub || spec.label}</th>
+            <th className="pl-corner" rowSpan={headSpan}>{sub}</th>
             {(() => {
               const cells: ReactNode[] = [];
               for (let m = 0; m < 12; m++) {
@@ -121,7 +123,7 @@ export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
           )}
         </thead>
         <tbody>
-          {spec.sections.map((sec) => (
+          {sections.map((sec) => (
             <FragmentSection key={sec.title}>
               <tr className="pl-band">
                 <th className="pl-bandlabel">{sec.title}</th>

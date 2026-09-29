@@ -1,4 +1,6 @@
 // Tipos do payload da planilha anual (compartilhados servidor↔cliente).
+import type { PSection } from "./spec";
+
 export type Cell = number | string | null;
 
 export interface RowData {
@@ -14,6 +16,8 @@ export type TabData = Record<string, RowData>;
 export interface PlanilhaPayload {
   year: number;
   tab: string;
+  weekly: boolean; // regime de colunas (semanal vs mensal) — pode variar por ano
+  sections: PSection[]; // ESTRUTURA vinda do servidor (por tab+ano) — engine renderiza isto
   data: TabData;
   // procedência resumida (mostrada em nota de rodapé — honesto sobre a cobertura)
   coverage: string;

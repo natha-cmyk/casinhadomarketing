@@ -6,7 +6,7 @@
 // Regra: mês com dado AO VIVO usa o vivo; mês sem dado vivo usa o histórico/manual (PlanilhaCell).
 // Semanas reais pela data (createdAt/data). Sem invenção: célula sem dado fica null.
 import { prisma } from "@/lib/prisma";
-import { weekOfDay, GERACAO_PRODUTOS, GERACAO_FONTES, PAGOS_CAMPANHAS } from "./spec";
+import { weekOfDay, GERACAO_PRODUTOS, GERACAO_FONTES, PAGOS_CAMPANHAS, tabById, type PSection } from "./spec";
 import { type Cell, type RowData, type TabData, emptyRow } from "./types";
 
 const norm = (s: unknown) =>
@@ -166,17 +166,40 @@ async function buildPagos(workspaceId: string, year: number): Promise<TabData> {
   return mergeLiveOverStored(stored, live, liveMonths);
 }
 
-export async function buildTab(workspaceId: string, year: number, tab: string): Promise<TabData> {
-  switch (tab) {
-    case "geracao": return buildGeracao(workspaceId, year);
-    case "pagos": return buildPagos(workspaceId, year);
-    case "insights":
-    default: return buildInsights(workspaceId, year);
-  }
-}
-
 export const COVERAGE: Record<string, string> = {
   insights: "Instagram · histórico importado das planilhas + preenchimento manual. Integração ao vivo (semanas do período corrente) entra em seguida.",
   geracao: "Leads reais do CRM por fonte × produto (semanas reais pela data). Meses sem lead ao vivo mostram o histórico importado/manual.",
   pagos: "Leads/vendas/receita reais do CRM por campanha. Investimento/CPL/CAC e histórico entram por importação/manual.",
 };
+
+// ── estrutura salva por (tab, ano): célula especial metric="__structure__", mes=0, texto=JSON{weekly,sections} ──
+async function loadStructure(workspaceId: string, year: number, tab: string): Promise<{ weekly: boolean; sections: PSection[] } | null> {
+  const c = await prisma.planilhaCell.findFirst({ where: { workspaceId, tab, ano: year, metric: "__structure__", mes: 0 } });
+  if (!c?.texto) return null;
+  try {
+    const j = JSON.parse(c.texto) as { weekly?: boolean; sections?: PSection[] };
+    if (Array.isArray(j?.sections)) return { weekly: !!j.weekly, sections: j.sections };
+  } catch {}
+  return null;
+}
+
+// entrada única do painel: devolve ESTRUTURA (sections/weekly) + VALORES por (tab, ano).
+// Insights = template canônico (código). Geração/Pagos: ano com estrutura salva (histórico
+// importado/manual) usa a estrutura salva e só os dados salvos; senão usa a canônica + CRM ao vivo.
+export async function buildPlanilha(
+  workspaceId: string,
+  year: number,
+  tab: string
+): Promise<{ weekly: boolean; sections: PSection[]; data: TabData; coverage: string }> {
+  const spec = tabById(tab);
+  if (tab === "insights") {
+    return { weekly: spec.weekly, sections: spec.sections, data: await buildInsights(workspaceId, year), coverage: COVERAGE.insights };
+  }
+  // geracao / pagos
+  const stored = await loadStructure(workspaceId, year, tab);
+  if (stored) {
+    return { weekly: stored.weekly, sections: stored.sections, data: await loadStored(workspaceId, year, tab), coverage: (COVERAGE[tab] || "") + " · histórico importado" };
+  }
+  const data = tab === "geracao" ? await buildGeracao(workspaceId, year) : await buildPagos(workspaceId, year);
+  return { weekly: spec.weekly, sections: spec.sections, data, coverage: COVERAGE[tab] || "" };
+}

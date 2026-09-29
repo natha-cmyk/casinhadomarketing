@@ -54,7 +54,7 @@ export function PlanilhaPanel() {
     return () => { alive = false; };
   }, [year, tab]);
 
-  const spec = tabById(tab);
+  const meta = tabById(tab); // só rótulo/sub da aba (a estrutura vem do payload/servidor)
   const scope = { period, month, quarter, week, year: storeYear };
 
   return (
@@ -86,7 +86,7 @@ export function PlanilhaPanel() {
               aria-label="Próximo ano"
             >›</button>
           </div>
-          {spec.weekly && (
+          {payload?.weekly && (
             <button
               className={"pl-weektgl" + (showWeeks ? " on" : "")}
               onClick={() => setShowWeeks((v) => !v)}
@@ -103,7 +103,15 @@ export function PlanilhaPanel() {
         <div style={{ padding: 28 }}><Spinner texto="Carregando planilha…" /></div>
       ) : payload ? (
         <>
-          <PlanilhaAnual spec={spec} data={payload.data} year={year} scope={scope} showWeeks={showWeeks} />
+          <PlanilhaAnual
+            sections={payload.sections}
+            weekly={payload.weekly}
+            sub={meta.sub || meta.label}
+            data={payload.data}
+            year={year}
+            scope={scope}
+            showWeeks={showWeeks}
+          />
           {payload.coverage && <div className="pl-coverage">{payload.coverage}</div>}
         </>
       ) : (
