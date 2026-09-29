@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scripts temporarios de importacao/probe (nao versionar)
+scripts/_*.ts
