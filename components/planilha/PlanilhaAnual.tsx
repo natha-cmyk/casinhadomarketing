@@ -17,6 +17,16 @@ interface Props {
   year: number;
   scope: { period: "semana" | "mes" | "trimestre" | "ano"; month: number; quarter: number; week: number; year: number };
   showWeeks: boolean; // toggle do usuário (só vale nas abas weekly)
+  editMode?: boolean; // preenchimento manual: célula de mês vira input
+  onEdit?: (rowKey: string, kind: CellKind, monthIdx: number, raw: string) => void;
+}
+
+// valor mostrado no input de edição (mês, semana=-1) conforme o tipo
+function editStr(v: Cell, kind: CellKind): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (kind === "pct") return String(Math.round(v * 1000) / 10); // fração -> percentual (20.3)
+  return String(v);
 }
 
 type Col =
@@ -41,8 +51,8 @@ function fmtCell(v: Cell, kind: CellKind): string {
   return fmt(v, 0);
 }
 
-export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWeeks }: Props) {
-  const effWeeks = weekly && showWeeks; // semanas só quando a aba é semanal E o toggle está ligado
+export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWeeks, editMode = false, onEdit }: Props) {
+  const effWeeks = weekly && showWeeks && !editMode; // no modo edição, colapsa pra visão mensal (edita o mês)
   const monthSpan = effWeeks ? 5 : 1;
 
   const cols = useMemo<Col[]>(() => {
@@ -137,6 +147,20 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
                   </th>
                   {cols.map((c, i) => {
                     const v = cellVal(row.key, row.kind, c);
+                    if (editMode && onEdit && c.type === "month") {
+                      return (
+                        <td key={i} className="pl-total pl-editcell">
+                          <input
+                            key={`${year}:${row.key}:${c.m}`}
+                            className="pl-input"
+                            defaultValue={editStr(v, row.kind)}
+                            inputMode={row.kind === "text" ? "text" : "decimal"}
+                            onBlur={(e) => onEdit(row.key, row.kind, c.m, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          />
+                        </td>
+                      );
+                    }
                     return (
                       <td key={i} className={colClass(c) + (v == null ? " pl-empty" : "")}>
                         {fmtCell(v, row.kind)}

@@ -933,3 +933,7 @@ thead .pl-sel{background:color-mix(in srgb,var(--cyan) 22%,#fff)!important;color
 /* zebra suave */
 .planilha tbody tr:not(.pl-band):not(.pl-strong):nth-child(even) .pl-rowlabel{background:color-mix(in srgb,var(--surface) 60%,#fff)}
 .pl-coverage{padding:10px 14px;font-size:11.5px;color:var(--label-3);border-top:1px solid var(--hairline);background:var(--bg)}
+/* preenchimento manual */
+.pl-editcell{padding:2px!important}
+.pl-input{width:100%;min-width:54px;border:1px solid var(--hairline-2);border-radius:5px;padding:3px 5px;font-size:11.5px;text-align:right;font-variant-numeric:tabular-nums;background:#fff;color:var(--label)}
+.pl-input:focus{outline:2px solid color-mix(in srgb,var(--cyan) 45%,transparent);outline-offset:-1px;border-color:var(--cyan)}

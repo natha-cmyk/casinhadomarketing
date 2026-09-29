@@ -19,6 +19,11 @@ export function periodClosed(until: string | null | undefined): boolean {
   return !!until && until < hojeFortaleza();
 }
 
+// invalida entradas cujo key começa com `prefix` (ex.: após gravar célula manual da planilha).
+export function bust(prefix: string): void {
+  for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
+}
+
 export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const hit = store.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.v as T;

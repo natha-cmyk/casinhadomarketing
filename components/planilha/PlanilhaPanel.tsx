@@ -4,8 +4,9 @@
 // Reage ao período da barra de cima (destaque da coluna) — o ano segue a barra por padrão, com stepper local.
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
-import { PLANILHA_TABS, tabById } from "@/lib/planilha/spec";
-import type { PlanilhaPayload } from "@/lib/planilha/types";
+import { PLANILHA_TABS, tabById, type CellKind } from "@/lib/planilha/spec";
+import { type PlanilhaPayload, emptyRow } from "@/lib/planilha/types";
+import { parseBR } from "@/lib/format";
 import { PlanilhaAnual } from "./PlanilhaAnual";
 import { Spinner } from "@/components/Spinner";
 
@@ -22,6 +23,7 @@ export function PlanilhaPanel() {
   const [tab, setTab] = useState<string>("insights");
   const [year, setYear] = useState<number>(storeYear);
   const [showWeeks, setShowWeeks] = useState<boolean>(true);
+  const [editMode, setEditMode] = useState<boolean>(false);
 
   // segue a barra de cima quando o ano dela muda (padrão render-time recomendado, sem efeito)
   const [prevStoreYear, setPrevStoreYear] = useState<number>(storeYear);
@@ -57,6 +59,30 @@ export function PlanilhaPanel() {
   const meta = tabById(tab); // só rótulo/sub da aba (a estrutura vem do payload/servidor)
   const scope = { period, month, quarter, week, year: storeYear };
 
+  // preenchimento manual: grava a célula do MÊS (semana=-1) + atualiza a tela na hora
+  const saveCell = (rowKey: string, kind: CellKind, monthIdx: number, raw: string) => {
+    const s = raw.trim();
+    let valor: number | null = null, texto: string | null = null;
+    if (kind === "text") texto = s || null;
+    else if (s !== "") { const n = parseBR(s); valor = kind === "pct" ? n / 100 : n; }
+    setPayload((p) => {
+      if (!p) return p;
+      const data = { ...p.data };
+      const prev = data[rowKey];
+      const rd = prev ? { weeks: prev.weeks, months: [...prev.months], year: prev.year } : emptyRow();
+      rd.months[monthIdx] = kind === "text" ? texto : valor;
+      data[rowKey] = rd;
+      const np = { ...p, data };
+      CACHE.set(`${year}|${tab}`, np);
+      return np;
+    });
+    fetch("/api/overview/planilha/cell", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tab, metric: rowKey, ano: year, mes: monthIdx + 1, semana: -1, valor, texto }),
+    }).catch(() => {});
+  };
+
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       {/* barra de controle */}
@@ -86,7 +112,7 @@ export function PlanilhaPanel() {
               aria-label="Próximo ano"
             >›</button>
           </div>
-          {payload?.weekly && (
+          {payload?.weekly && !editMode && (
             <button
               className={"pl-weektgl" + (showWeeks ? " on" : "")}
               onClick={() => setShowWeeks((v) => !v)}
@@ -95,6 +121,13 @@ export function PlanilhaPanel() {
               {showWeeks ? "Semanas ✓" : "Semanas"}
             </button>
           )}
+          <button
+            className={"pl-weektgl" + (editMode ? " on" : "")}
+            onClick={() => setEditMode((v) => !v)}
+            title="Preencher/editar valores manualmente (por mês). Salva automaticamente."
+          >
+            {editMode ? "Editando ✓" : "Editar"}
+          </button>
         </div>
       </div>
 
@@ -111,7 +144,14 @@ export function PlanilhaPanel() {
             year={year}
             scope={scope}
             showWeeks={showWeeks}
+            editMode={editMode}
+            onEdit={saveCell}
           />
+          {editMode && (
+            <div className="pl-coverage" style={{ color: "var(--cyan)" }}>
+              Modo edição: preencha os valores por mês (salva sozinho). Percentuais em % (ex.: 20,3). Vazio apaga a célula.
+            </div>
+          )}
           {payload.coverage && <div className="pl-coverage">{payload.coverage}</div>}
         </>
       ) : (
