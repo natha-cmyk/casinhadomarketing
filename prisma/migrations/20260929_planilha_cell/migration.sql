@@ -1,5 +1,5 @@
-﻿-- Célula da PLANILHA ANUAL (overview): histórico importado + preenchimento manual do cliente.
--- Cobre semanas (semana 0-3) e total do mês (semana -1), além de valores de texto.
+-- PlanilhaCell (overview annual sheet): imported history + client manual fill.
+-- Covers weeks (semana 0-3) and the month total (semana -1), plus text values.
 CREATE TABLE IF NOT EXISTS "PlanilhaCell" (
   "id"          TEXT NOT NULL PRIMARY KEY,
   "workspaceId" TEXT NOT NULL,
@@ -15,6 +15,6 @@ CREATE TABLE IF NOT EXISTS "PlanilhaCell" (
   "createdAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX IF NOT EXISTS "PlanilhaCell_ws_tab_metric_ano_mes_semana_key"
-  ON "PlanilhaCell"("workspaceId","tab","metric","ano","mes","semana");
+  ON "PlanilhaCell" ("workspaceId", "tab", "metric", "ano", "mes", "semana");
 CREATE INDEX IF NOT EXISTS "PlanilhaCell_ws_tab_ano_idx"
-  ON "PlanilhaCell"("workspaceId","tab","ano");
+  ON "PlanilhaCell" ("workspaceId", "tab", "ano");
