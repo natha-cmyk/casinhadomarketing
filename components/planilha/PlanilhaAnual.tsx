@@ -1,8 +1,8 @@
 "use client";
-// Motor de renderização da PLANILHA ANUAL — replica 1:1 o template tradicional da Seahub:
-// linhas = métricas (em seções/faixas), colunas = meses (W1-W4 + TOTAL) + trimestres (Q) + ano.
-// Coluna de rótulos FIXA (sticky) à esquerda; cabeçalho fixo no topo. Destaca o período selecionado
-// na barra de cima. Só apresentação — os números vêm prontos (TabData). Sem invenção: null = branco.
+// Motor de renderização da PLANILHA ANUAL — replica 1:1 o template tradicional da Seahub.
+// Dois regimes de coluna: SEMANAL (mês×[W1-W4+TOTAL]+Q+ano) e MENSAL (mês+Q+ano).
+// Coluna de rótulos FIXA (sticky) à esquerda; cabeçalho fixo no topo. Destaca o período
+// selecionado na barra de cima. Só apresentação — números vêm prontos (TabData). null = branco.
 import { useMemo, type ReactNode } from "react";
 import { MONTHS_FULL } from "@/lib/scope";
 import { fmt, money, pct } from "@/lib/format";
@@ -14,7 +14,7 @@ interface Props {
   data: TabData;
   year: number;
   scope: { period: "semana" | "mes" | "trimestre" | "ano"; month: number; quarter: number; week: number; year: number };
-  showWeeks: boolean;
+  showWeeks: boolean; // toggle do usuário (só vale nas abas weekly)
 }
 
 type Col =
@@ -40,22 +40,21 @@ function fmtCell(v: Cell, kind: CellKind): string {
 }
 
 export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
-  // modelo de colunas (memo)
+  const effWeeks = spec.weekly && showWeeks; // semanas só quando a aba é semanal E o toggle está ligado
+  const monthSpan = effWeeks ? 5 : 1;
+
   const cols = useMemo<Col[]>(() => {
     const out: Col[] = [];
     for (let m = 0; m < 12; m++) {
-      if (showWeeks) for (let w = 0; w < 4; w++) out.push({ type: "w", m, w, label: `W${w + 1}` });
+      if (effWeeks) for (let w = 0; w < 4; w++) out.push({ type: "w", m, w, label: `W${w + 1}` });
       out.push({ type: "month", m, label: "TOTAL" });
       if (m % 3 === 2) out.push({ type: "q", q: (m - 2) / 3, label: `Q${(m - 2) / 3 + 1}` });
     }
     out.push({ type: "year", label: String(year) });
     return out;
-  }, [showWeeks, year]);
+  }, [effWeeks, year]);
 
-  const monthSpan = showWeeks ? 5 : 1;
   const sameYear = scope.year === year;
-
-  // uma coluna está "selecionada" (destaque ciano) conforme o período da barra de cima
   const isSel = (c: Col): boolean => {
     if (!sameYear) return false;
     if (scope.period === "semana") return c.type === "w" && c.m === scope.month && c.w === scope.week;
@@ -63,7 +62,6 @@ export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
     if (scope.period === "trimestre") return c.type === "q" && c.q === scope.quarter;
     return c.type === "year";
   };
-  // valor de uma célula (linha × coluna), ciente do tipo (aditivo soma; pct/text não)
   const cellVal = (key: string, kind: CellKind, c: Col): Cell => {
     const rd = data[key];
     if (!rd) return null;
@@ -72,10 +70,8 @@ export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
     if (c.type === "w") return rd.weeks[c.m]?.[c.w] ?? null;
     if (c.type === "month") return monthTotal(c.m);
     if (c.type === "q") return additive ? addSum([0, 1, 2].map((k) => monthTotal(c.q * 3 + k))) : null;
-    // year
     return rd.year ?? (additive ? addSum([...Array(12)].map((_, m) => monthTotal(m))) : null);
   };
-
   const colClass = (c: Col): string => {
     const sel = isSel(c) ? " pl-sel" : "";
     if (c.type === "month") return "pl-total" + sel;
@@ -85,6 +81,7 @@ export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
   };
 
   const totalCols = 1 + cols.length;
+  const headSpan = effWeeks ? 2 : 1;
 
   return (
     <div className="planilha-wrap">
@@ -92,7 +89,7 @@ export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
         <thead>
           {/* linha 1 — grupos de mês + Q + ano */}
           <tr>
-            <th className="pl-corner" rowSpan={2}>{spec.sub || spec.label}</th>
+            <th className="pl-corner" rowSpan={headSpan}>{spec.sub || spec.label}</th>
             {(() => {
               const cells: ReactNode[] = [];
               for (let m = 0; m < 12; m++) {
@@ -103,23 +100,25 @@ export function PlanilhaAnual({ spec, data, year, scope, showWeeks }: Props) {
                 );
                 if (m % 3 === 2) {
                   const q = (m - 2) / 3;
-                  cells.push(<th key={`qh-${q}`} className="pl-q pl-qhead" rowSpan={2}>Q{q + 1}</th>);
+                  cells.push(<th key={`qh-${q}`} className="pl-q pl-qhead" rowSpan={headSpan}>Q{q + 1}</th>);
                 }
               }
-              cells.push(<th key="yh" className="pl-year pl-yearhead" rowSpan={2}>{year}</th>);
+              cells.push(<th key="yh" className="pl-year pl-yearhead" rowSpan={headSpan}>{year}</th>);
               return cells;
             })()}
           </tr>
-          {/* linha 2 — W1-W4 + TOTAL sob cada mês (só quando showWeeks; senão só TOTAL) */}
-          <tr>
-            {cols
-              .filter((c) => c.type === "w" || c.type === "month")
-              .map((c, i) => (
-                <th key={`sub-${i}`} className={colClass(c)}>
-                  {c.type === "month" ? "TOTAL" : c.label}
-                </th>
-              ))}
-          </tr>
+          {/* linha 2 — W1-W4 + TOTAL sob cada mês (só no modo semanal) */}
+          {effWeeks && (
+            <tr>
+              {cols
+                .filter((c) => c.type === "w" || c.type === "month")
+                .map((c, i) => (
+                  <th key={`sub-${i}`} className={colClass(c)}>
+                    {c.type === "month" ? "TOTAL" : c.label}
+                  </th>
+                ))}
+            </tr>
+          )}
         </thead>
         <tbody>
           {spec.sections.map((sec) => (

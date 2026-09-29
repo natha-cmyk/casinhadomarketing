@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-const TABS = new Set(["insights", "geracao", "planejamento", "pagos"]);
+const TABS = new Set(["insights", "geracao", "pagos"]);
 
 export async function GET(req: Request) {
   try {

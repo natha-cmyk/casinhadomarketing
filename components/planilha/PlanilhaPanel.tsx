@@ -86,13 +86,15 @@ export function PlanilhaPanel() {
               aria-label="Próximo ano"
             >›</button>
           </div>
-          <button
-            className={"pl-weektgl" + (showWeeks ? " on" : "")}
-            onClick={() => setShowWeeks((v) => !v)}
-            title="Mostrar/ocultar as semanas (W1–W4) dentro de cada mês"
-          >
-            {showWeeks ? "Semanas ✓" : "Semanas"}
-          </button>
+          {spec.weekly && (
+            <button
+              className={"pl-weektgl" + (showWeeks ? " on" : "")}
+              onClick={() => setShowWeeks((v) => !v)}
+              title="Mostrar/ocultar as semanas (W1–W4) dentro de cada mês"
+            >
+              {showWeeks ? "Semanas ✓" : "Semanas"}
+            </button>
+          )}
         </div>
       </div>
 

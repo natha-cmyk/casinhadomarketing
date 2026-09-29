@@ -477,3 +477,28 @@ model AnalyticsCache {
 
   @@index([createdAt])
 }
+
+// ─────────────────────────────────────────────────────────────
+// Célula da PLANILHA ANUAL (overview) — o "espelho" do template tradicional.
+// Guarda histórico IMPORTADO das planilhas antigas + preenchimento MANUAL do cliente
+// para períodos que a integração ao vivo não cobre. Cobre semanas (semana 0-3) e
+// total do mês (semana -1), além de valores de TEXTO (ex.: Formato vencedor).
+// Sem FK modelada (workspaceId direto) — additivo e descartável por workspace.
+// ─────────────────────────────────────────────────────────────
+model PlanilhaCell {
+  id          String   @id @default(cuid())
+  workspaceId String
+  tab         String // insights | geracao | pagos
+  metric      String // row.key da spec
+  ano         Int
+  mes         Int // 1-12
+  semana      Int      @default(-1) // -1 = total do mês; 0-3 = W1-W4
+  valor       Float?
+  texto       String? // linhas de texto (ex.: Formato vencedor)
+  source      String   @default("manual") // manual | import | auto
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, tab, metric, ano, mes, semana])
+  @@index([workspaceId, tab, ano])
+}
