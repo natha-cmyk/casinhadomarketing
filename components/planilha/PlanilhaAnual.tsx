@@ -20,6 +20,8 @@ interface Props {
   onEdit?: (rowKey: string, kind: CellKind, monthIdx: number, raw: string) => void;
   cmpMode?: "off" | "ano" | "mes"; // comparação: Δ vs ano anterior (na coluna do ano ou de cada mês)
   cmpData?: TabData; // dados do ano anterior (mesmas chaves)
+  focusMonth?: number | null; // modo foco: destaca só este mês (0-11), desfoca os outros
+  fontSize?: "sm" | "md" | "lg"; // tamanho da fonte da tabela
 }
 
 // valor mostrado no input de edição (mês, semana=-1) conforme o tipo
@@ -52,7 +54,7 @@ function fmtCell(v: Cell, kind: CellKind): string {
   return fmt(v, 0);
 }
 
-export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, editMode = false, onEdit, cmpMode = "off", cmpData }: Props) {
+export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, editMode = false, onEdit, cmpMode = "off", cmpData, focusMonth = null, fontSize = "md" }: Props) {
   const effWeeks = weekly && showWeeks && !editMode; // no modo edição, colapsa pra visão mensal (edita o mês)
   const monthSpan = effWeeks ? 5 : 1;
 
@@ -107,12 +109,15 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
       </>
     );
   };
+  // modo foco: desfoca colunas de meses que não são o foco (semanas e total do mês)
+  const dimCol = (c: Col): boolean => focusMonth != null && (c.type === "w" || c.type === "month") && c.m !== focusMonth;
   const colClass = (c: Col): string => {
     const sel = isSel(c) ? " pl-sel" : "";
-    if (c.type === "month") return "pl-total" + sel;
+    const dim = dimCol(c) ? " pl-dim" : "";
+    if (c.type === "month") return "pl-total" + sel + dim;
     if (c.type === "q") return "pl-q" + sel;
     if (c.type === "year") return "pl-year" + sel;
-    return "pl-w" + (c.type === "w" && c.w === 0 ? " pl-wfirst" : "") + sel;
+    return "pl-w" + (c.type === "w" && c.w === 0 ? " pl-wfirst" : "") + sel + dim;
   };
 
   const totalCols = 1 + cols.length;
@@ -169,7 +174,7 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
 
   return (
     <div className="planilha-wrap">
-      <table className="planilha">
+      <table className={"planilha pl-sz-" + fontSize}>
         <thead>
           {/* linha 1 — grupos de mês + Q + ano */}
           <tr>
@@ -178,7 +183,7 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
               const cells: ReactNode[] = [];
               for (let m = 0; m < 12; m++) {
                 cells.push(
-                  <th key={`mh-${m}`} className="pl-monthhead" colSpan={monthSpan}>
+                  <th key={`mh-${m}`} className={"pl-monthhead" + (focusMonth != null && m !== focusMonth ? " pl-dim" : "")} colSpan={monthSpan}>
                     {MONTHS_FULL[m]}
                   </th>
                 );

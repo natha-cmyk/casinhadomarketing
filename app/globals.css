@@ -950,3 +950,16 @@ thead .pl-sel{background:color-mix(in srgb,var(--cyan) 22%,#fff)!important;color
 .pl-editcell{padding:2px!important}
 .pl-input{width:100%;min-width:54px;border:1px solid var(--hairline-2);border-radius:5px;padding:3px 5px;font-size:11.5px;text-align:right;font-variant-numeric:tabular-nums;background:#fff;color:var(--label)}
 .pl-input:focus{outline:2px solid color-mix(in srgb,var(--cyan) 45%,transparent);outline-offset:-1px;border-color:var(--cyan)}
+/* modo foco no mês: desfoca os outros meses */
+.pl-dim{opacity:.18;filter:saturate(.5);transition:opacity .12s}
+.pl-monthhead.pl-dim{opacity:.28}
+/* tamanho de fonte da planilha */
+.planilha.pl-sz-sm{font-size:10.5px}
+.planilha.pl-sz-md{font-size:11.5px}
+.planilha.pl-sz-lg{font-size:13.5px}
+.planilha.pl-sz-sm th,.planilha.pl-sz-sm td{padding:3px 5px}
+.planilha.pl-sz-lg th,.planilha.pl-sz-lg td{padding:7px 10px}
+.planilha.pl-sz-sm thead th{font-size:9.5px}
+.planilha.pl-sz-lg thead th{font-size:12px}
+/* freeze visual da coluna de rótulos (sombra na borda direita) */
+.pl-rowlabel,.pl-corner,.pl-bandlabel{box-shadow:3px 0 6px -3px rgba(0,0,0,.14)}

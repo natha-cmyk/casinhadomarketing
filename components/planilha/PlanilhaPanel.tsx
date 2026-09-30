@@ -26,6 +26,8 @@ export function PlanilhaPanel() {
   const [editMode, setEditMode] = useState<boolean>(false);
   const [cmpMode, setCmpMode] = useState<"off" | "ano" | "mes">("off");
   const [cmpPayload, setCmpPayload] = useState<PlanilhaPayload | null>(null);
+  const [focusOn, setFocusOn] = useState<boolean>(false);
+  const [fontSize, setFontSize] = useState<"sm" | "md" | "lg">("md");
 
   // segue a barra de cima quando o ano dela muda (padrão render-time recomendado, sem efeito)
   const [prevStoreYear, setPrevStoreYear] = useState<number>(storeYear);
@@ -135,9 +137,23 @@ export function PlanilhaPanel() {
             </button>
           )}
           <button
+            className={"pl-weektgl" + (focusOn ? " on" : "")}
+            onClick={() => setFocusOn((v) => !v)}
+            title="Foco no mês: desfoca os outros meses e destaca só o mês selecionado na barra de cima."
+          >
+            {focusOn ? "Foco ✓" : "Foco no mês"}
+          </button>
+          <button
+            className="pl-weektgl"
+            onClick={() => setFontSize((s) => (s === "sm" ? "md" : s === "md" ? "lg" : "sm"))}
+            title="Tamanho da fonte da planilha (compacto / normal / grande)."
+          >
+            {fontSize === "sm" ? "A−" : fontSize === "lg" ? "A+" : "A"}
+          </button>
+          <button
             className={"pl-weektgl" + (cmpMode !== "off" ? " on" : "")}
             onClick={() => setCmpMode((m) => (m === "off" ? "ano" : m === "ano" ? "mes" : "off"))}
-            title="Comparar com o ano anterior. Um clique alterna: Δ Ano (na coluna do ano) → Δ Mês (em cada total de mês) → desliga."
+            title="Comparar com o ano anterior. Um clique alterna: Δ Ano (trimestres + ano) → Δ Mês (cada total de mês) → desliga."
           >
             {cmpMode === "off" ? "Comparar" : cmpMode === "ano" ? `vs ${year - 1} · ano` : `vs ${year - 1} · mês`}
           </button>
@@ -177,6 +193,8 @@ export function PlanilhaPanel() {
             onEdit={saveCell}
             cmpMode={cmpMode}
             cmpData={cmpData}
+            focusMonth={focusOn ? month : null}
+            fontSize={fontSize}
           />
           {editMode && (
             <div className="pl-coverage" style={{ color: "var(--cyan)" }}>
