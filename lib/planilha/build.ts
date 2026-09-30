@@ -7,7 +7,7 @@
 // Semanas reais pela data (createdAt/data). Sem invenção: célula sem dado fica null.
 import { prisma } from "@/lib/prisma";
 import { weekOfDay, GERACAO_PRODUTOS, GERACAO_FONTES, PAGOS_CAMPANHAS, tabById, type PSection } from "./spec";
-import { type Cell, type RowData, type TabData, emptyRow } from "./types";
+import { type Cell, type RowData, type TabData, type PlanilhaConfig, emptyRow, emptyConfig } from "./types";
 
 const norm = (s: unknown) =>
   String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -203,23 +203,44 @@ async function loadStructure(workspaceId: string, year: number, tab: string): Pr
   return null;
 }
 
-// entrada única do painel: devolve ESTRUTURA (sections/weekly) + VALORES por (tab, ano).
+// personalização GLOBAL por aba (célula __config__ em ano=0). Cliente aplica ocultar/ordenar/custom.
+async function loadPlanilhaConfig(workspaceId: string, tab: string): Promise<PlanilhaConfig> {
+  const c = await prisma.planilhaCell.findFirst({ where: { workspaceId, tab, ano: 0, mes: 0, metric: "__config__" } });
+  if (!c?.texto) return emptyConfig();
+  try {
+    const j = JSON.parse(c.texto) as Partial<PlanilhaConfig>;
+    return {
+      hidden: Array.isArray(j.hidden) ? j.hidden : [],
+      custom: Array.isArray(j.custom) ? j.custom : [],
+      order: j.order && typeof j.order === "object" ? j.order : {},
+    };
+  } catch {
+    return emptyConfig();
+  }
+}
+
+// entrada única do painel: devolve ESTRUTURA (sections/weekly) + VALORES + CONFIG por (tab, ano).
 // Insights = template canônico (código). Geração/Pagos: ano com estrutura salva (histórico
 // importado/manual) usa a estrutura salva e só os dados salvos; senão usa a canônica + CRM ao vivo.
 export async function buildPlanilha(
   workspaceId: string,
   year: number,
   tab: string
-): Promise<{ weekly: boolean; sections: PSection[]; data: TabData; coverage: string }> {
+): Promise<{ weekly: boolean; sections: PSection[]; config: PlanilhaConfig; data: TabData; coverage: string }> {
   const spec = tabById(tab);
-  if (tab === "insights") {
-    return { weekly: spec.weekly, sections: spec.sections, data: await buildInsights(workspaceId, year), coverage: COVERAGE.insights };
-  }
-  // geracao / pagos
-  const stored = await loadStructure(workspaceId, year, tab);
-  if (stored) {
-    return { weekly: stored.weekly, sections: stored.sections, data: await loadStored(workspaceId, year, tab), coverage: (COVERAGE[tab] || "") + " · histórico importado" };
-  }
-  const data = tab === "geracao" ? await buildGeracao(workspaceId, year) : await buildPagos(workspaceId, year);
-  return { weekly: spec.weekly, sections: spec.sections, data, coverage: COVERAGE[tab] || "" };
+  const [config, base] = await Promise.all([
+    loadPlanilhaConfig(workspaceId, tab),
+    (async (): Promise<{ weekly: boolean; sections: PSection[]; data: TabData; coverage: string }> => {
+      if (tab === "insights") {
+        return { weekly: spec.weekly, sections: spec.sections, data: await buildInsights(workspaceId, year), coverage: COVERAGE.insights };
+      }
+      const stored = await loadStructure(workspaceId, year, tab);
+      if (stored) {
+        return { weekly: stored.weekly, sections: stored.sections, data: await loadStored(workspaceId, year, tab), coverage: (COVERAGE[tab] || "") + " · histórico importado" };
+      }
+      const data = tab === "geracao" ? await buildGeracao(workspaceId, year) : await buildPagos(workspaceId, year);
+      return { weekly: spec.weekly, sections: spec.sections, data, coverage: COVERAGE[tab] || "" };
+    })(),
+  ]);
+  return { ...base, config };
 }

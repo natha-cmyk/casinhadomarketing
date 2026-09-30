@@ -1,7 +1,16 @@
 // Tipos do payload da planilha anual (compartilhados servidor↔cliente).
-import type { PSection } from "./spec";
+import type { PSection, CellKind } from "./spec";
 
 export type Cell = number | string | null;
+
+// ── personalização da aba (por workspace, GLOBAL por aba — vale pra todos os anos) ──
+export interface PlanilhaCustomRow { section: string; key: string; label: string; kind: CellKind }
+export interface PlanilhaConfig {
+  hidden: string[]; // row.keys ocultos
+  custom: PlanilhaCustomRow[]; // indicadores manuais adicionados
+  order: Record<string, string[]>; // ordem das linhas por seção (title -> [row.key...])
+}
+export const emptyConfig = (): PlanilhaConfig => ({ hidden: [], custom: [], order: {} });
 
 export interface RowData {
   // weeks[mês 0-11][semana 0-3] — valor da semana (null = sem dado)
@@ -17,7 +26,8 @@ export interface PlanilhaPayload {
   year: number;
   tab: string;
   weekly: boolean; // regime de colunas (semanal vs mensal) — pode variar por ano
-  sections: PSection[]; // ESTRUTURA vinda do servidor (por tab+ano) — engine renderiza isto
+  sections: PSection[]; // ESTRUTURA COMPLETA vinda do servidor (por tab+ano)
+  config: PlanilhaConfig; // personalização (ocultar/ordenar/indicadores manuais) — cliente aplica
   data: TabData;
   // procedência resumida (mostrada em nota de rodapé — honesto sobre a cobertura)
   coverage: string;

@@ -5,9 +5,11 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { PLANILHA_TABS, type CellKind } from "@/lib/planilha/spec";
-import { type PlanilhaPayload, emptyRow } from "@/lib/planilha/types";
+import { type PlanilhaPayload, type PlanilhaConfig, emptyRow, emptyConfig } from "@/lib/planilha/types";
+import { applyConfig } from "@/lib/planilha/apply";
 import { parseBR } from "@/lib/format";
 import { PlanilhaAnual } from "./PlanilhaAnual";
+import { PlanilhaOrganize } from "./PlanilhaOrganize";
 import { GeracaoCharts } from "./GeracaoCharts";
 import { Spinner } from "@/components/Spinner";
 
@@ -99,6 +101,37 @@ export function PlanilhaPanel() {
     }).catch(() => {});
   };
 
+  // ── personalização (ocultar / reordenar / indicadores manuais) ──
+  const [organize, setOrganize] = useState(false);
+  const config: PlanilhaConfig = payload?.config ?? emptyConfig();
+  const fullSections = payload ? applyConfig(payload.sections, config, true) : [];
+  const effectiveSections = payload ? applyConfig(payload.sections, config, false) : [];
+  const hiddenSet = new Set(config.hidden);
+  const customKeys = new Set(config.custom.map((c) => c.key));
+  const persistConfig = (next: PlanilhaConfig) => {
+    setPayload((p) => { if (!p) return p; const np = { ...p, config: next }; CACHE.set(`${year}|${tab}`, np); return np; });
+    fetch("/api/overview/planilha/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ tab, hidden: next.hidden, custom: next.custom, order: next.order }) }).catch(() => {});
+  };
+  const toggleHide = (key: string) => {
+    const h = new Set(config.hidden); if (h.has(key)) h.delete(key); else h.add(key);
+    persistConfig({ ...config, hidden: [...h] });
+  };
+  const moveRow = (secTitle: string, key: string, dir: -1 | 1) => {
+    const sec = fullSections.find((s) => s.title === secTitle); if (!sec) return;
+    const keys = sec.rows.map((r) => r.key);
+    const i = keys.indexOf(key), j = i + dir;
+    if (i < 0 || j < 0 || j >= keys.length) return;
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+    persistConfig({ ...config, order: { ...config.order, [secTitle]: keys } });
+  };
+  const addCustom = (c: { section: string; label: string; kind: CellKind }) => {
+    const key = "custom_" + Math.random().toString(36).slice(2, 10);
+    persistConfig({ ...config, custom: [...config.custom, { ...c, key }] });
+  };
+  const removeCustom = (key: string) => {
+    persistConfig({ ...config, custom: config.custom.filter((c) => c.key !== key), hidden: config.hidden.filter((h) => h !== key) });
+  };
+
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       {/* barra de controle */}
@@ -165,6 +198,13 @@ export function PlanilhaPanel() {
           >
             {editMode ? "Editando ✓" : "Editar"}
           </button>
+          <button
+            className={"pl-weektgl" + (organize ? " on" : "")}
+            onClick={() => setOrganize((v) => !v)}
+            title="Organizar: ocultar, reordenar e adicionar indicadores manuais."
+          >
+            {organize ? "Organizando ✓" : "Organizar"}
+          </button>
         </div>
       </div>
 
@@ -183,8 +223,19 @@ export function PlanilhaPanel() {
         <div style={{ padding: 28 }}><Spinner texto="Carregando planilha…" /></div>
       ) : payload ? (
         <>
+          {organize && (
+            <PlanilhaOrganize
+              sections={fullSections}
+              hidden={hiddenSet}
+              customKeys={customKeys}
+              onToggleHide={toggleHide}
+              onMove={moveRow}
+              onAddCustom={addCustom}
+              onRemoveCustom={removeCustom}
+            />
+          )}
           <PlanilhaAnual
-            sections={payload.sections}
+            sections={effectiveSections}
             weekly={payload.weekly}
             data={payload.data}
             year={year}
