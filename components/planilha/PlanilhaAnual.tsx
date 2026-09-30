@@ -4,7 +4,7 @@
 // Coluna de rótulos FIXA (sticky) à esquerda; cabeçalho fixo no topo. Destaca o período
 // selecionado na barra de cima. Só apresentação — números vêm prontos (TabData). null = branco.
 import { useMemo, type ReactNode } from "react";
-import { MONTHS_FULL } from "@/lib/scope";
+import { MONTHS_FULL, computeDelta, type Delta } from "@/lib/scope";
 import { fmt, money, pct } from "@/lib/format";
 import type { PSection, PRow, CellKind } from "@/lib/planilha/spec";
 import type { Cell, TabData } from "@/lib/planilha/types";
@@ -12,13 +12,14 @@ import type { Cell, TabData } from "@/lib/planilha/types";
 interface Props {
   sections: PSection[]; // ESTRUTURA vinda do servidor
   weekly: boolean; // regime de colunas da aba/ano
-  sub: string; // rótulo da célula-canto (nome da aba)
   data: TabData;
   year: number;
   scope: { period: "semana" | "mes" | "trimestre" | "ano"; month: number; quarter: number; week: number; year: number };
   showWeeks: boolean; // toggle do usuário (só vale nas abas weekly)
   editMode?: boolean; // preenchimento manual: célula de mês vira input
   onEdit?: (rowKey: string, kind: CellKind, monthIdx: number, raw: string) => void;
+  cmpMode?: "off" | "ano" | "mes"; // comparação: Δ vs ano anterior (na coluna do ano ou de cada mês)
+  cmpData?: TabData; // dados do ano anterior (mesmas chaves)
 }
 
 // valor mostrado no input de edição (mês, semana=-1) conforme o tipo
@@ -51,7 +52,7 @@ function fmtCell(v: Cell, kind: CellKind): string {
   return fmt(v, 0);
 }
 
-export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWeeks, editMode = false, onEdit }: Props) {
+export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, editMode = false, onEdit, cmpMode = "off", cmpData }: Props) {
   const effWeeks = weekly && showWeeks && !editMode; // no modo edição, colapsa pra visão mensal (edita o mês)
   const monthSpan = effWeeks ? 5 : 1;
 
@@ -74,8 +75,8 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
     if (scope.period === "trimestre") return c.type === "q" && c.q === scope.quarter;
     return c.type === "year";
   };
-  const cellVal = (key: string, kind: CellKind, c: Col): Cell => {
-    const rd = data[key];
+  const valOf = (src: TabData, key: string, kind: CellKind, c: Col): Cell => {
+    const rd = src[key];
     if (!rd) return null;
     const additive = ADDITIVE[kind];
     const monthTotal = (m: number): Cell => rd.months[m] ?? (additive ? addSum(rd.weeks[m]) : null);
@@ -83,6 +84,26 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
     if (c.type === "month") return monthTotal(c.m);
     if (c.type === "q") return additive ? addSum([0, 1, 2].map((k) => monthTotal(c.q * 3 + k))) : null;
     return rd.year ?? (additive ? addSum([...Array(12)].map((_, m) => monthTotal(m))) : null);
+  };
+  const cellVal = (key: string, kind: CellKind, c: Col): Cell => valOf(data, key, kind, c);
+  // Δ vs ano anterior — na coluna do ANO (cmpMode=ano) ou em cada TOTAL de mês (cmpMode=mes)
+  const deltaCell = (key: string, kind: CellKind, c: Col): Delta | null => {
+    if (cmpMode === "off" || !cmpData || kind === "text") return null;
+    const want = cmpMode === "ano" ? c.type === "year" : cmpMode === "mes" && c.type === "month";
+    if (!want) return null;
+    const cur = valOf(data, key, kind, c), prev = valOf(cmpData, key, kind, c);
+    if (typeof cur !== "number" || typeof prev !== "number") return null;
+    return computeDelta(cur, prev, true);
+  };
+  const content = (v: Cell, kind: CellKind, key: string, c: Col): ReactNode => {
+    const d = deltaCell(key, kind, c);
+    if (!d) return fmtCell(v, kind);
+    return (
+      <>
+        <span>{fmtCell(v, kind)}</span>
+        <span className={"pl-delta pl-d-" + d.kind}>{d.pctLabel}{d.numLabel ? ` ${d.numLabel}` : ""}</span>
+      </>
+    );
   };
   const colClass = (c: Col): string => {
     const sel = isSel(c) ? " pl-sel" : "";
@@ -105,7 +126,7 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
         const v = cellVal(row.key, row.kind, mc);
         out.push(
           <td key={`m${m}`} colSpan={monthSpan} className={colClass(mc) + " pl-mcell" + (v == null ? " pl-empty" : "")}>
-            {fmtCell(v, row.kind)}
+            {content(v, row.kind, row.key, mc)}
           </td>
         );
         if (m % 3 === 2) {
@@ -117,7 +138,7 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
       }
       const yc: Col = { type: "year", label: String(year) };
       const yv = cellVal(row.key, row.kind, yc);
-      out.push(<td key="y" className={colClass(yc) + (yv == null ? " pl-empty" : "")}>{fmtCell(yv, row.kind)}</td>);
+      out.push(<td key="y" className={colClass(yc) + (yv == null ? " pl-empty" : "")}>{content(yv, row.kind, row.key, yc)}</td>);
       return out;
     }
     return cols.map((c, i) => {
@@ -138,7 +159,7 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
       }
       return (
         <td key={i} className={colClass(c) + (v == null ? " pl-empty" : "")}>
-          {fmtCell(v, row.kind)}
+          {content(v, row.kind, row.key, c)}
         </td>
       );
     });
@@ -150,7 +171,7 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
         <thead>
           {/* linha 1 — grupos de mês + Q + ano */}
           <tr>
-            <th className="pl-corner" rowSpan={headSpan}>{sub}</th>
+            <th className="pl-corner" rowSpan={headSpan} aria-hidden />
             {(() => {
               const cells: ReactNode[] = [];
               for (let m = 0; m < 12; m++) {

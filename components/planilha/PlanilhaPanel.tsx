@@ -4,7 +4,7 @@
 // Reage ao período da barra de cima (destaque da coluna) — o ano segue a barra por padrão, com stepper local.
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
-import { PLANILHA_TABS, tabById, type CellKind } from "@/lib/planilha/spec";
+import { PLANILHA_TABS, type CellKind } from "@/lib/planilha/spec";
 import { type PlanilhaPayload, emptyRow } from "@/lib/planilha/types";
 import { parseBR } from "@/lib/format";
 import { PlanilhaAnual } from "./PlanilhaAnual";
@@ -24,6 +24,8 @@ export function PlanilhaPanel() {
   const [year, setYear] = useState<number>(storeYear);
   const [showWeeks, setShowWeeks] = useState<boolean>(true);
   const [editMode, setEditMode] = useState<boolean>(false);
+  const [cmpMode, setCmpMode] = useState<"off" | "ano" | "mes">("off");
+  const [cmpPayload, setCmpPayload] = useState<PlanilhaPayload | null>(null);
 
   // segue a barra de cima quando o ano dela muda (padrão render-time recomendado, sem efeito)
   const [prevStoreYear, setPrevStoreYear] = useState<number>(storeYear);
@@ -56,8 +58,19 @@ export function PlanilhaPanel() {
     return () => { alive = false; };
   }, [year, tab]);
 
-  const meta = tabById(tab); // só rótulo/sub da aba (a estrutura vem do payload/servidor)
   const scope = { period, month, quarter, week, year: storeYear };
+  // comparação: busca o ANO ANTERIOR quando ligado; cmpData só vale se casar (ano-1, mesma aba)
+  useEffect(() => {
+    if (cmpMode === "off") return;
+    let alive = true;
+    fetch(`/api/overview/planilha?year=${year - 1}&tab=${tab}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: PlanilhaPayload) => { if (alive && d && !(d as { error?: string }).error) setCmpPayload(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [cmpMode, year, tab]);
+  const cmpData =
+    cmpMode !== "off" && cmpPayload && cmpPayload.year === year - 1 && cmpPayload.tab === tab ? cmpPayload.data : undefined;
 
   // preenchimento manual: grava a célula do MÊS (semana=-1) + atualiza a tela na hora
   const saveCell = (rowKey: string, kind: CellKind, monthIdx: number, raw: string) => {
@@ -122,6 +135,13 @@ export function PlanilhaPanel() {
             </button>
           )}
           <button
+            className={"pl-weektgl" + (cmpMode !== "off" ? " on" : "")}
+            onClick={() => setCmpMode((m) => (m === "off" ? "ano" : m === "ano" ? "mes" : "off"))}
+            title="Comparar com o ano anterior. Um clique alterna: Δ Ano (na coluna do ano) → Δ Mês (em cada total de mês) → desliga."
+          >
+            {cmpMode === "off" ? "Comparar" : cmpMode === "ano" ? "Δ Ano ✓" : "Δ Mês ✓"}
+          </button>
+          <button
             className={"pl-weektgl" + (editMode ? " on" : "")}
             onClick={() => setEditMode((v) => !v)}
             title="Preencher/editar valores manualmente (por mês). Salva automaticamente."
@@ -139,13 +159,14 @@ export function PlanilhaPanel() {
           <PlanilhaAnual
             sections={payload.sections}
             weekly={payload.weekly}
-            sub={meta.sub || meta.label}
             data={payload.data}
             year={year}
             scope={scope}
             showWeeks={showWeeks}
             editMode={editMode}
             onEdit={saveCell}
+            cmpMode={cmpMode}
+            cmpData={cmpData}
           />
           {editMode && (
             <div className="pl-coverage" style={{ color: "var(--cyan)" }}>

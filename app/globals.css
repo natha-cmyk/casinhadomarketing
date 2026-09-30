@@ -924,6 +924,11 @@ svg.chartI{cursor:crosshair}
 thead .pl-sel{background:color-mix(in srgb,var(--cyan) 22%,#fff)!important;color:color-mix(in srgb,var(--cyan) 60%,var(--ink))!important}
 .pl-empty{color:transparent}
 .pl-mcell{text-align:center;font-weight:650}
+/* chip de comparação (Δ vs ano anterior) */
+.pl-delta{display:block;font-size:9px;font-weight:700;line-height:1.1;margin-top:1px;letter-spacing:-.2px;font-variant-numeric:tabular-nums}
+.pl-d-up{color:#2FB457}
+.pl-d-down{color:var(--red)}
+.pl-d-flat{color:var(--label-3)}
 /* faixa de seção (header vermelho) */
 .pl-band th,.pl-band td{background:color-mix(in srgb,var(--red) 9%,#fff);border-bottom:1px solid color-mix(in srgb,var(--red) 22%,transparent);border-top:1px solid color-mix(in srgb,var(--red) 22%,transparent)}
 .pl-bandlabel{position:sticky;left:0;z-index:2;text-align:left!important;font-weight:800;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--red)!important;background:color-mix(in srgb,var(--red) 12%,#fff)!important;min-width:220px;max-width:220px;width:220px;padding-left:12px!important}
