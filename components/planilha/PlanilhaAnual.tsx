@@ -4,7 +4,7 @@
 // Coluna de rótulos FIXA (sticky) à esquerda; cabeçalho fixo no topo. Destaca o período
 // selecionado na barra de cima. Só apresentação — números vêm prontos (TabData). null = branco.
 import { useMemo, type ReactNode } from "react";
-import { MONTHS_FULL, computeDelta, type Delta } from "@/lib/scope";
+import { MONTHS, MONTHS_FULL, computeDelta, type Delta } from "@/lib/scope";
 import { fmt, money, pct } from "@/lib/format";
 import type { PSection, PRow, CellKind } from "@/lib/planilha/spec";
 import type { Cell, TabData } from "@/lib/planilha/types";
@@ -172,13 +172,25 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
     });
   };
 
+  // canto fixo (mês/período do escopo) — sem rowSpan (rowSpan+sticky quebra ao rolar)
+  const cornerTop =
+    focusMonth != null ? MONTHS[focusMonth]
+      : scope.year !== year ? "Ano"
+        : scope.period === "mes" ? MONTHS[scope.month]
+          : scope.period === "trimestre" ? `Q${scope.quarter + 1}`
+            : scope.period === "semana" ? `S${scope.week + 1}`
+              : "Ano";
+
   return (
     <div className="planilha-wrap">
       <table className={"planilha pl-sz-" + fontSize}>
         <thead>
-          {/* linha 1 — grupos de mês + Q + ano */}
+          {/* linha 1 — canto (mês/período) + grupos de mês + Q + ano */}
           <tr>
-            <th className="pl-corner" rowSpan={headSpan} aria-hidden />
+            <th className="pl-corner pl-corner-a">
+              <span className="pl-corner-lbl">{cornerTop}</span>
+              {!effWeeks && <span className="pl-corner-sub">{year}</span>}
+            </th>
             {(() => {
               const cells: ReactNode[] = [];
               for (let m = 0; m < 12; m++) {
@@ -196,9 +208,10 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
               return cells;
             })()}
           </tr>
-          {/* linha 2 — W1-W4 + TOTAL sob cada mês (só no modo semanal) */}
+          {/* linha 2 — canto (ano) + W1-W4 + TOTAL sob cada mês (só no modo semanal) */}
           {effWeeks && (
             <tr>
+              <th className="pl-corner pl-corner-b"><span className="pl-corner-sub">{year}</span></th>
               {cols
                 .filter((c) => c.type === "w" || c.type === "month")
                 .map((c, i) => (

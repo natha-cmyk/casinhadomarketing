@@ -8,6 +8,7 @@ import { PLANILHA_TABS, type CellKind } from "@/lib/planilha/spec";
 import { type PlanilhaPayload, type PlanilhaConfig, emptyRow, emptyConfig } from "@/lib/planilha/types";
 import { applyConfig } from "@/lib/planilha/apply";
 import { parseBR } from "@/lib/format";
+import { IconBtn } from "@/components/ui";
 import { PlanilhaAnual } from "./PlanilhaAnual";
 import { PlanilhaOrganize } from "./PlanilhaOrganize";
 import { GeracaoCharts } from "./GeracaoCharts";
@@ -162,49 +163,29 @@ export function PlanilhaPanel() {
             >›</button>
           </div>
           {payload?.weekly && !editMode && (
-            <button
-              className={"pl-weektgl" + (showWeeks ? " on" : "")}
-              onClick={() => setShowWeeks((v) => !v)}
-              title="Mostrar/ocultar as semanas (W1–W4) dentro de cada mês"
-            >
-              {showWeeks ? "Semanas ✓" : "Semanas"}
-            </button>
+            <IconBtn label={showWeeks ? "Semanas (W1–W4) visíveis" : "Mostrar semanas (W1–W4)"} active={showWeeks} onClick={() => setShowWeeks((v) => !v)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6 5v14M10 5v14M14 5v14M18 5v14" /></svg>
+            </IconBtn>
           )}
-          <button
-            className={"pl-weektgl" + (focusOn ? " on" : "")}
-            onClick={() => setFocusOn((v) => !v)}
-            title="Foco no mês: desfoca os outros meses e destaca só o mês selecionado na barra de cima."
-          >
-            {focusOn ? "Foco ✓" : "Foco no mês"}
-          </button>
-          <button
-            className="pl-weektgl"
-            onClick={() => setFontSize((s) => (s === "sm" ? "md" : s === "md" ? "lg" : "sm"))}
-            title="Tamanho da fonte da planilha (compacto / normal / grande)."
-          >
-            {fontSize === "sm" ? "A−" : fontSize === "lg" ? "A+" : "A"}
-          </button>
-          <button
-            className={"pl-weektgl" + (cmpMode !== "off" ? " on" : "")}
+          <IconBtn label="Foco no mês (desfoca os outros)" active={focusOn} onClick={() => setFocusOn((v) => !v)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="6.5" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" strokeLinecap="round" /><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" /></svg>
+          </IconBtn>
+          <IconBtn label={`Tamanho da fonte: ${fontSize === "sm" ? "compacto" : fontSize === "lg" ? "grande" : "normal"} (clique alterna)`} onClick={() => setFontSize((s) => (s === "sm" ? "md" : s === "md" ? "lg" : "sm"))}>
+            <span style={{ fontWeight: 800, fontSize: fontSize === "sm" ? 12 : fontSize === "lg" ? 17 : 14, lineHeight: 1 }}>A</span>
+          </IconBtn>
+          <IconBtn
+            label={cmpMode === "off" ? "Comparar com o ano anterior (clique alterna Δ Ano → Δ Mês)" : cmpMode === "ano" ? `Comparando: Δ Ano vs ${year - 1} (clique → Δ Mês)` : `Comparando: Δ Mês vs ${year - 1} (clique → desliga)`}
+            active={cmpMode !== "off"}
             onClick={() => setCmpMode((m) => (m === "off" ? "ano" : m === "ano" ? "mes" : "off"))}
-            title="Comparar com o ano anterior. Um clique alterna: Δ Ano (trimestres + ano) → Δ Mês (cada total de mês) → desliga."
           >
-            {cmpMode === "off" ? "Comparar" : cmpMode === "ano" ? `vs ${year - 1} · ano` : `vs ${year - 1} · mês`}
-          </button>
-          <button
-            className={"pl-weektgl" + (editMode ? " on" : "")}
-            onClick={() => setEditMode((v) => !v)}
-            title="Preencher/editar valores manualmente (por mês). Salva automaticamente."
-          >
-            {editMode ? "Editando ✓" : "Editar"}
-          </button>
-          <button
-            className={"pl-weektgl" + (organize ? " on" : "")}
-            onClick={() => setOrganize((v) => !v)}
-            title="Organizar: ocultar, reordenar e adicionar indicadores manuais."
-          >
-            {organize ? "Organizando ✓" : "Organizar"}
-          </button>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17V6M7 6L4 9M7 6l3 3" /><path d="M17 7v11M17 18l-3-3M17 18l3-3" /></svg>
+          </IconBtn>
+          <IconBtn label="Editar valores manualmente (por mês)" active={editMode} onClick={() => setEditMode((v) => !v)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4Z" /><path d="M14 6l4 4" /></svg>
+          </IconBtn>
+          <IconBtn label="Organizar (ocultar, reordenar, adicionar indicador)" active={organize} onClick={() => setOrganize((v) => !v)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 8h8M16 8h4M4 16h4M12 16h8" /><circle cx="14" cy="8" r="2.3" /><circle cx="8" cy="16" r="2.3" /></svg>
+          </IconBtn>
         </div>
       </div>
 
