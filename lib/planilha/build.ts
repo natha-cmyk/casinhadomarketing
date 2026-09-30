@@ -96,8 +96,28 @@ function isWon(status: unknown): boolean {
 }
 
 // ── ABA 1: INSIGHTS (Instagram) — histórico/manual (ao vivo entra depois) ──
+// Os blocos de RESUMO MENSAL (Indicadores/Meta Ads/Desempenho Social) muitas vezes só foram
+// preenchidos parcialmente na planilha (ex.: só Q1). Derivamos o que faltar do bloco DETALHADO
+// de cima (Performance de Meta Ads / Métricas de Performance / Alcance / Produção) — mês a mês.
+const INSIGHTS_DERIVE: Record<string, string> = {
+  mam_investimento: "ma_investimento", mam_cpm: "ma_cpm", mam_cpl: "ma_cpl",
+  mam_leads: "ma_leads", mam_vendas: "ma_vendas", mam_faturamento: "ma_faturamento",
+  ds_faturamento_social: "mp_faturamento_social",
+  ind_contas_alcancadas: "contas_alcancadas", ind_visualizacoes: "visualizacoes",
+  ind_atividades: "atividades_perfil", ind_visitas_link: "visitas_site",
+  ind_leads_direct: "leads_direct", ind_cta_compra: "cta_compra",
+};
 async function buildInsights(workspaceId: string, year: number): Promise<TabData> {
-  return loadStored(workspaceId, year, "insights");
+  const data = await loadStored(workspaceId, year, "insights");
+  for (const [tgt, src] of Object.entries(INSIGHTS_DERIVE)) {
+    const s = data[src];
+    if (!s) continue;
+    const t = ensure(data, tgt);
+    for (let m = 0; m < 12; m++) {
+      if (t.months[m] == null && s.months[m] != null) t.months[m] = s.months[m];
+    }
+  }
+  return data;
 }
 
 // ── ABA 2: GERAÇÃO POR CANAIS (leads por fonte × produto) ──

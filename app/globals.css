@@ -907,7 +907,7 @@ svg.chartI{cursor:crosshair}
 .planilha thead tr:nth-child(2) th{top:27px}
 .pl-monthhead{text-transform:uppercase;color:var(--label);background:var(--surface)!important;border-left:2px solid var(--hairline-2)}
 /* coluna de rótulos fixa à esquerda */
-.pl-corner{position:sticky!important;left:0;top:0;z-index:6;background:var(--ink)!important;color:#fff!important;text-align:left!important;font-size:11px;min-width:220px;max-width:220px;width:220px;padding:6px 12px!important}
+.pl-corner{position:sticky!important;left:0;top:0;z-index:6;background:var(--ink)!important;color:#fff!important;text-align:left!important;font-size:10.5px;line-height:1.2;white-space:normal!important;overflow:hidden;vertical-align:middle;min-width:220px;max-width:220px;width:220px;padding:6px 12px!important}
 .pl-rowlabel{position:sticky;left:0;z-index:2;background:var(--bg);text-align:left!important;font-weight:600;color:var(--label);min-width:220px;max-width:220px;width:220px;padding-left:12px!important}
 .pl-hint{color:var(--label-3);font-size:9px;margin-left:5px;vertical-align:super}
 /* colunas de valor */
