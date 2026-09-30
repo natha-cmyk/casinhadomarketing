@@ -139,7 +139,7 @@ export function PlanilhaPanel() {
             onClick={() => setCmpMode((m) => (m === "off" ? "ano" : m === "ano" ? "mes" : "off"))}
             title="Comparar com o ano anterior. Um clique alterna: Δ Ano (na coluna do ano) → Δ Mês (em cada total de mês) → desliga."
           >
-            {cmpMode === "off" ? "Comparar" : cmpMode === "ano" ? "Δ Ano ✓" : "Δ Mês ✓"}
+            {cmpMode === "off" ? "Comparar" : cmpMode === "ano" ? `vs ${year - 1} · ano` : `vs ${year - 1} · mês`}
           </button>
           <button
             className={"pl-weektgl" + (editMode ? " on" : "")}
@@ -150,6 +150,16 @@ export function PlanilhaPanel() {
           </button>
         </div>
       </div>
+
+      {/* legenda da comparação — deixa explícito o que está sendo comparado */}
+      {cmpMode !== "off" && (
+        <div className="pl-cmpnote">
+          Comparando com <b>{year - 1}</b>:{" "}
+          {cmpMode === "ano"
+            ? <>variação (Δ) nas colunas de <b>trimestre (Q)</b> e do <b>ano</b>, vs {year - 1}.</>
+            : <>variação (Δ) em cada <b>total de mês</b>, vs o <b>mesmo mês</b> de {year - 1}.</>}
+        </div>
+      )}
 
       {/* corpo */}
       {loading && !payload ? (

@@ -915,9 +915,13 @@ svg.chartI{cursor:crosshair}
 .pl-wfirst{border-left:2px solid var(--hairline-2)}
 .pl-total{min-width:56px;background:color-mix(in srgb,var(--ink) 7%,#fff);color:var(--label);font-weight:800;border-left:2px solid var(--hairline-2)}
 .planilha thead th.pl-total{background:color-mix(in srgb,var(--ink) 12%,#fff)!important;color:var(--label)!important;font-weight:800}
-.pl-q{min-width:56px;background:color-mix(in srgb,var(--ink) 5%,#fff);color:var(--label);font-weight:700;border-left:2px solid var(--hairline-2)}
+.pl-q{min-width:56px;background:var(--ink);color:#fff;font-weight:800;border-left:2px solid var(--ink)}
 .pl-year{min-width:64px;background:color-mix(in srgb,var(--red) 7%,#fff);color:var(--label);font-weight:800;border-left:2px solid var(--hairline-2)}
-.pl-qhead{background:color-mix(in srgb,var(--ink) 8%,#fff)!important;color:var(--label)!important}
+.pl-qhead{background:var(--ink)!important;color:#fff!important;font-weight:800}
+/* Δ com contraste no fundo preto dos trimestres */
+.pl-q .pl-d-up{color:#4ade80}
+.pl-q .pl-d-down{color:#ff7a86}
+.pl-q .pl-d-flat{color:#cfcfcf}
 .pl-yearhead{background:color-mix(in srgb,var(--red) 12%,#fff)!important;color:var(--red)!important;font-weight:800}
 /* período selecionado na barra de cima → destaque ciano */
 .pl-sel{background:color-mix(in srgb,var(--cyan) 15%,#fff)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cyan) 40%,transparent)}
@@ -940,6 +944,8 @@ thead .pl-sel{background:color-mix(in srgb,var(--cyan) 22%,#fff)!important;color
 /* zebra suave */
 .planilha tbody tr:not(.pl-band):not(.pl-strong):nth-child(even) .pl-rowlabel{background:color-mix(in srgb,var(--surface) 60%,#fff)}
 .pl-coverage{padding:10px 14px;font-size:11.5px;color:var(--label-3);border-top:1px solid var(--hairline);background:var(--bg)}
+.pl-cmpnote{padding:8px 14px;font-size:12px;color:color-mix(in srgb,var(--cyan) 60%,var(--ink));background:color-mix(in srgb,var(--cyan) 8%,#fff);border-bottom:1px solid var(--hairline)}
+.pl-cmpnote b{font-weight:750;color:var(--ink)}
 /* preenchimento manual */
 .pl-editcell{padding:2px!important}
 .pl-input{width:100%;min-width:54px;border:1px solid var(--hairline-2);border-radius:5px;padding:3px 5px;font-size:11.5px;text-align:right;font-variant-numeric:tabular-nums;background:#fff;color:var(--label)}

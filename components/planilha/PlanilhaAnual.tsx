@@ -88,8 +88,10 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
   const cellVal = (key: string, kind: CellKind, c: Col): Cell => valOf(data, key, kind, c);
   // Δ vs ano anterior — na coluna do ANO (cmpMode=ano) ou em cada TOTAL de mês (cmpMode=mes)
   const deltaCell = (key: string, kind: CellKind, c: Col): Delta | null => {
-    if (cmpMode === "off" || !cmpData || kind === "text") return null;
-    const want = cmpMode === "ano" ? c.type === "year" : cmpMode === "mes" && c.type === "month";
+    // sem Δ em texto nem em % (variação de percentual sobre percentual confunde)
+    if (cmpMode === "off" || !cmpData || kind === "text" || kind === "pct") return null;
+    // Δ Ano marca trimestres (Q) e o ano — mais visível. Δ Mês marca cada total de mês.
+    const want = cmpMode === "ano" ? c.type === "year" || c.type === "q" : cmpMode === "mes" && c.type === "month";
     if (!want) return null;
     const cur = valOf(data, key, kind, c), prev = valOf(cmpData, key, kind, c);
     if (typeof cur !== "number" || typeof prev !== "number") return null;
@@ -133,7 +135,7 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
           const q = (m - 2) / 3;
           const qc: Col = { type: "q", q, label: `Q${q + 1}` };
           const qv = cellVal(row.key, row.kind, qc);
-          out.push(<td key={`q${q}`} className={colClass(qc) + (qv == null ? " pl-empty" : "")}>{fmtCell(qv, row.kind)}</td>);
+          out.push(<td key={`q${q}`} className={colClass(qc) + (qv == null ? " pl-empty" : "")}>{content(qv, row.kind, row.key, qc)}</td>);
         }
       }
       const yc: Col = { type: "year", label: String(year) };
