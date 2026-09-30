@@ -1,6 +1,7 @@
 "use client";
 // Biblioteca de relatórios + geração via Assistente (Panteão). Escopado pelo painel atual.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useStore } from "@/lib/store";
 import { AGENTS_META, panelOfView, type AgentKey } from "@/lib/agents-meta";
 import { scopeLabelText } from "@/lib/scope";
@@ -17,6 +18,30 @@ function defaultAgent(panel: string): AgentKey {
   if (panel === "metas") return "athena";
   return "athena";
 }
+
+// atalhos de TIPO de relatório por painel {label curto, foco do prompt, agente sugerido}
+interface Preset { label: string; focus: string; agent?: AgentKey }
+const PRESETS: Record<string, Preset[]> = {
+  redes: [
+    { label: "Desempenho geral", focus: "o desempenho geral do canal no período — alcance, engajamento, seguidores e produção de conteúdo", agent: "poseidon" },
+    { label: "Conteúdo & formatos", focus: "o que performou melhor por formato (Reels/Stories/Post), temas e ganchos que engajaram", agent: "apollo" },
+    { label: "Crescimento", focus: "o crescimento de seguidores e alcance, e o que impulsionou ou travou", agent: "poseidon" },
+  ],
+  ads: [
+    { label: "Performance de campanhas", focus: "a performance das campanhas pagas — investimento, leads, CPL, CAC, ROAS por campanha", agent: "poseidon" },
+    { label: "Eficiência (CAC/ROI)", focus: "a eficiência do investimento — CAC, ROAS, onde escalar e onde cortar verba", agent: "poseidon" },
+  ],
+  geracao: [
+    { label: "Geração de leads", focus: "a geração de leads por fonte e produto, taxa de conversão e de onde vêm os melhores leads", agent: "dionisio" },
+    { label: "Receita & vendas", focus: "a receita e as vendas por canal/produto e o funil comercial", agent: "dionisio" },
+  ],
+  overview: [
+    { label: "Panorama do mês", focus: "um panorama geral do mês — social, mídia paga e comercial juntos", agent: "athena" },
+    { label: "Destaques & alertas", focus: "os principais destaques (o que subiu e o que caiu) e alertas que merecem atenção", agent: "athena" },
+  ],
+  metas: [{ label: "Progresso das metas", focus: "o progresso das metas/OKR e o que falta pra bater", agent: "athena" }],
+};
+const presetsFor = (panel: string): Preset[] => PRESETS[panel] ?? [{ label: "Relatório de desempenho", focus: "o desempenho geral do painel no período" }];
 
 // render markdown MÍNIMO (títulos, negrito, listas, parágrafos)
 function Markdown({ text }: { text: string }): ReactNode {
@@ -62,16 +87,19 @@ export function ReportsModal({ view, onClose }: { view: string; onClose: () => v
     return (agentsConfig?.[agentKey]?.name || "").trim() || factory;
   }, [agentKey, agentsConfig]);
 
-  async function generate() {
+  async function generate(focus?: string, label?: string, agent?: AgentKey) {
+    const useAgent = agent || agentKey;
+    if (agent && agent !== agentKey) setAgentKey(agent);
+    const f = focus || "o desempenho geral do painel no período";
     setStreaming(true); setContent(""); setViewing(null);
-    const prompt = `Gere um RELATÓRIO de desempenho em markdown do painel "${view}" no período ${periodLabel}. ` +
+    const prompt = `Gere um RELATÓRIO em markdown sobre ${f}, no painel "${view}", no período ${periodLabel}. ` +
       `Estruture em seções: ## Resumo executivo; ## Principais números; ## Variações (o que subiu e o que caiu); ## Insights; ## Recomendações práticas. ` +
       `Use SOMENTE os dados reais do contexto do workspace — não invente números. Seja objetivo, direto e acionável.`;
-    setTitle(`Relatório · ${AGENTS_META.find((a) => a.key === agentKey)?.papel?.split(",")[0] || "desempenho"} · ${periodLabel}`);
+    setTitle(`Relatório · ${label || "desempenho"} · ${periodLabel}`);
     try {
       const res = await fetch("/api/agents/chat", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ agentKey, messages: [{ role: "user", text: prompt }], scope, panel: snapshot?.data }),
+        body: JSON.stringify({ agentKey: useAgent, messages: [{ role: "user", text: prompt }], scope, panel: snapshot?.data }),
       });
       const ct = res.headers.get("content-type") || "";
       if (ct.includes("application/json")) {
@@ -103,7 +131,8 @@ export function ReportsModal({ view, onClose }: { view: string; onClose: () => v
     if (viewing?.id === id) setViewing(null);
   }
 
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div className="rp-overlay" onClick={onClose}>
       <div className="rp-modal" onClick={(e) => e.stopPropagation()}>
         <div className="rp-head">
@@ -116,6 +145,14 @@ export function ReportsModal({ view, onClose }: { view: string; onClose: () => v
 
         {tab === "gen" ? (
           <div className="rp-body">
+            <div className="rp-presets">
+              <span className="rp-lbl">Tipo:</span>
+              {presetsFor(panel).map((p) => (
+                <button key={p.label} className="rp-preset-chip" disabled={streaming} onClick={() => generate(p.focus, p.label, p.agent)} title={`Gerar: ${p.focus}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
             <div className="rp-gen-ctrls">
               <span className="rp-lbl">Assistente:</span>
               <div className="rp-agents">
@@ -125,7 +162,7 @@ export function ReportsModal({ view, onClose }: { view: string; onClose: () => v
                   </button>
                 ))}
               </div>
-              <button className="rp-gen-btn" onClick={generate} disabled={streaming}>
+              <button className="rp-gen-btn" onClick={() => generate()} disabled={streaming}>
                 {streaming ? "Gerando…" : content ? "Gerar de novo" : "Gerar relatório"}
               </button>
             </div>
@@ -167,6 +204,7 @@ export function ReportsModal({ view, onClose }: { view: string; onClose: () => v
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
