@@ -8,6 +8,7 @@ import { PLANILHA_TABS, type CellKind } from "@/lib/planilha/spec";
 import { type PlanilhaPayload, emptyRow } from "@/lib/planilha/types";
 import { parseBR } from "@/lib/format";
 import { PlanilhaAnual } from "./PlanilhaAnual";
+import { GeracaoCharts } from "./GeracaoCharts";
 import { Spinner } from "@/components/Spinner";
 
 // cache de módulo (stale-while-revalidate) por `ano|aba`
@@ -201,6 +202,7 @@ export function PlanilhaPanel() {
               Modo edição: preencha os valores por mês (salva sozinho). Percentuais em % (ex.: 20,3). Vazio apaga a célula.
             </div>
           )}
+          {tab === "geracao" && <GeracaoCharts data={payload.data} sections={payload.sections} year={year} />}
           {payload.coverage && <div className="pl-coverage">{payload.coverage}</div>}
         </>
       ) : (

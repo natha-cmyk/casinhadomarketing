@@ -946,6 +946,9 @@ thead .pl-sel{background:color-mix(in srgb,var(--cyan) 22%,#fff)!important;color
 .pl-coverage{padding:10px 14px;font-size:11.5px;color:var(--label-3);border-top:1px solid var(--hairline);background:var(--bg)}
 .pl-cmpnote{padding:8px 14px;font-size:12px;color:color-mix(in srgb,var(--cyan) 60%,var(--ink));background:color-mix(in srgb,var(--cyan) 8%,#fff);border-bottom:1px solid var(--hairline)}
 .pl-cmpnote b{font-weight:750;color:var(--ink)}
+/* gráficos pizza da aba Geração */
+.pl-charts{padding:20px 18px;border-top:1px solid var(--hairline);background:var(--bg)}
+.pl-charts-h{font-size:12px;font-weight:800;color:var(--label);margin-bottom:16px;text-transform:uppercase;letter-spacing:.4px}
 /* preenchimento manual */
 .pl-editcell{padding:2px!important}
 .pl-input{width:100%;min-width:54px;border:1px solid var(--hairline-2);border-radius:5px;padding:3px 5px;font-size:11.5px;text-align:right;font-variant-numeric:tabular-nums;background:#fff;color:var(--label)}
