@@ -139,10 +139,10 @@ export function PainelView() {
   const modeToggle = (
     <div className="seg" role="tablist" aria-label="Modo de visualização">
       <button role="tab" aria-selected={mode === "rica"} className={"seg-b" + (mode === "rica" ? " on" : "")} onClick={() => setMode("rica")}>
-        Visão rica
+        Dashboard
       </button>
       <button role="tab" aria-selected={mode === "planilha"} className={"seg-b" + (mode === "planilha" ? " on" : "")} onClick={() => setMode("planilha")}>
-        Planilha anual
+        Planilha
       </button>
     </div>
   );

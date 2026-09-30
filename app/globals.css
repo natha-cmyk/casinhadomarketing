@@ -913,7 +913,8 @@ svg.chartI{cursor:crosshair}
 /* colunas de valor */
 .pl-w{min-width:42px;color:var(--label-2)}
 .pl-wfirst{border-left:2px solid var(--hairline-2)}
-.pl-total{min-width:52px;background:var(--surface);color:var(--label);font-weight:650;border-left:1px solid var(--hairline-2)}
+.pl-total{min-width:56px;background:color-mix(in srgb,var(--ink) 7%,#fff);color:var(--label);font-weight:800;border-left:2px solid var(--hairline-2)}
+.planilha thead th.pl-total{background:color-mix(in srgb,var(--ink) 12%,#fff)!important;color:var(--label)!important;font-weight:800}
 .pl-q{min-width:56px;background:color-mix(in srgb,var(--ink) 5%,#fff);color:var(--label);font-weight:700;border-left:2px solid var(--hairline-2)}
 .pl-year{min-width:64px;background:color-mix(in srgb,var(--red) 7%,#fff);color:var(--label);font-weight:800;border-left:2px solid var(--hairline-2)}
 .pl-qhead{background:color-mix(in srgb,var(--ink) 8%,#fff)!important;color:var(--label)!important}
