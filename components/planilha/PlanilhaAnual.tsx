@@ -4,7 +4,7 @@
 // Coluna de rótulos FIXA (sticky) à esquerda; cabeçalho fixo no topo. Destaca o período
 // selecionado na barra de cima. Só apresentação — números vêm prontos (TabData). null = branco.
 import { useMemo, type ReactNode } from "react";
-import { MONTHS, MONTHS_FULL, computeDelta, type Delta } from "@/lib/scope";
+import { MONTHS_FULL, computeDelta, type Delta } from "@/lib/scope";
 import { fmt, money, pct } from "@/lib/format";
 import type { PSection, PRow, CellKind } from "@/lib/planilha/spec";
 import type { Cell, TabData } from "@/lib/planilha/types";
@@ -20,8 +20,10 @@ interface Props {
   onEdit?: (rowKey: string, kind: CellKind, monthIdx: number, raw: string) => void;
   cmpMode?: "off" | "ano" | "mes"; // comparação: Δ vs ano anterior (na coluna do ano ou de cada mês)
   cmpData?: TabData; // dados do ano anterior (mesmas chaves)
-  focusMonth?: number | null; // modo foco: destaca só este mês (0-11), desfoca os outros
+  focusMonth?: number | null; // modo foco: destaca só este mês (0-11), desfoca (blur) os outros
   fontSize?: "sm" | "md" | "lg"; // tamanho da fonte da tabela
+  cornerMain: string; // nome da aba no canto fixo (ex.: Inside Zuck's Mind)
+  cornerSub?: string; // subtítulo do canto (ex.: Instagram)
 }
 
 // valor mostrado no input de edição (mês, semana=-1) conforme o tipo
@@ -54,7 +56,7 @@ function fmtCell(v: Cell, kind: CellKind): string {
   return fmt(v, 0);
 }
 
-export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, editMode = false, onEdit, cmpMode = "off", cmpData, focusMonth = null, fontSize = "md" }: Props) {
+export function PlanilhaAnual({ sections, weekly, data, year, showWeeks, editMode = false, onEdit, cmpMode = "off", cmpData, focusMonth = null, fontSize = "md", cornerMain, cornerSub = "" }: Props) {
   const effWeeks = weekly && showWeeks && !editMode; // no modo edição, colapsa pra visão mensal (edita o mês)
   const monthSpan = effWeeks ? 5 : 1;
 
@@ -69,14 +71,6 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
     return out;
   }, [effWeeks, year]);
 
-  const sameYear = scope.year === year;
-  const isSel = (c: Col): boolean => {
-    if (!sameYear) return false;
-    if (scope.period === "semana") return c.type === "w" && c.m === scope.month && c.w === scope.week;
-    if (scope.period === "mes") return (c.type === "month" || c.type === "w") && "m" in c && c.m === scope.month;
-    if (scope.period === "trimestre") return c.type === "q" && c.q === scope.quarter;
-    return c.type === "year";
-  };
   const valOf = (src: TabData, key: string, kind: CellKind, c: Col): Cell => {
     const rd = src[key];
     if (!rd) return null;
@@ -112,12 +106,12 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
   // modo foco: desfoca colunas de meses que não são o foco (semanas e total do mês)
   const dimCol = (c: Col): boolean => focusMonth != null && (c.type === "w" || c.type === "month") && c.m !== focusMonth;
   const colClass = (c: Col): string => {
-    const sel = isSel(c) ? " pl-sel" : "";
     const dim = dimCol(c) ? " pl-dim" : "";
-    if (c.type === "month") return "pl-total" + sel + dim;
-    if (c.type === "q") return "pl-q" + sel;
-    if (c.type === "year") return "pl-year" + sel;
-    return "pl-w" + (c.type === "w" && c.w === 0 ? " pl-wfirst" : "") + sel + dim;
+    // mês: nas abas semanais é a coluna TOTAL (destaque); nas mensais é dado normal (mesma régua do Insights)
+    if (c.type === "month") return (weekly ? "pl-total" : "pl-month-plain") + dim;
+    if (c.type === "q") return "pl-q";
+    if (c.type === "year") return "pl-year";
+    return "pl-w" + (c.type === "w" && c.w === 0 ? " pl-wfirst" : "") + dim;
   };
 
   const totalCols = 1 + cols.length;
@@ -172,15 +166,6 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
     });
   };
 
-  // canto fixo (mês/período do escopo) — sem rowSpan (rowSpan+sticky quebra ao rolar)
-  const cornerTop =
-    focusMonth != null ? MONTHS[focusMonth]
-      : scope.year !== year ? "Ano"
-        : scope.period === "mes" ? MONTHS[scope.month]
-          : scope.period === "trimestre" ? `Q${scope.quarter + 1}`
-            : scope.period === "semana" ? `S${scope.week + 1}`
-              : "Ano";
-
   return (
     <div className="planilha-wrap">
       <table className={"planilha pl-sz-" + fontSize}>
@@ -188,8 +173,8 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
           {/* linha 1 — canto (mês/período) + grupos de mês + Q + ano */}
           <tr>
             <th className="pl-corner pl-corner-a">
-              <span className="pl-corner-lbl">{cornerTop}</span>
-              {!effWeeks && <span className="pl-corner-sub">{year}</span>}
+              <span className="pl-corner-lbl">{cornerMain}</span>
+              {!effWeeks && cornerSub ? <span className="pl-corner-sub">{cornerSub}</span> : null}
             </th>
             {(() => {
               const cells: ReactNode[] = [];
@@ -211,7 +196,7 @@ export function PlanilhaAnual({ sections, weekly, data, year, scope, showWeeks, 
           {/* linha 2 — canto (ano) + W1-W4 + TOTAL sob cada mês (só no modo semanal) */}
           {effWeeks && (
             <tr>
-              <th className="pl-corner pl-corner-b"><span className="pl-corner-sub">{year}</span></th>
+              <th className="pl-corner pl-corner-b">{cornerSub ? <span className="pl-corner-sub">{cornerSub}</span> : null}</th>
               {cols
                 .filter((c) => c.type === "w" || c.type === "month")
                 .map((c, i) => (

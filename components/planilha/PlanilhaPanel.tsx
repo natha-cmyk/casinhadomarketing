@@ -17,6 +17,13 @@ import { Spinner } from "@/components/Spinner";
 // cache de módulo (stale-while-revalidate) por `ano|aba`
 const CACHE = new Map<string, PlanilhaPayload>();
 
+// nome de cada aba no canto fixo da planilha (como na planilha original)
+const CORNER: Record<string, { main: string; sub: string }> = {
+  insights: { main: "Inside Zuck's Mind", sub: "Instagram" },
+  geracao: { main: "Geração por Canais", sub: "" },
+  pagos: { main: "Canais Pagos", sub: "" },
+};
+
 export function PlanilhaPanel() {
   const period = useStore((s) => s.period);
   const storeYear = useStore((s) => s.year);
@@ -228,6 +235,8 @@ export function PlanilhaPanel() {
             cmpData={cmpData}
             focusMonth={focusOn ? month : null}
             fontSize={fontSize}
+            cornerMain={CORNER[tab]?.main ?? tab}
+            cornerSub={CORNER[tab]?.sub ?? ""}
           />
           {editMode && (
             <div className="pl-coverage" style={{ color: "var(--cyan)" }}>

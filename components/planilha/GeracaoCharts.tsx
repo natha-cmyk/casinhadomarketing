@@ -1,82 +1,96 @@
 "use client";
-// Gráficos de desempenho por canais (aba Geração) — replica os gráficos PIZZA da planilha.
-// Duas roscas (donut): leads por FONTE (somando produtos) e leads por PRODUTO — total do ano exibido.
+// Gráficos de desempenho por canais (aba Geração) — UM gráfico PIZZA por MÊS (jan…dez),
+// como na planilha. Dá pra ver, mês a mês, de onde vêm os leads (por fonte ou por produto).
+import { useMemo, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { MONTHS } from "@/lib/scope";
 import { fmt } from "@/lib/format";
 import type { PSection } from "@/lib/planilha/spec";
 import type { TabData, Cell as PCell } from "@/lib/planilha/types";
 
 const PALETTE = [
   "#FF001E", "#00BBC5", "#121111", "#FF9F0A", "#2FB457", "#7C5CFF", "#FF5CA8",
-  "#0A84FF", "#8E8E93", "#BF5AF2", "#FFD60A", "#30D158", "#64D2FF", "#FF6B3D",
+  "#0A84FF", "#8E8E93", "#BF5AF2", "#FFD60A", "#30D158", "#64D2FF", "#FF6B3D", "#A2845E",
 ];
-
-const yearTotal = (rd: { months: PCell[] } | undefined): number => {
-  if (!rd) return 0;
-  let t = 0;
-  for (const m of rd.months) if (typeof m === "number") t += m;
-  return t;
+const monthVal = (rd: { months: PCell[] } | undefined, m: number): number => {
+  const v = rd?.months[m];
+  return typeof v === "number" ? v : 0;
 };
 
-interface Slice { name: string; value: number }
-
-function Donut({ title, data }: { title: string; data: Slice[] }) {
-  const total = data.reduce((s, d) => s + d.value, 0);
-  if (!total) return null;
-  const top = [...data].sort((a, b) => b.value - a.value);
-  return (
-    <div style={{ flex: "1 1 320px", minWidth: 300 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".5px", color: "var(--label-3)", textTransform: "uppercase", marginBottom: 8 }}>
-        {title}
-      </div>
-      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-        <div style={{ width: 150, height: 150, flex: "0 0 150px" }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={top} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={44} outerRadius={70} paddingAngle={1.5} stroke="none">
-                {top.map((d, i) => <Cell key={d.name} fill={PALETTE[i % PALETTE.length]} />)}
-              </Pie>
-              <Tooltip formatter={(v, n) => { const num = Number(v); return [`${fmt(num)} (${total ? ((num / total) * 100).toFixed(1) : 0}%)`, String(n)]; }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-          {top.slice(0, 8).map((d, i) => (
-            <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
-              <span style={{ width: 9, height: 9, borderRadius: 3, background: PALETTE[i % PALETTE.length], flex: "0 0 9px" }} />
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--label-2)" }}>{d.name}</span>
-              <span className="tnum" style={{ fontWeight: 700, color: "var(--label)" }}>{fmt(d.value)}</span>
-              <span className="tnum" style={{ color: "var(--label-3)", width: 42, textAlign: "right" }}>{((d.value / total) * 100).toFixed(1)}%</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function GeracaoCharts({ data, sections, year }: { data: TabData; sections: PSection[]; year: number }) {
-  const bySource: Record<string, number> = {};
-  const byProduct: Slice[] = [];
-  for (const sec of sections) {
-    let prod = 0;
-    for (const row of sec.rows) {
-      if (row.strong) continue; // pula linha de TOTAL
-      const v = yearTotal(data[row.key]);
-      prod += v;
-      bySource[row.label] = (bySource[row.label] || 0) + v;
+  const [dim, setDim] = useState<"fonte" | "produto">("fonte");
+
+  // por mês: { categoria -> valor } conforme a dimensão escolhida
+  const { months, cats, colors } = useMemo(() => {
+    const months: Record<string, number>[] = Array.from({ length: 12 }, () => ({}));
+    const catSet = new Set<string>();
+    for (const sec of sections) {
+      for (let m = 0; m < 12; m++) {
+        if (dim === "produto") {
+          let tot = 0;
+          for (const row of sec.rows) { if (row.strong) continue; tot += monthVal(data[row.key], m); }
+          if (tot > 0) { months[m][sec.title] = (months[m][sec.title] || 0) + tot; catSet.add(sec.title); }
+        } else {
+          for (const row of sec.rows) {
+            if (row.strong) continue;
+            const v = monthVal(data[row.key], m);
+            if (v > 0) { months[m][row.label] = (months[m][row.label] || 0) + v; catSet.add(row.label); }
+          }
+        }
+      }
     }
-    if (prod > 0) byProduct.push({ name: sec.title, value: prod });
-  }
-  const sourceSlices = Object.entries(bySource).map(([name, value]) => ({ name, value })).filter((s) => s.value > 0);
-  if (!byProduct.length && !sourceSlices.length) return null;
+    const cats = [...catSet].sort();
+    const colors = new Map<string, string>();
+    cats.forEach((c, i) => colors.set(c, PALETTE[i % PALETTE.length]));
+    return { months, cats, colors };
+  }, [data, sections, dim]);
+
+  const anyData = months.some((m) => Object.keys(m).length > 0);
+  if (!anyData) return null;
 
   return (
     <div className="pl-charts">
-      <div className="pl-charts-h">Gráfico de desempenho por canais · {year}</div>
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-        <Donut title="Leads por fonte" data={sourceSlices} />
-        <Donut title="Leads por produto" data={byProduct} />
+      <div className="pl-charts-top">
+        <div className="pl-charts-h">Desempenho por canais · mês a mês · {year}</div>
+        <div className="pl-dimtabs">
+          <button className={dim === "fonte" ? "on" : ""} onClick={() => setDim("fonte")}>Por fonte</button>
+          <button className={dim === "produto" ? "on" : ""} onClick={() => setDim("produto")}>Por produto</button>
+        </div>
+      </div>
+
+      {/* legenda compartilhada */}
+      <div className="pl-charts-legend">
+        {cats.map((c) => (
+          <span key={c} className="pl-lg-item">
+            <span className="pl-lg-dot" style={{ background: colors.get(c) }} />{c}
+          </span>
+        ))}
+      </div>
+
+      {/* 12 mini-roscas (uma por mês) */}
+      <div className="pl-month-grid">
+        {months.map((mm, m) => {
+          const slices = Object.entries(mm).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+          const total = slices.reduce((s, x) => s + x.value, 0);
+          return (
+            <div key={m} className={"pl-month-chart" + (total ? "" : " empty")}>
+              <div className="pl-mc-title">{MONTHS[m]}</div>
+              <div className="pl-mc-donut">
+                {total ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={slices} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={20} outerRadius={34} paddingAngle={1.5} stroke="none">
+                        {slices.map((d) => <Cell key={d.name} fill={colors.get(d.name)} />)}
+                      </Pie>
+                      <Tooltip formatter={(v, n) => { const num = Number(v); return [`${fmt(num)} (${total ? ((num / total) * 100).toFixed(0) : 0}%)`, String(n)]; }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <div className="pl-mc-empty">—</div>}
+              </div>
+              <div className="pl-mc-total tnum">{total ? fmt(total) : ""}</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
