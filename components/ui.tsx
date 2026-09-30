@@ -155,18 +155,21 @@ export function KpiCard({
   foot,
   children,
   tone,
+  delta,
 }: {
   lbl: string;
   val: ReactNode;
   foot?: ReactNode;
   children?: ReactNode; // bloco de comparação (cmp)
   tone?: "pos" | "neg"; // realça o valor (ganho = verde, perda = vermelho)
+  delta?: Delta; // sinalização de variação (verde = alta, vermelho = queda)
 }) {
   const color = tone === "pos" ? "var(--excelente)" : tone === "neg" ? "var(--red)" : undefined;
   return (
     <div className="card kpi">
       <div className="lbl">{lbl}</div>
       <div className="val tnum" style={color ? { color } : undefined}>{val}</div>
+      {delta && <div className="cmp"><DeltaChip delta={delta} /></div>}
       {children && <div className="cmp">{children}</div>}
       {foot && <div className="foot">{foot}</div>}
     </div>

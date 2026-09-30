@@ -13,7 +13,7 @@ import { ChannelSummaryCard, ChannelBrandIcon } from "@/components/ChannelSummar
 import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { PlanilhaPanel } from "@/components/planilha/PlanilhaPanel";
 import { fmt, kfmt, sum } from "@/lib/format";
-import { daysInMonth, type Period } from "@/lib/scope";
+import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
 
 const redeCor = (p: string) =>
   REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.cor || "#121111";
@@ -95,6 +95,26 @@ export function PainelView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey]);
 
+  // ── comparação (sinalização de variação verde/vermelho): busca o período B quando "Comparar" liga ──
+  const cmpRange = dateRange({ period: s.cmp.period, year: s.cmp.year, month: s.cmp.month, quarter: s.cmp.quarter, week: s.cmp.week });
+  const cmpKey = `${cmpRange.since}|${cmpRange.until}`;
+  const [cmpAccounts, setCmpAccounts] = useState<AccountSummary[] | null>(SUMMARY_CACHE.get(cmpKey) ?? null);
+  useEffect(() => {
+    if (!s.scenario) return;
+    let alive = true;
+    fetch(`/api/zernio/summary?since=${cmpRange.since}&until=${cmpRange.until}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { accounts?: AccountSummary[] }) => {
+        if (!alive) return;
+        const listB = Array.isArray(d?.accounts) ? d.accounts : [];
+        SUMMARY_CACHE.set(cmpKey, listB);
+        setCmpAccounts(listB);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cmpKey, s.scenario]);
+
   // publica o snapshot do overview (números na tela) p/ os agentes ancorarem — evita invenção
   const setPanelSnapshot = s.setPanelSnapshot;
   useEffect(() => {
@@ -125,6 +145,13 @@ export function PainelView() {
   const totalInter = sum(list.map((a) => a.metrics?.total_interactions ?? 0));
   const anyReach = list.some((a) => a.metrics?.reach != null || a.metrics?.impressions != null);
   const anyInter = list.some((a) => a.metrics?.total_interactions != null);
+
+  // variação vs período de comparação (verde = alta, vermelho = queda) — só com "Comparar" ligado
+  const showVar = s.scenario && cmpAccounts != null;
+  const cmpList = cmpAccounts ?? [];
+  const dFollowers = showVar ? computeDelta(totalFollowers, sum(cmpList.map((a) => a.followersCount || 0)), true) : undefined;
+  const dReach = showVar ? computeDelta(totalReach, sum(cmpList.map((a) => a.metrics?.reach ?? a.metrics?.impressions ?? 0)), true) : undefined;
+  const dInter = showVar ? computeDelta(totalInter, sum(cmpList.map((a) => a.metrics?.total_interactions ?? 0)), true) : undefined;
 
   // produção de conteúdo: total de posts publicados no período + breakdown por rede
   const anyPosts = list.some((a) => a.posts != null);
@@ -182,10 +209,10 @@ export function PainelView() {
 
           {/* KPIs-herói agregados da empresa (no período selecionado) */}
           <div className="grid kpis">
-            <KpiCard lbl="Seguidores (total)" val={totalFollowers ? fmt(totalFollowers) : "—"} foot="somados nas redes" />
+            <KpiCard lbl="Seguidores (total)" val={totalFollowers ? fmt(totalFollowers) : "—"} foot="somados nas redes" delta={dFollowers} />
             <KpiCard lbl="Canais conectados" val={fmt(list.length)} foot="com dados no período" />
-            <KpiCard lbl="Alcance no período" val={anyReach ? kfmt(totalReach) : "—"} foot="soma das redes" />
-            <KpiCard lbl="Interações no período" val={anyInter ? kfmt(totalInter) : "—"} foot="engajamento bruto" />
+            <KpiCard lbl="Alcance no período" val={anyReach ? kfmt(totalReach) : "—"} foot="soma das redes" delta={anyReach ? dReach : undefined} />
+            <KpiCard lbl="Interações no período" val={anyInter ? kfmt(totalInter) : "—"} foot="engajamento bruto" delta={anyInter ? dInter : undefined} />
           </div>
 
           {/* Produção de conteúdo — a Casinha também acompanha o que foi publicado */}

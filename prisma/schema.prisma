@@ -502,3 +502,23 @@ model PlanilhaCell {
   @@unique([workspaceId, tab, metric, ano, mes, semana])
   @@index([workspaceId, tab, ano])
 }
+
+// ─────────────────────────────────────────────────────────────
+// Relatório gerado por um Assistente (Panteão) dentro de um painel.
+// Biblioteca de relatórios por workspace: desempenho, performance, etc.
+// ─────────────────────────────────────────────────────────────
+model Report {
+  id          String   @id @default(cuid())
+  workspaceId String
+  panel       String // view/painel de origem (overview, redes, ads, geracao, ...)
+  title       String
+  content     String // markdown gerado pela LLM
+  agentKey    String?
+  agentName   String?
+  periodLabel String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, panel])
+  @@index([workspaceId, createdAt])
+}

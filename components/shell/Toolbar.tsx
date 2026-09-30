@@ -3,6 +3,7 @@ import { usePathname } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { META, TEMPORAL, usesCompare, viewForPath } from "@/lib/nav";
 import { MONTHS, MONTHS_FULL, scopeLabelText, type Period, type Scope } from "@/lib/scope";
+import { ReportsButton } from "./ReportsButton";
 
 const PERIODS: { value: Period; label: string }[] = [
   { value: "semana", label: "Semana" },
@@ -103,6 +104,7 @@ export function Toolbar() {
         )}
 
         {temporal && <span className="updated">{scopeLabelText(scope)}</span>}
+        <ReportsButton />
       </div>
 
       {s.scenario && usesCompare(view) && (() => {
