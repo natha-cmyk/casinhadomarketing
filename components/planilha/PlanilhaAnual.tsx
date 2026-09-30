@@ -6,7 +6,7 @@
 import { useMemo, type ReactNode } from "react";
 import { MONTHS_FULL } from "@/lib/scope";
 import { fmt, money, pct } from "@/lib/format";
-import type { PSection, CellKind } from "@/lib/planilha/spec";
+import type { PSection, PRow, CellKind } from "@/lib/planilha/spec";
 import type { Cell, TabData } from "@/lib/planilha/types";
 
 interface Props {
@@ -95,6 +95,55 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
   const totalCols = 1 + cols.length;
   const headSpan = effWeeks ? 2 : 1;
 
+  // células de uma linha. Linha de seção MENSAL em visão semanal: o valor do mês ocupa o mês
+  // inteiro (colSpan), sem as colunas W1-W4 vazias. Demais: uma célula por coluna (com input no modo edição).
+  const cellsForRow = (row: PRow, secMonthly: boolean): ReactNode[] => {
+    if (effWeeks && secMonthly) {
+      const out: ReactNode[] = [];
+      for (let m = 0; m < 12; m++) {
+        const mc: Col = { type: "month", m, label: "TOTAL" };
+        const v = cellVal(row.key, row.kind, mc);
+        out.push(
+          <td key={`m${m}`} colSpan={monthSpan} className={colClass(mc) + " pl-mcell" + (v == null ? " pl-empty" : "")}>
+            {fmtCell(v, row.kind)}
+          </td>
+        );
+        if (m % 3 === 2) {
+          const q = (m - 2) / 3;
+          const qc: Col = { type: "q", q, label: `Q${q + 1}` };
+          const qv = cellVal(row.key, row.kind, qc);
+          out.push(<td key={`q${q}`} className={colClass(qc) + (qv == null ? " pl-empty" : "")}>{fmtCell(qv, row.kind)}</td>);
+        }
+      }
+      const yc: Col = { type: "year", label: String(year) };
+      const yv = cellVal(row.key, row.kind, yc);
+      out.push(<td key="y" className={colClass(yc) + (yv == null ? " pl-empty" : "")}>{fmtCell(yv, row.kind)}</td>);
+      return out;
+    }
+    return cols.map((c, i) => {
+      const v = cellVal(row.key, row.kind, c);
+      if (editMode && onEdit && c.type === "month") {
+        return (
+          <td key={i} className="pl-total pl-editcell">
+            <input
+              key={`${year}:${row.key}:${c.m}`}
+              className="pl-input"
+              defaultValue={editStr(v, row.kind)}
+              inputMode={row.kind === "text" ? "text" : "decimal"}
+              onBlur={(e) => onEdit(row.key, row.kind, c.m, e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            />
+          </td>
+        );
+      }
+      return (
+        <td key={i} className={colClass(c) + (v == null ? " pl-empty" : "")}>
+          {fmtCell(v, row.kind)}
+        </td>
+      );
+    });
+  };
+
   return (
     <div className="planilha-wrap">
       <table className="planilha">
@@ -145,28 +194,7 @@ export function PlanilhaAnual({ sections, weekly, sub, data, year, scope, showWe
                     {row.label}
                     {row.hint ? <span className="pl-hint">ⓘ</span> : null}
                   </th>
-                  {cols.map((c, i) => {
-                    const v = cellVal(row.key, row.kind, c);
-                    if (editMode && onEdit && c.type === "month") {
-                      return (
-                        <td key={i} className="pl-total pl-editcell">
-                          <input
-                            key={`${year}:${row.key}:${c.m}`}
-                            className="pl-input"
-                            defaultValue={editStr(v, row.kind)}
-                            inputMode={row.kind === "text" ? "text" : "decimal"}
-                            onBlur={(e) => onEdit(row.key, row.kind, c.m, e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                          />
-                        </td>
-                      );
-                    }
-                    return (
-                      <td key={i} className={colClass(c) + (v == null ? " pl-empty" : "")}>
-                        {fmtCell(v, row.kind)}
-                      </td>
-                    );
-                  })}
+                  {cellsForRow(row, !!sec.monthly)}
                 </tr>
               ))}
             </FragmentSection>

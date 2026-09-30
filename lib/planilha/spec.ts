@@ -17,6 +17,7 @@ export interface PRow {
 export interface PSection {
   title: string; // faixa (header em vermelho)
   rows: PRow[];
+  monthly?: boolean; // seção só MENSAL (resumo): na visão semanal o valor ocupa o mês todo (sem W1-W4 vazios)
 }
 export interface PTab {
   id: "insights" | "geracao" | "pagos";
@@ -124,6 +125,7 @@ const TAB_INSIGHTS: PTab = {
     },
     {
       title: "INDICADORES (resumo mensal)",
+      monthly: true,
       rows: [
         { key: "ind_contas_alcancadas", label: "Contas alcançadas", kind: "int" },
         { key: "ind_visualizacoes", label: "Visualizações", kind: "int" },
@@ -137,6 +139,7 @@ const TAB_INSIGHTS: PTab = {
     },
     {
       title: "META ADS (resumo mensal)",
+      monthly: true,
       rows: [
         { key: "mam_investimento", label: "Investimento", kind: "money" },
         { key: "mam_cpm", label: "CPM", kind: "money" },
@@ -148,6 +151,7 @@ const TAB_INSIGHTS: PTab = {
     },
     {
       title: "DESEMPENHO SOCIAL",
+      monthly: true,
       rows: [{ key: "ds_faturamento_social", label: "Faturamento social", kind: "money", strong: true }],
     },
   ],
