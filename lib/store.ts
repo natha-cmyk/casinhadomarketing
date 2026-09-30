@@ -99,6 +99,9 @@ export interface UIState {
   agentOpen: boolean; agentMsgs: Record<string, { role: "user" | "bot"; text: string }[]>;
   // snapshot do que o painel atual exibe (números na tela) — enviado aos agentes p/ ancorar
   panelSnapshot: { view: string; label?: string; data: unknown } | null;
+  // snapshots ACUMULADOS por painel visitado (o agente/relatório correlaciona entre painéis,
+  // ex.: orgânico do Instagram + mídia paga do Meta Ads da mesma marca)
+  snapshots: Record<string, { label?: string; data: unknown }>;
   // metas / persona / concorrência
   metasEdit: boolean; personaIdx: number; personaPhotos: Record<number, string>;
   compIcons: Record<string, string>; compEdit: string | null;
@@ -225,7 +228,7 @@ export const useStore = create<UIState>((set) => ({
   redes: {},
   contas: {},
   paineis: {}, cfgOpen: {}, impOpen: false,
-  agentOpen: false, agentMsgs: {}, panelSnapshot: null,
+  agentOpen: false, agentMsgs: {}, panelSnapshot: null, snapshots: {},
   metasEdit: false, personaIdx: 0, personaPhotos: {}, compIcons: {}, compEdit: null,
   calCanal: "todos", calPerfil: "todos", calCV: "todos", calMonth: CUR_MONTH, calYear: CUR_YEAR,
   postModal: null,
@@ -407,7 +410,11 @@ export const useStore = create<UIState>((set) => ({
       const next = arr.slice(0, -1).concat({ ...arr[arr.length - 1], text });
       return { agentMsgs: { ...s.agentMsgs, [agentKey]: next } };
     }),
-  setPanelSnapshot: (snap) => set({ panelSnapshot: snap }),
+  setPanelSnapshot: (snap) =>
+    set((s) => ({
+      panelSnapshot: snap,
+      snapshots: snap && snap.data != null ? { ...s.snapshots, [snap.view]: { label: snap.label, data: snap.data } } : s.snapshots,
+    })),
 
   setObjetivo: (t) => set((s) => ({ okr: { ...s.okr, objetivo: t } })),
   setAreaNome: (areaId, nome) =>

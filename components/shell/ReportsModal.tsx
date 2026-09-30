@@ -23,25 +23,50 @@ function defaultAgent(panel: string): AgentKey {
 interface Preset { label: string; focus: string; agent?: AgentKey }
 const PRESETS: Record<string, Preset[]> = {
   redes: [
-    { label: "Desempenho geral", focus: "o desempenho geral do canal no período — alcance, engajamento, seguidores e produção de conteúdo", agent: "poseidon" },
+    { label: "Desempenho geral", focus: "o desempenho geral do canal — alcance, engajamento, seguidores e produção de conteúdo", agent: "poseidon" },
+    { label: "Orgânico + mídia paga", focus: "o resultado INTEGRADO da marca: orgânico (social) somado à mídia paga (Meta/Google Ads) da MESMA marca — investimento, leads e retorno correlacionados", agent: "poseidon" },
     { label: "Conteúdo & formatos", focus: "o que performou melhor por formato (Reels/Stories/Post), temas e ganchos que engajaram", agent: "apollo" },
-    { label: "Crescimento", focus: "o crescimento de seguidores e alcance, e o que impulsionou ou travou", agent: "poseidon" },
+    { label: "Crescimento de audiência", focus: "o crescimento de seguidores e alcance, ritmo e o que impulsionou ou travou", agent: "poseidon" },
+    { label: "Engajamento & comunidade", focus: "qualidade do engajamento (salvos, comentários, compartilhamentos) e relação com a comunidade", agent: "apollo" },
+    { label: "Plano de conteúdo", focus: "recomendação de pauta e próximos passos de conteúdo com base no que performou", agent: "apollo" },
   ],
   ads: [
     { label: "Performance de campanhas", focus: "a performance das campanhas pagas — investimento, leads, CPL, CAC, ROAS por campanha", agent: "poseidon" },
     { label: "Eficiência (CAC/ROI)", focus: "a eficiência do investimento — CAC, ROAS, onde escalar e onde cortar verba", agent: "poseidon" },
+    { label: "Onde escalar", focus: "onde vale aumentar investimento e onde está saturando, com base em custo e retorno", agent: "poseidon" },
+    { label: "Meta vs Google", focus: "comparativo entre as plataformas pagas (Meta Ads vs Google Ads) por eficiência e volume", agent: "poseidon" },
+    { label: "Mídia paga × receita", focus: "o elo entre investimento em mídia paga e a receita/vendas gerada (do CRM)", agent: "poseidon" },
   ],
   geracao: [
-    { label: "Geração de leads", focus: "a geração de leads por fonte e produto, taxa de conversão e de onde vêm os melhores leads", agent: "dionisio" },
+    { label: "Geração de leads", focus: "a geração de leads por fonte e produto, e de onde vêm os melhores leads", agent: "dionisio" },
     { label: "Receita & vendas", focus: "a receita e as vendas por canal/produto e o funil comercial", agent: "dionisio" },
+    { label: "Funil & conversão", focus: "o funil: entrada de leads → qualificação → proposta → ganho/perdido, e taxas de conversão", agent: "poseidon" },
+    { label: "Qualidade da base", focus: "a saúde da base — quem está frio/morno/quente e o que fazer com cada grupo", agent: "dionisio" },
+    { label: "Motivos de perda", focus: "os principais motivos de perda de leads e como reduzir", agent: "dionisio" },
+    { label: "Régua de relacionamento", focus: "uma régua de WhatsApp/mensagens por momento do funil pra reativar e converter a base", agent: "dionisio" },
   ],
   overview: [
     { label: "Panorama do mês", focus: "um panorama geral do mês — social, mídia paga e comercial juntos", agent: "athena" },
     { label: "Destaques & alertas", focus: "os principais destaques (o que subiu e o que caiu) e alertas que merecem atenção", agent: "athena" },
+    { label: "Diagnóstico + plano", focus: "um diagnóstico do cenário e um plano de ação priorizado pro próximo período", agent: "athena" },
+    { label: "ROI de marketing", focus: "o retorno do marketing — investimento total vs leads/receita gerada", agent: "poseidon" },
+    { label: "Relatório executivo", focus: "um relatório executivo enxuto pra diretoria: resultado, eficiência e recomendação", agent: "athena" },
   ],
-  metas: [{ label: "Progresso das metas", focus: "o progresso das metas/OKR e o que falta pra bater", agent: "athena" }],
+  metas: [
+    { label: "Progresso das metas", focus: "o progresso das metas/OKR (alvo × realizado) e o que falta pra bater", agent: "athena" },
+    { label: "Riscos & prioridades", focus: "quais KRs estão em risco e onde focar pra recuperar", agent: "athena" },
+  ],
+  calendario: [
+    { label: "Produção de conteúdo", focus: "o esforço de produção no período — volume por canal, status e consistência", agent: "apollo" },
+    { label: "Plano editorial", focus: "um plano editorial pro período com base no que já está pautado e nas lacunas", agent: "apollo" },
+  ],
+  persona: [{ label: "Persona × audiência", focus: "o alinhamento entre as personas cadastradas e a audiência/base real", agent: "dionisio" }],
+  concorrencia: [{ label: "Benchmark competitivo", focus: "um benchmark competitivo com os concorrentes cadastrados e oportunidades de posicionamento", agent: "athena" }],
 };
-const presetsFor = (panel: string): Preset[] => PRESETS[panel] ?? [{ label: "Relatório de desempenho", focus: "o desempenho geral do painel no período" }];
+const presetsFor = (panel: string): Preset[] => PRESETS[panel] ?? [
+  { label: "Relatório de desempenho", focus: "o desempenho geral do painel no período" },
+  { label: "Diagnóstico + plano", focus: "um diagnóstico e um plano de ação com base nos dados do painel", agent: "athena" },
+];
 
 // render markdown MÍNIMO (títulos, negrito, listas, parágrafos)
 function Markdown({ text }: { text: string }): ReactNode {
@@ -67,7 +92,7 @@ export function ReportsModal({ view, onClose }: { view: string; onClose: () => v
   const s = useStore();
   const scope = { period: s.period, year: s.year, month: s.month, week: s.week, quarter: s.quarter };
   const periodLabel = scopeLabelText(scope);
-  const snapshot = useStore((st) => st.panelSnapshot);
+  const snapshots = useStore((st) => st.snapshots);
   const agentsConfig = useStore((st) => st.agentsConfig);
 
   const [tab, setTab] = useState<"gen" | "lib">("gen");
@@ -99,7 +124,7 @@ export function ReportsModal({ view, onClose }: { view: string; onClose: () => v
     try {
       const res = await fetch("/api/agents/chat", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ agentKey: useAgent, messages: [{ role: "user", text: prompt }], scope, panel: snapshot?.data }),
+        body: JSON.stringify({ agentKey: useAgent, messages: [{ role: "user", text: prompt }], scope, panel: { painelAtual: view, dados: snapshots } }),
       });
       const ct = res.headers.get("content-type") || "";
       if (ct.includes("application/json")) {

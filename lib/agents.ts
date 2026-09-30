@@ -129,6 +129,7 @@ function accountsBlock(accounts: AccountLite[]): string {
   });
   const out = [`CANAIS CONECTADOS (${social.length}):`, ...(lines.length ? lines : ["- (nenhum)"])];
   if (ads.length) out.push(`Contas com mídia paga conectada: ${ads.map((a) => a.displayName || a.platform).join(", ")}.`);
+  out.push("VÍNCULO DE MARCA: contas com o MESMO nome (ou nome equivalente) em canais diferentes são a MESMA marca — ex.: o Instagram \"Seahub Coworking\" e o Meta Ads \"Seahub Coworking\" são o mesmo negócio. Correlacione os dados ORGÂNICOS (social) e de MÍDIA PAGA (ads) dessa marca ao analisar e montar relatórios.");
   return out.join("\n");
 }
 
@@ -218,8 +219,8 @@ function panelBlock(panel: unknown): string {
   let s = "";
   try { s = typeof panel === "string" ? panel : JSON.stringify(panel); } catch { s = ""; }
   if (!s || s === "{}" || s === "null") return "";
-  if (s.length > 4500) s = s.slice(0, 4500) + " …(truncado)";
-  return `\n=== O QUE O USUÁRIO ESTÁ VENDO NO PAINEL AGORA (fonte primária dos números ao vivo) ===\n${s}\n=== FIM DO PAINEL ===`;
+  if (s.length > 9000) s = s.slice(0, 9000) + " …(truncado)";
+  return `\n=== DADOS DOS PAINÉIS QUE O USUÁRIO CARREGOU (fonte primária dos números ao vivo; inclui outros painéis já abertos, ex.: mídia paga) ===\n${s}\n=== FIM DOS PAINÉIS ===`;
 }
 
 export async function buildContext(
