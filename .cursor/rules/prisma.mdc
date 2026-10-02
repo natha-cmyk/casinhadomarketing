@@ -1,0 +1,44 @@
+---
+description: Schema, migrations e RLS no Postgres
+globs: prisma/**
+alwaysApply: false
+---
+
+# Prisma e Postgres
+
+**Antes de qualquer alteração de schema ou migration:** ler a skill **`.agents/skills/supabase-postgres-best-practices/SKILL.md`** e as referências `security-rls-*`, `schema-*` relevantes.
+
+Leia também `docs/arquitetura.md` → Tenancy e RLS.
+
+## Stack
+
+- Prisma **6.x** — `url` + `directUrl` no datasource (`schema.prisma`).
+- Postgres no Supabase: pooler (`DATABASE_URL`, porta 6543) + direct (`DIRECT_URL`, 5432) para migrate.
+
+## Modelagem
+
+- Todo dado de cliente: coluna `workspaceId` + relação `Workspace` + índice em `workspaceId`.
+- Comentários no schema são spec — mantenha alinhados ao código.
+- Migrations nomeadas em `prisma migrate dev --name descricao_curta`.
+
+## RLS (obrigatório em tabelas de tenant)
+
+Ao criar ou alterar tabela com `workspaceId`:
+
+1. `ALTER TABLE … ENABLE ROW LEVEL SECURITY`
+2. Política que restringe linhas ao workspace do usuário autenticado (via `auth.uid()` + `Membership`, ou claim JWT de workspace — ver `docs/arquitetura.md`).
+3. Preferir `FORCE ROW LEVEL SECURITY` em dados sensíveis.
+4. Incluir SQL de policy na migration (não só no Prisma schema).
+5. Testar policy: usuário A não vê linhas do workspace B.
+
+**Prisma + RLS:** o client usa connection string de serviço e **ignora RLS** por padrão. A aplicação continua filtrando por `workspaceId`; RLS protege acesso direto ao banco e futuros clients com JWT. Para queries via Supabase client com JWT, RLS aplica automaticamente.
+
+## Queries
+
+- Skill **`prisma-client-api`** para filtros, `include`, transações.
+- Nunca `findMany()` sem `where` em model de tenant em rotas de cliente.
+- `prisma.$transaction` + advisory lock: ver `lib/provision.ts` como referência de concorrência.
+
+## Seed
+
+- `prisma/seed.ts` — dados de referência; não confundir com estado inicial de workspace novo (ver `GLOSSARY.md`).

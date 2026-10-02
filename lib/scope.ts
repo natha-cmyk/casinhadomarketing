@@ -1,4 +1,4 @@
-// Contexto temporal + resolução de escopo, portado do blueprint (linhas 515-521, 702-765).
+// Contexto temporal e resolução de escopo (semana/mês/trimestre/ano).
 import { sum } from "./format";
 
 export const MONTHS = [
@@ -115,7 +115,7 @@ export function chartSeries(
   return { labels: MONTHS, values: m.slice(0, 12), sel: period === "mes" ? month : -1 };
 }
 
-// classificadores de status (linhas 763-765)
+// Classificadores de status para Pill
 export type StatusTier = "exc" | "bom" | "ate" | "cri";
 export const convClass = (v: number): StatusTier =>
   v >= 0.3 ? "exc" : v >= 0.18 ? "bom" : v >= 0.1 ? "ate" : "cri";
@@ -124,7 +124,7 @@ export const roasClass = (v: number): StatusTier =>
 export const attClass = (p: number): StatusTier =>
   p >= 1 ? "exc" : p >= 0.75 ? "bom" : p >= 0.5 ? "ate" : "cri";
 
-// delta estruturado (substitui deltaChip HTML do blueprint; renderizado por <DeltaChip>)
+// Delta estruturado — renderizado por <DeltaChip>
 export interface Delta {
   kind: "up" | "down" | "flat";
   pctLabel: string;

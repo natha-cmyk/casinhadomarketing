@@ -1,7 +1,6 @@
 "use client";
-// Store de estado de UI — espelha o objeto `state` do blueprint (linhas 681-690).
-// `view` NÃO fica aqui: é derivado da rota (ver lib/nav.ts). Persistência (Bloco 4)
-// hidratará estas fatias a partir do banco (hoje semeadas de lib/seed-data).
+// Store de estado de UI (Zustand). A view atual vem da rota (lib/nav.ts), não da store.
+// Persistência: Hydrator + lib/api.ts (debounce) ↔ rotas /api/*.
 import { create } from "zustand";
 import { CUR_YEAR, CUR_MONTH, quarterOf, type Period } from "./scope";
 import { type SeedPost } from "./seed-data";
@@ -15,7 +14,7 @@ export interface KrItem { id: string; kr: string; alvo: string; un: string; tag:
 export interface AreaItem { id: string; nome: string; krs: KrItem[] }
 export interface Okr { objetivo: string; areas: AreaItem[] }
 
-// ── Post do calendário (mesma forma do blueprint; y/m/d) ──
+// ── Post do calendário ──
 // mídia enviada via presign da Zernio (imagem/vídeo/gif/pdf)
 export interface PostMedia { type: "image" | "video" | "gif" | "document"; url: string; filename?: string; mimeType?: string; size?: number; thumbnail?: string }
 export interface PostOverride { caption?: string; ytTitle?: string; ytVisibility?: string; ytMadeForKids?: boolean }
@@ -105,7 +104,7 @@ export interface UIState {
   // calendário
   calCanal: string; calPerfil: string; calCV: string; calMonth: number; calYear: number;
   postModal: { mode: "new" | "edit"; id?: string; y: number; m: number; d: number } | null;
-  // dados editáveis (persistidos no Bloco 4)
+  // dados editáveis (persistidos via API)
   okr: Okr; posts: PostItem[]; fontes: FonteItem[]; fonteMap: FonteMap | null; perfil: Perfil;
   personas: PersonaItem[]; concorrentes: ConcItem[];
   hydrated: boolean;

@@ -1,0 +1,42 @@
+---
+description: Route Handlers — auth, tenancy, erros neutros
+globs: app/api/**/*.ts
+alwaysApply: false
+---
+
+# API (`app/api/**/route.ts`)
+
+Leia `docs/padroes.md` → seção API. Skill: **`codebase-design`** (seams server-only).
+
+## Auth
+
+- Rotas do **painel do cliente:** `getActiveWorkspaceId()` ou `getActiveWorkspace()` de `lib/auth.ts` no início; `401` se null.
+- Rotas **admin:** `getAdminUser()` de `lib/admin.ts`; `403` se null.
+- **Cron:** `Authorization: Bearer $CRON_SECRET` quando `CRON_SECRET` está setado.
+- **Stripe webhook:** validar `STRIPE_WEBHOOK_SECRET` — não usar sessão de usuário.
+- **CRM webhook:** `app/api/crm/webhook/[workspaceId]` — validar origem/conteúdo conforme implementação existente.
+
+O middleware **não** protege `/api` — cada handler autentica sozinho (`middleware.ts`).
+
+## Tenancy
+
+- Toda query/mutação de dado de cliente: filtrar `workspaceId` do workspace da sessão.
+- Não aceitar `workspaceId` do body/query sem checar `Membership`.
+- Defesa em profundidade: políticas RLS no Postgres (ver `docs/arquitetura.md` + skill **`supabase-postgres-best-practices`**).
+
+## Integrações
+
+- Zernio / Stripe / LLM: delegar a `lib/zernio.ts`, `lib/stripe.ts`, `lib/llm.ts` — nunca fetch direto com segredo fora desses módulos.
+- Erros voltados ao usuário: mensagens **neutras** (`lib/zernio.ts`).
+
+## Padrão mínimo
+
+```ts
+export async function GET() {
+  const ws = await getActiveWorkspaceId();
+  if (!ws) return NextResponse.json(null, { status: 401 });
+  // ... prisma com where: { workspaceId: ws }
+}
+```
+
+Rotas com side effects longos: `export const dynamic = "force-dynamic"` quando já usado no arquivo vizinho.

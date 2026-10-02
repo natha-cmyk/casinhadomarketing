@@ -1,5 +1,5 @@
 "use client";
-// Primitivas de UI — emitem as MESMAS classes do blueprint (fidelidade 1:1).
+// Primitivas de UI — wrappers das classes em app/globals.css.
 import type { ReactNode } from "react";
 import type { Delta, StatusTier } from "@/lib/scope";
 import { Ic } from "./Ic";
@@ -203,7 +203,7 @@ export function Switch({ on, onChange }: { on: boolean; onChange: (v: boolean) =
   return <button type="button" className={`switch${on ? " on" : ""}`} aria-pressed={on} onClick={() => onChange(!on)} />;
 }
 
-// Placeholder de seção (usado nas páginas antes do Bloco 3)
+// Placeholder de seção ainda sem implementação completa
 export function ScaffoldHero({ icon, title, desc }: { icon: string; title: string; desc: string }) {
   return (
     <div className="card pad-lg">
@@ -212,7 +212,7 @@ export function ScaffoldHero({ icon, title, desc }: { icon: string; title: strin
           <Ic name={icon} />
         </div>
         <div>
-          <span className="soon">Em construção · Bloco 3</span>
+          <span className="soon">Em construção</span>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-.3px" }}>{title}</div>
           <p style={{ color: "var(--label-2)", margin: "4px 0 0", fontSize: 13.5 }}>{desc}</p>
         </div>

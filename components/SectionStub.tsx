@@ -19,7 +19,7 @@ export function SectionStub({ view }: { view: string }) {
   return (
     <>
       <PageHead eyebrow={d.eyebrow} title={meta?.title || meta?.label || "Seção"} desc={d.desc} />
-      <ScaffoldHero icon={meta?.icon || "overview"} title={meta?.label || "Seção"} desc="Conteúdo desta tela é portado no Bloco 3 (painéis de leitura)." />
+      <ScaffoldHero icon={meta?.icon || "overview"} title={meta?.label || "Seção"} desc="Conteúdo desta seção ainda não está disponível." />
     </>
   );
 }

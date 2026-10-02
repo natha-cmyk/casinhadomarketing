@@ -1,5 +1,5 @@
 "use client";
-// Tooltip global dos gráficos (line/bar), portado verbatim do blueprint (1892-1921).
+// Tooltip global dos gráficos SVG (line/bar).
 // Um único listener em document; opera sobre qualquer svg.chartI com data-meta.
 import { useEffect } from "react";
 

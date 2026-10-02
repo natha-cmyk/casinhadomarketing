@@ -1,4 +1,4 @@
-// Dados read-mostly extraídos VERBATIM do blueprint casinha-do-marketing.html.
+// Dados read-mostly de referência Seahub (valores originais do estudo de marketing).
 // Não vão para o banco (só o que o usuário edita é persistido — ver schema.prisma).
 // Fonte real: Conexa + Chatwoot + ClickUp. "LLM" sempre; SeaHealth = histórico.
 import { sum } from "./format";
@@ -347,7 +347,7 @@ export const COMP: Record<CompCategoria, { label: string; list: CompItem[] }> = 
   ]},
 };
 
-// ── Ambiente / Perfil default (state.perfil do blueprint) ──
+// ── Ambiente / Perfil default (referência) ──
 export const PERFIL_DEFAULT = {
   empresa: "Seahub Coworking",
   canais: ["Instagram","Google Ads","Meta Ads","WhatsApp"],

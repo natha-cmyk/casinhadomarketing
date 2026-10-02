@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ===================== TOKENS SEAHUB (portados verbatim do blueprint) ===================== */
+/* ===================== TOKENS SEAHUB ===================== */
 :root{
   --red:#FF001E; --cyan:#00BBC5; --ink:#121111;
   --bg:#FFFFFF; --surface:#F5F5F7; --surface-2:#EDEDEC;
@@ -10,7 +10,7 @@
   --shadow-card:0 1px 2px rgba(0,0,0,.04), 0 1px 8px rgba(0,0,0,.03);
   --shadow-pop:0 4px 24px rgba(0,0,0,.10);
   --r-lg:14px; --r-md:10px; --r-sm:7px; --sidebar-w:248px;
-  /* Fonte original do projeto (Apple-system stack, do blueprint) */
+  /* Pilha system Apple */
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
 }
 *{box-sizing:border-box}

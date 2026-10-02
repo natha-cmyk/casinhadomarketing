@@ -1,4 +1,4 @@
-// Formatadores portados verbatim do blueprint (helpers, linhas 692-699).
+// Formatadores de número, moeda e percentual (pt-BR).
 export const sum = (a: number[]) => a.reduce((s, x) => s + (Number(x) || 0), 0);
 export const avg = (a: number[]) => (a.length ? sum(a) / a.length : 0);
 

@@ -1,5 +1,4 @@
-// Gráficos SVG portados VERBATIM do blueprint (linhas 768-801). Retornam string SVG
-// com data-meta (tooltip interativo lido por components/ChartTooltips).
+// Gráficos SVG (string) — tooltip via components/ChartTooltips.
 import { sum, kfmt, fmt, pct } from "./format";
 
 export interface LineSeries {

@@ -1,8 +1,5 @@
 "use client";
-// Porta a viewConfig do blueprint (linhas 1344-1393) + helpers de import/CSV,
-// chip lists, matriz de relação, toggles de redes e acordeões de indicadores.
-// Fidelidade 1:1 com casinha-do-marketing.html.
-// UX: cada seção é um card colapsável (.psec) com acento de cor próprio; só "Conexões" abre por padrão.
+// Personalização: ambiente, canais, indicadores, importação e conexões (.psec colapsável).
 import { useState, useEffect, useCallback, useRef, type CSSProperties, type ReactNode } from "react";
 import { PageHead } from "@/components/ui";
 import { parseBR, fmt } from "@/lib/format";
@@ -15,7 +12,7 @@ import { SOCIAL_IDS, META } from "@/lib/nav";
 import { socialIndGroups, indShown, isSocialPanel, socialCatalog } from "@/lib/indicators";
 import { useStore, newId, type FonteItem, type CustomInd } from "@/lib/store";
 
-/* ===== helpers CSV (blueprint 1292-1306) ===== */
+/* ===== helpers CSV ===== */
 function parseCSV(text: string): { cols: string[]; rows: string[][]; total: number } {
   const lines = String(text).replace(/\r/g, "").split("\n").filter((l) => l.trim().length);
   if (!lines.length) return { cols: [], rows: [], total: 0 };
@@ -224,10 +221,10 @@ export default function PersonalizacaoView() {
   }
   void ind; void setInd;
 
-  /* ===== import de arquivos (blueprint 1307-1328) ===== */
+  /* ===== import de arquivos ===== */
   function handleKitFile(file?: File | null) {
     if (!file) return;
-    // TODO(openclaw): extração do PDF do kit roda no backend; aqui só registramos o nome.
+    // Extração do PDF do kit: backend futuro; aqui só registramos o nome.
     setKit(file.name || "arquivo");
   }
   function handleFonteFile(file?: File | null) {
@@ -247,7 +244,7 @@ export default function PersonalizacaoView() {
       };
       rd.readAsText(file);
     } else {
-      // TODO(openclaw): XLSX/PDF são interpretados no backend — adiciona como pendente.
+      // XLSX/PDF: interpretação no backend — adiciona como pendente.
       setFonteMap({ nome: name, tipo: extTipo(ext), linhas: 0, campos: [], preview: [] });
     }
   }
@@ -855,7 +852,7 @@ function RamoSelect({ value, onChange }: { value: string; onChange: (v: string) 
   );
 }
 
-/* ===== chipList (blueprint 1135) ===== */
+/* ===== chipList ===== */
 function ChipList({
   kind,
   items,
@@ -898,7 +895,7 @@ function ChipList({
   );
 }
 
-/* ===== redeToggle (blueprint 1235) ===== */
+/* ===== redeToggle ===== */
 function RedeToggle({ rede, on, onToggle }: { rede: (typeof REDES)[number]; on: boolean; onToggle: () => void }) {
   const sub =
     rede.grupo === "conversas"
@@ -1131,7 +1128,7 @@ function CfgAccordion({
   );
 }
 
-/* ===== interpretPanel (blueprint 1330-1343) ===== */
+/* ===== interpretPanel ===== */
 function InterpretPanel({
   fonteMap,
   onCancel,

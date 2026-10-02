@@ -1,7 +1,7 @@
 "use client";
 // Grid de conexões (quadrados) reaproveitável por grupo de rede.
 // Preserva a lógica de connect do ConexoesZernio: OAuth hospedado, popup + poll + message listener.
-// O usuário nunca entra na Zernio. // TODO(zernio): tratar fluxos multi-step (select-page/account).
+// OAuth hospedado — usuário não acessa o painel do provedor. Fluxos multi-step (select-page) pendentes.
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { REDES, type Rede } from "@/lib/seed-data";

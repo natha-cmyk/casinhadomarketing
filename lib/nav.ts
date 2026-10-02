@@ -1,4 +1,4 @@
-// Navegação, ícones e mapeamento view↔rota. NAV/META/TEMPORAL portados do blueprint (829-846).
+// Navegação, ícones SVG e mapeamento view ↔ rota.
 
 export const ICONS: Record<string, string> = {
   overview: '<path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z"/>',

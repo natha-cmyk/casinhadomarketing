@@ -1,0 +1,40 @@
+---
+description: Views React, shell e design system Seahub
+globs: "{components/**/*.tsx,app/**/*.tsx,app/**/*.css}"
+alwaysApply: false
+---
+
+# UI — views e componentes
+
+## Design system
+
+Leia **`DESIGN.md`** antes de criar ou alterar telas. Implementação: `app/globals.css` + `components/ui.tsx`.
+
+- Use classes semânticas (`.card`, `.seg`, `.kpi`, `.page-head`) — não monte UI só com utilities Tailwind.
+- Números de métrica: classe `.tnum`.
+- Reutilize primitivos de `components/ui.tsx` antes de inventar markup.
+
+Skill **`web-design-guidelines`**: use para **auditoria** de acessibilidade/UX, não para substituir `DESIGN.md` (identidade Seahub).
+
+## Padrão de camadas
+
+Leia `docs/padroes.md` → Views.
+
+- `app/(app)/*/page.tsx` — fina, só importa `*View`.
+- `components/views/*View.tsx` — UI + Zustand; **sem** Prisma nem segredos.
+- Dados: `lib/api.ts` + rotas `/api/*`; estado global `lib/store.ts` + `Hydrator`.
+
+Skill **`vercel-react-best-practices`**: performance React/Next (waterfalls, bundle, re-renders) ao refatorar views grandes.
+
+## Shell
+
+- Layout autenticado: `components/shell/Shell.tsx` (Sidebar, Toolbar, AgentDock).
+- View atual pela rota (`lib/nav.ts`), não pela store.
+
+## Copy
+
+- PT-BR; **"LLM"** na UI; sem nomes de fornecedor em erros ou labels.
+
+## Arquivos grandes
+
+`PersonalizacaoView`, `GeracaoView`, `CalendarioView`, `PostModal` têm 1k+ linhas — edite só a seção necessária; não reformatar o arquivo inteiro.

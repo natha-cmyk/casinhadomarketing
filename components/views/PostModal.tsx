@@ -1,5 +1,5 @@
 "use client";
-// Porta renderPostModal (blueprint 1475-1504) + savePost (1505-1515).
+// Modal de criação/edição de post do calendário.
 // Modal de criação/edição de post do calendário de conteúdo.
 import { useEffect, useRef, useState } from "react";
 import { useStore, newId, type PostItem, type PostMedia, type PostOverride } from "@/lib/store";
@@ -257,7 +257,7 @@ export function PostModal() {
   // Edição já entra direto no composer (canal definido). "trocar canal" volta pra etapa 1.
   const [step, setStep] = useState<"canal" | "composer">(pm?.mode === "edit" ? "composer" : "canal");
 
-  // Estado seed: post existente (edição) ou defaults do blueprint (novo).
+  // Post existente (edição) ou defaults para novo post.
   const [f, setF] = useState<Fields>(() => {
     if (pm && pm.mode === "edit" && existing) {
       return {

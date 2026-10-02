@@ -1,6 +1,6 @@
 "use client";
 // Concorrência — CRUD por workspace (persistido). Começa vazio.
-// Portado de viewConcorrencia + compCard + pIcon (blueprint 1613-1643).
+// Grid de concorrentes com filtros por linha de negócio.
 import { useStore, newId, type ConcItem } from "@/lib/store";
 import { Card, Segmented, type SegOption } from "@/components/ui";
 import { Ic } from "@/components/Ic";
