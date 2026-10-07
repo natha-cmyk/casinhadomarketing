@@ -119,7 +119,7 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
       if (concs.length) {
         const cur = await fetch("/api/concorrentes").then((r) => r.json()).catch(() => null);
         const existentes = Array.isArray(cur?.concorrentes) ? cur.concorrentes : [];
-        const novos = concs.map((nome, i) => ({ id: `conc_${Date.now()}_${i}`, nome, ig: "", linkedin: false, youtube: false, dominio: null, categoria: "marca", iconOverride: null, ordem: existentes.length + i }));
+        const novos = concs.map((nome, i) => ({ id: `conc_${Date.now()}_${i}`, nome, ig: "", canais: [], dominio: null, categoria: "", iconOverride: null, ordem: existentes.length + i }));
         await fetch("/api/concorrentes", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ concorrentes: [...existentes, ...novos] }) });
       }
     } catch { /* não bloqueia a entrada */ }

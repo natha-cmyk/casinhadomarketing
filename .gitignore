@@ -44,3 +44,5 @@ next-env.d.ts
 # scripts temporarios de importacao/probe (nao versionar)
 scripts/_*.ts
 review/
+# artefatos de trabalho do metodo vibecoder (spec/tickets locais)
+.scratch/

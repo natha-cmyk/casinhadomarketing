@@ -219,6 +219,7 @@ model EnvConfig {
   manualStats Json      @default("{}") // { redeId: { stories?: number } } — indicadores manuais por canal (ex.: Stories IG)
   agentsConfig Json     @default("{}") // { agentKey: { enabled, panels:[]|null, promptExtra } } — personalização dos agentes
   widgetLayout Json     @default("{}") // { painel: { order:[], size:{id:"sm"|"lg"}, hidden:[] } } — layout arrastável/redimensionável dos widgets
+  concCategorias Json   @default("[]") // [{ id, label }] — categorias de concorrência criadas pelo workspace
   updatedAt   DateTime  @updatedAt
 }
 
@@ -398,10 +399,11 @@ model Concorrente {
   workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   nome         String
   ig           String        @default("")
-  linkedin     Boolean       @default(false)
-  youtube      Boolean       @default(false)
+  linkedin     Boolean       @default(false) // legado — coerência mantida a partir de `canais`
+  youtube      Boolean       @default(false) // legado — coerência mantida a partir de `canais`
   dominio      String?
-  categoria    CompCategoria
+  categoria    String        @default("") // categoria LIVRE por workspace (era enum CompCategoria)
+  canais       Json          @default("[]") // [{ tipo, url }] — canais flexíveis com URL
   iconOverride String?
   ordem        Int           @default(0)
 

@@ -32,11 +32,18 @@ export interface PersonaItem {
 }
 
 // ── Concorrente editável (persistido por workspace) ──
+// canal flexível de um concorrente: tipo livre (linkedin/youtube/tiktok/x/...) + URL.
+export interface ConcChannel { tipo: string; url: string }
 export interface ConcItem {
-  id: string; nome: string; ig: string; linkedin: boolean; youtube: boolean;
-  dominio?: string; categoria: "espaco" | "marca" | "certificado" | "cobranca";
+  id: string; nome: string; ig: string;
+  dominio?: string; categoria: string; // categoria LIVRE por workspace
+  canais: ConcChannel[]; // canais extras com URL
   iconOverride?: string; ordem: number;
+  // legado (não usado na UI nova; migrado p/ `canais` na leitura):
+  linkedin?: boolean; youtube?: boolean;
 }
+// categoria de concorrência criada pelo workspace.
+export interface ConcCategoria { id: string; label: string }
 
 // ── Fonte de dados importada ──
 export interface FonteItem { id: string; nome: string; tipo: "csv" | "xlsx" | "pdf"; campos: number; usados: number; linhas: number; pendente: boolean }
@@ -110,6 +117,8 @@ export interface UIState {
   // dados editáveis (persistidos via API)
   okr: Okr; posts: PostItem[]; fontes: FonteItem[]; fonteMap: FonteMap | null; perfil: Perfil;
   personas: PersonaItem[]; concorrentes: ConcItem[];
+  // categorias de concorrência criadas pelo workspace (persistido no config). Vazio = deriva dos concorrentes.
+  concCategorias: ConcCategoria[];
   hydrated: boolean;
   // contas conectadas na Zernio (do profile do workspace)
   zernioAccounts: { _id: string; platform: string; followersCount?: number; displayName?: string;
@@ -142,7 +151,7 @@ export interface UIState {
   // setters genéricos
   set: (patch: Partial<UIState>) => void;
   hydrate: (d: {
-    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; calDefaults?: Record<string, string>; calOpcoes?: { pilares?: string[]; formatos?: string[] }; manualStats?: Record<string, { stories?: number; crmCanal?: string }>; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, unknown> } | null;
+    config: { redes: Record<string, boolean>; paineis: Record<string, Record<string, boolean>>; contas: Record<string, boolean>; cfgOpen: Record<string, boolean>; impOpen: boolean; adConfig?: { manualChannels?: ManualAd[]; manualCampaigns?: ManualCampaign[]; cardOrder?: Record<string, string[]> }; customInd?: Record<string, CustomInd[]>; calManuais?: string[]; calDefaults?: Record<string, string>; calOpcoes?: { pilares?: string[]; formatos?: string[] }; manualStats?: Record<string, { stories?: number; crmCanal?: string }>; agentsConfig?: Record<string, { enabled: boolean; panels: string[] | null; promptExtra: string; name?: string }>; widgetLayout?: Record<string, unknown>; concCategorias?: ConcCategoria[] } | null;
     perfil: Perfil | null;
     okr: Okr | null;
     posts: { posts: PostItem[] } | null;
@@ -203,6 +212,11 @@ export interface UIState {
   // concorrentes
   addConc: (c: ConcItem) => void; updateConc: (id: string, patch: Partial<ConcItem>) => void;
   removeConc: (id: string) => void;
+  // categorias de concorrência (por workspace)
+  setConcCategorias: (list: ConcCategoria[]) => void;
+  addConcCategoria: (label: string) => string | null;
+  renameConcCategoria: (id: string, label: string) => void;
+  removeConcCategoria: (id: string) => void;
   // perfil
   setPerfil: (patch: Partial<Perfil>) => void; toggleRelacao: (key: string) => void;
   addChip: (field: "canais" | "produtos", v: string) => void;
@@ -233,7 +247,7 @@ export const useStore = create<UIState>((set) => ({
   postModal: null,
   okr: { objetivo: "", areas: [] },
   posts: [],
-  personas: [], concorrentes: [],
+  personas: [], concorrentes: [], concCategorias: [],
   fontes: [], fonteMap: null,
   perfil: { empresa: "", segmento: "", cidade: "", site: "", ramo: "", telefone: "", emailContato: "", estado: "", canais: [], produtos: [], relacao: {}, logoUrl: "", iconUrl: "", iconBg: "" },
   hydrated: false,
@@ -372,12 +386,14 @@ export const useStore = create<UIState>((set) => ({
         if (d.config.manualStats && typeof d.config.manualStats === "object") patch.manualStats = d.config.manualStats as Record<string, { stories?: number; crmCanal?: string; defaultAccount?: string }>;
         if (d.config.agentsConfig && typeof d.config.agentsConfig === "object") patch.agentsConfig = d.config.agentsConfig;
         if (d.config.widgetLayout && typeof d.config.widgetLayout === "object") patch.widgetLayout = d.config.widgetLayout as UIState["widgetLayout"];
+        if (Array.isArray(d.config.concCategorias)) patch.concCategorias = d.config.concCategorias as UIState["concCategorias"];
       }
       if (d.perfil) patch.perfil = d.perfil;
       if (d.okr && d.okr.areas) patch.okr = d.okr;
       if (d.posts && Array.isArray(d.posts.posts)) patch.posts = d.posts.posts;
       if (d.personas && Array.isArray(d.personas.personas)) patch.personas = d.personas.personas;
-      if (d.concorrentes && Array.isArray(d.concorrentes.concorrentes)) patch.concorrentes = d.concorrentes.concorrentes;
+      if (d.concorrentes && Array.isArray(d.concorrentes.concorrentes))
+        patch.concorrentes = d.concorrentes.concorrentes.map((c) => ({ ...c, canais: Array.isArray(c.canais) ? c.canais : [] }));
       return patch;
     }),
   setPeriod: (p) => set({ period: p }),
@@ -455,6 +471,24 @@ export const useStore = create<UIState>((set) => ({
   addConc: (c) => set((s) => ({ concorrentes: [...s.concorrentes, c] })),
   updateConc: (id, patch) => set((s) => ({ concorrentes: s.concorrentes.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
   removeConc: (id) => set((s) => ({ concorrentes: s.concorrentes.filter((c) => c.id !== id) })),
+
+  setConcCategorias: (list) => set(() => ({ concCategorias: list })),
+  addConcCategoria: (label) => {
+    const name = label.trim();
+    if (!name) return null;
+    let id: string | null = null;
+    set((s) => {
+      const dup = s.concCategorias.find((c) => c.label.toLowerCase() === name.toLowerCase());
+      if (dup) { id = dup.id; return {}; }
+      const slug = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 24) || "cat";
+      id = `cat_${slug}_${Math.random().toString(36).slice(2, 6)}`;
+      return { concCategorias: [...s.concCategorias, { id, label: name }] };
+    });
+    return id;
+  },
+  renameConcCategoria: (id, label) => set((s) => ({ concCategorias: s.concCategorias.map((c) => (c.id === id ? { ...c, label } : c)) })),
+  removeConcCategoria: (id) => set((s) => ({ concCategorias: s.concCategorias.filter((c) => c.id !== id) })),
 
   setPerfil: (patch) => set((s) => ({ perfil: { ...s.perfil, ...patch } })),
   toggleRelacao: (key) => set((s) => ({ perfil: { ...s.perfil, relacao: { ...s.perfil.relacao, [key]: !s.perfil.relacao[key] } } })),
