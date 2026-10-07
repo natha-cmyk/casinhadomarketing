@@ -15,6 +15,9 @@ export function Sidebar() {
   const iconUrl = useStore((s) => s.perfil.iconUrl);
   const iconBg = useStore((s) => s.perfil.iconBg);
   const [q, setQ] = useState("");
+  // fallback do ícone/logo: se a imagem falhar (URL quebrada), cai pra inicial da empresa
+  const [iconBroke, setIconBroke] = useState(false);
+  const [logoBroke, setLogoBroke] = useState(false);
   const view = viewForPath(pathname);
   const query = q.trim().toLowerCase();
 
@@ -33,13 +36,13 @@ export function Sidebar() {
         </div>
         <div className="brand">
           <div className="mark" style={iconBg ? { background: iconBg } : undefined}>
-            {iconUrl ? (
+            {iconUrl && !iconBroke ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={iconUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} />
-            ) : logoUrl ? (
+              <img src={iconUrl} alt="" onError={() => setIconBroke(true)} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} />
+            ) : logoUrl && !logoBroke ? (
               // logo centralizada sobre a cor de fundo (ícone gerado)
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", padding: "16%", borderRadius: "inherit" }} />
+              <img src={logoUrl} alt="" onError={() => setLogoBroke(true)} style={{ width: "100%", height: "100%", objectFit: "contain", padding: "16%", borderRadius: "inherit" }} />
             ) : (
               (empresa?.trim()?.[0] || "C").toUpperCase()
             )}
