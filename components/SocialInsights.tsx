@@ -1,10 +1,5 @@
 "use client";
-// Dashboard de analytics social por workspace. Serve Instagram e os painéis de rede
-// (canal/[rede]). Dado real quando a conta está conectada; estado vazio quando não.
-// Layout portado 1:1 do painel Instagram do blueprint (viewInstagram): 4 KPIs, um card
-// "Desempenho no tempo" com SELETOR de métrica (série diária cronológica), mix de
-// conteúdo, seguidores, engajamento por tipo, rendimento orgânico, atividade & audiência,
-// conversas, top conteúdos e heatmap de melhores horários. COMPARAÇÃO de períodos preservada.
+// Insights sociais (Instagram e /canal/[rede]): KPIs, widgets e comparação de períodos.
 import {
   Fragment, useEffect, useState,
   type CSSProperties, type ReactElement, type ReactNode, type HTMLAttributes,

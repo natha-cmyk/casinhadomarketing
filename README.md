@@ -1,74 +1,72 @@
 # Casinha do Marketing — Seahub
 
-Painel/SO de marketing da **Seahub Coworking** (Natal/RN): redes sociais, mídia paga, geração de leads, OKR, calendário de conteúdo, personas e concorrência. Porte do blueprint `casinha-do-marketing.html` para app real (Next.js + Postgres).
+Painel de marketing **multi-tenant** (workspace): redes sociais, mídia paga, geração de leads, OKR, calendário, personas, concorrência, billing e agentes LLM.
 
 ## Stack
-- **Next.js 16** (App Router) + TypeScript + **Tailwind v4**
-- **Zustand** (estado de UI) · **Prisma 6** + **PostgreSQL**
-- Gráficos SVG próprios (portados do blueprint) · Montserrat via `next/font`
 
-> **Prisma fixado no v6** de propósito: o v7 removeu `url` do datasource. Não subir sem migrar o schema.
+- **Next.js 16** (App Router) + TypeScript + **Tailwind v4**
+- **Prisma 6** + **PostgreSQL** (Supabase: pooler + direct URL)
+- **Supabase Auth** · **Stripe** (assinatura) · **Zustand** (UI)
+- Gráficos SVG em `components/Chart.tsx` · ícones `lucide-react`
+
+> Prisma fixado no v6: o v7 removeu `url` do datasource. Não subir sem ADR de migração.
 
 ## Rodar local
+
 ```bash
 npm install
 npx prisma generate
 npm run dev          # http://localhost:3000
 ```
-Sem banco configurado, a app roda 100% com o **seed em memória** (`lib/seed-data.ts`) — nada persiste entre reloads. Persistência liga quando o Postgres estiver conectado (abaixo).
 
-## Variáveis de ambiente (`.env`)
-Copie de `.env.example`:
+Node **22.x** (`package.json` → `engines`).
+
+## Variáveis de ambiente
+
+Copie `.env.example` para `.env`. Mínimo para desenvolvimento:
+
+- `DATABASE_URL` / `DIRECT_URL` — Postgres (pooler 6543 + direct 5432 no Supabase)
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — auth
+
+Integrações e produção: ver comentários em `.env.example` e `grep process.env` no código.
+
+## Banco
+
+```bash
+npx prisma migrate dev    # primeira vez local
+npm run db:seed
+npm run db:verify         # valida números do seed (offline)
+npm run db:studio
 ```
-DATABASE_URL=   # Postgres (Supabase: pooler 6543 + ?pgbouncer=true)
-DIRECT_URL=     # conexão direta (Supabase: 5432) — usada por prisma migrate
-ZERNIO_API_KEY= # integrações futuras (ver INTEGRACOES.md)
-ZERNIO_PROFILE_ID=
-OPENCLAW_URL=
-OPENCLAW_TOKEN=
+
+Deploy: `npm run vercel-build` ou `npm run db:migrate && npm run db:seed && npm run start`.
+
+## Estrutura
+
+```
+app/(app)/          painel do cliente
+app/admin/          operação interna
+app/login|cadastro|onboarding|auth
+app/api/            persistência, zernio, stripe, crm, agents, cron
+components/shell    Sidebar, Toolbar, AgentDock
+components/views    uma view por seção
+lib/                auth, prisma, store, zernio, llm, stripe, scope, seed-data
+prisma/             schema + migrations + seed
+docs/historico/     documentação antiga (não seguir)
 ```
 
-## Banco de dados (Supabase ou Postgres)
-1. **Supabase** → crie um projeto → *Project Settings → Database → Connection string*:
-   - `DATABASE_URL` = **Transaction pooler** (host `...pooler...`, porta `6543`) + `?pgbouncer=true`
-   - `DIRECT_URL` = **conexão direta** (porta `5432`)
-   - (Postgres simples/local/EasyPanel: aponte os dois para a mesma URL.)
-2. Primeira vez (cria a migration e aplica):
-   ```bash
-   npx prisma migrate dev --name init
-   npm run db:seed          # popula dados reais (OKR, personas, 24 concorrentes, posts)
-   ```
-3. Confira: `npm run db:studio` (ou `npm run db:verify` valida os números offline).
+## Documentação para agentes
 
-O que persiste (o resto é seed read-only): **EnvConfig** (redes/indicadores/contas), **Perfil/Ambiente + matriz**, **Posts** do calendário, **OKR** (editor). Auto-save debounced; recarregar mantém as edições.
+Contrato canônico: [`AGENTS.md`](AGENTS.md). **Vibecoder (não-programador):** [`GUIA-VIBECODER.md`](GUIA-VIBECODER.md). Design: [`DESIGN.md`](DESIGN.md). Arquitetura: [`docs/arquitetura.md`](docs/arquitetura.md). Padrões: [`docs/padroes.md`](docs/padroes.md). Skills: [`.agents/skills/README.md`](.agents/skills/README.md). `docs/historico/` é **arquivo** — não usar como spec.
 
 ## Scripts
+
 | Script | Faz |
 |---|---|
 | `npm run dev` / `build` / `start` | Next.js |
+| `npm run lint` | ESLint |
 | `npm run db:generate` | `prisma generate` |
-| `npm run db:migrate` | `prisma migrate deploy` (produção; migrations já criadas) |
-| `npm run db:seed` | popula tabelas editáveis |
-| `npm run db:verify` | valida números do seed sem banco |
-| `npm run db:studio` | Prisma Studio |
-
-## Deploy no EasyPanel
-- **Serviço Postgres** (ou use o Supabase direto) → pegue a URL interna.
-- **Serviço App** (Next.js, build Nixpacks) apontando pro repositório. Env: `DATABASE_URL`, `DIRECT_URL` (+ `ZERNIO_*`/`OPENCLAW_*` vazios).
-- Comando de deploy/start roda migrations + seed:
-  ```bash
-  npx prisma migrate deploy && npx prisma db seed && npm run start
-  ```
-
-## Integrações (stub por ora)
-Zernio (contas/publish/analytics/ads) e OpenClaw (agentes/interpretação de arquivos) estão marcados `// TODO(zernio)` / `// TODO(openclaw)` e respondem mock. Mapa de ligação em [`INTEGRACOES.md`](INTEGRACOES.md).
-
-## Estrutura
-```
-app/            rotas (painel, instagram, geracao, ads, metas, calendario,
-                persona, concorrencia, personalizacao, canal/[rede]) + api/*
-components/     shell (Sidebar/Toolbar/AgentDock), ui, views/*, Chart, Hydrator
-lib/            store (Zustand), seed-data, scope, format, charts, nav, api, prisma
-prisma/         schema.prisma + seed.ts
-```
-Fonte de verdade visual/lógica: `casinha-do-marketing.html`. Especificação: `PRD.md`.
+| `npm run db:migrate` | `prisma migrate deploy` |
+| `npm run db:seed` | popula tabelas |
+| `npm run db:verify` | valida seed |
+| `vercel-build` | migrate + build (Vercel) |

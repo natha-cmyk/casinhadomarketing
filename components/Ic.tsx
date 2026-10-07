@@ -1,6 +1,6 @@
 import { ICONS } from "@/lib/nav";
 
-// Ícone SVG portado do blueprint (função ic()). Renderiza o path inline de ICONS.
+// Ícone SVG inline a partir de ICONS (lib/nav.ts).
 export function Ic({ name, className }: { name: string; className?: string }) {
   return (
     <svg

@@ -1,0 +1,39 @@
+---
+description: Contrato do projeto, skills e proibições que não podem falhar
+alwaysApply: true
+---
+
+# Projeto — regras globais
+
+Leia **`AGENTS.md`** antes de codar. É o contrato canônico (stack, tenancy, comandos).
+
+## Documentação sob demanda
+
+| Tarefa | Ler |
+|---|---|
+| UI / CSS / componente visual | `DESIGN.md` |
+| Auth, tenancy, Zernio, Stripe, LLM, cron | `docs/arquitetura.md` |
+| Página, view, API, Prisma | `docs/padroes.md` |
+| Termos do domínio | `GLOSSARY.md` |
+| Standards (code-review) | `CODING_STANDARDS.md` |
+| Specs / tickets | `.scratch/README.md` |
+
+Não siga `docs/historico/` — material arquivado.
+
+## Skills locais (`.agents/skills/`)
+
+Carregue a **`SKILL.md`** da skill indicada em `AGENTS.md` → seção Skills **antes** de implementar na área. Não despeje a skill inteira no contexto; leia e aplique só o que a tarefa pede.
+
+## Proibições (nunca violar)
+
+1. **Tenancy:** dado de cliente sempre escopado por `workspaceId` validado via `getActiveWorkspace*()` + membership. RLS no Postgres é camada adicional — ver `docs/arquitetura.md`.
+2. **Segredos:** `ZERNIO_API_KEY`, chaves LLM, Stripe — só servidor; não logar nem retornar ao cliente.
+3. **Imports:** não importar `lib/zernio`, `lib/stripe`, `lib/llm` em `"use client"`.
+4. **Marca:** copy PT-BR; dizer **"LLM"**; erros e UI neutros (sem nome de fornecedor).
+5. **Prisma 7:** não subir sem ADR/migração explícita (v6 fixado).
+
+## Pronto
+
+```bash
+npm run lint && npx tsc --noEmit && npm test && npm run build
+```

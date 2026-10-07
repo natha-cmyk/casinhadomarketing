@@ -1,6 +1,5 @@
 "use client";
-// Porta viewCalendario (blueprint 1445-1474) + helpers contaChip/filaRow/postMatch/postChip/
-// contentMonthGrid (1417-1444) + feriadosMoveis/feriadosLista (662-663). Estética mLabs.
+// Calendário de conteúdo: grid mensal, fila de agendamentos e barra de contas.
 import { useEffect, useState } from "react";
 import { useStore, type PostItem } from "@/lib/store";
 import {
@@ -205,7 +204,7 @@ export function CalendarioView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mostrarPerfil, calPerfil, perfisKey, set]);
 
-  // Escape fecha o modal (blueprint 1880).
+  // Escape fecha o modal.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && useStore.getState().postModal) set({ postModal: null });
