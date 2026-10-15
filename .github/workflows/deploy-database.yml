@@ -1,0 +1,94 @@
+name: Deploy database
+
+# Prisma migrate no Postgres certo por branch (staging = branch dev Supabase;
+# production = banco principal). Espelha o fluxo do seajobs (deploy-supabase.yml),
+# adaptado para migrations Prisma em vez do CLI Supabase.
+on:
+  push:
+    branches: [staging, production]
+    paths:
+      - "prisma/**"
+      - "scripts/db-preflight.mjs"
+      - ".github/workflows/deploy-database.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Alvo do migrate (redeploy manual)"
+        required: true
+        type: choice
+        options: [staging, production]
+
+concurrency:
+  group: database-${{ github.ref }}-${{ github.event.inputs.environment || 'auto' }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, types, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test
+
+  deploy-staging:
+    name: Migrate (staging)
+    needs: check
+    if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL_STAGING }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Apply migrations (staging)
+        run: npm run db:deploy
+
+  deploy-production:
+    name: Migrate (production)
+    needs: check
+    if: github.ref == 'refs/heads/production' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCTION }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL_PRODUCTION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Apply migrations (production)
+        run: npm run db:deploy
