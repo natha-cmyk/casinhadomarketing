@@ -62,7 +62,7 @@ Configurar na Vercel em **Production** vs **Preview** (valores diferentes onde i
 
 ### Build e migrations
 
-- [ ] Migrations via GitHub Actions (`deploy-database.yml`) ou `npm run db:deploy` — não no build da Vercel.
+- [ ] Migrations via GitHub Actions (`ci.yml`, jobs deploy-*) ou `npm run db:deploy` — não no build da Vercel.
 - [ ] Migrations aplicam no **principal** (Production) e no **branch dev** (Preview/staging) — manter os dois em dia ao mudar schema.
 - [ ] Seed (`npm run db:seed`) só no branch dev / local, não no banco de produção sem processo explícito.
 
@@ -156,8 +156,8 @@ Workflows em `.github/workflows/` (mesmo espírito do **seajobs**: CI + migrate 
 
 | Workflow | Quando | O quê |
 |----------|--------|--------|
-| `ci.yml` | Push/PR em `staging` e `production` | `lint`, `tsc`, `npm test` |
-| `deploy-database.yml` | Push nessas branches se mudou `prisma/**` (ou manual) | `npm run db:deploy` → **Prisma** `migrate deploy` no Postgres (Supabase); não usa CLI `supabase db push` |
+| `ci.yml` | Push/PR em `staging` e `production` | Job **check**: lint, typegen, `tsc`, testes |
+| `ci.yml` (mesmo run) | Após **check** verde: push com mudança em `prisma/**` ou **Run workflow** manual | Jobs **deploy-staging** / **deploy-production**: `npm run db:deploy` (Prisma no Postgres Supabase) |
 
 **Secrets no repositório** (Settings → Secrets and variables → Actions):
 
@@ -170,9 +170,9 @@ Workflows em `.github/workflows/` (mesmo espírito do **seajobs**: CI + migrate 
 
 O workflow mapeia para `DATABASE_URL` / `DIRECT_URL` só no job (Prisma não precisa mudar).
 
-Deploy manual: Actions → **Deploy database** → `workflow_dispatch` → escolher `staging` ou `production`.
+Deploy manual: Actions → **CI** → **Run workflow** → escolher `staging` ou `production` (roda check + migrate).
 
-**Migrations não rodam na Vercel** (`vercel-build` = `prisma generate` + `next build`). O Supabase costuma bloquear ou falhar conexão **direct :5432** a partir do build da Vercel (P1001); o migrate fica só no **Deploy database** (Actions) e no deploy manual com `npm run db:deploy`.
+**Migrations não rodam na Vercel** (`vercel-build` = `prisma generate` + `next build`). O migrate fica no job **deploy-*** do workflow **CI** (ou `npm run db:deploy` local).
 
 Na Vercel, `DATABASE_URL` e `DIRECT_URL` ainda são obrigatórios em **runtime** (API/cron). Formato:
 
