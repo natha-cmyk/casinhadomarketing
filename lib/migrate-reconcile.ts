@@ -1,6 +1,6 @@
 /**
  * Plano de reconciliação do histórico Prisma vs schema Postgres já existente.
- * Usado por `scripts/migrate-reconcile.mjs` antes de `prisma migrate deploy` (CI e local).
+ * Usado por `scripts/migrate-reconcile.ts` antes de `prisma migrate deploy` (CI e local).
  */
 
 export const LEGACY_INIT_MIGRATION = "20260807180759_init";
@@ -41,6 +41,33 @@ export function sortMigrationNames(names: string[]): string[] {
   return [...names].filter((n) => n !== "migration_lock.toml").sort();
 }
 
+function projectedApplied(
+  rows: MigrationRow[],
+  actions: ReconcileAction[],
+): Set<string> {
+  const applied = new Set(
+    rows.filter(isApplied).map((r) => r.migration_name),
+  );
+  for (const action of actions) {
+    if (action.kind === "resolve" && action.flag === "applied") {
+      applied.add(action.migration);
+    }
+    if (action.kind === "baseline_all") {
+      for (const name of action.migrations) applied.add(name);
+    }
+  }
+  return applied;
+}
+
+function hasRolledBack(actions: ReconcileAction[], migration: string): boolean {
+  return actions.some(
+    (a) =>
+      a.kind === "resolve" &&
+      a.flag === "rolled-back" &&
+      a.migration === migration,
+  );
+}
+
 /**
  * Gera ações em ordem. O executor deve reaplicar o plano após cada `resolve`
  * se quiser estado fresco; este plano assume um snapshot único (suficiente para o CI).
@@ -53,11 +80,11 @@ export function planReconcileActions(
   const actions: ReconcileAction[] = [];
   const sorted = sortMigrationNames(allMigrationNames);
   const byName = new Map(rows.map((r) => [r.migration_name, r]));
+  const failedRows = rows.filter(isFailed);
 
   const appliedNames = new Set(
     rows.filter(isApplied).map((r) => r.migration_name),
   );
-  const squashedApplied = appliedNames.has(SQUASHED_INIT_MIGRATION);
   const legacyApplied = appliedNames.has(LEGACY_INIT_MIGRATION);
   const failedSquashed = byName.get(SQUASHED_INIT_MIGRATION);
   const squashedFailed = failedSquashed ? isFailed(failedSquashed) : false;
@@ -103,16 +130,33 @@ export function planReconcileActions(
     appliedNames.add(SQUASHED_INIT_MIGRATION);
   }
 
-  const nothingApplied = appliedNames.size === 0;
-  if (
-    nothingApplied &&
-    schema.hasRoleEnum &&
-    schema.hasUserTable &&
-    schema.hasHeadSchemaMarker &&
-    sorted.length > 0
-  ) {
-    actions.push({ kind: "baseline_all", migrations: sorted });
-    return actions;
+  if (schema.hasHeadSchemaMarker) {
+    for (const row of failedRows) {
+      if (!hasRolledBack(actions, row.migration_name)) {
+        actions.push({
+          kind: "resolve",
+          flag: "rolled-back",
+          migration: row.migration_name,
+        });
+      }
+    }
+
+    const applied = projectedApplied(rows, actions);
+    const missing = sorted.filter((m) => !applied.has(m));
+    const latest = sorted[sorted.length - 1];
+    const onlyNewHeadPending =
+      missing.length === 1 &&
+      missing[0] === latest &&
+      failedRows.length === 0 &&
+      applied.size >= sorted.length - 1;
+
+    if (missing.length > 0 && !onlyNewHeadPending) {
+      const shouldCatchUp =
+        failedRows.length > 0 || missing.length >= 2;
+      if (shouldCatchUp) {
+        actions.push({ kind: "baseline_all", migrations: missing });
+      }
+    }
   }
 
   return actions;

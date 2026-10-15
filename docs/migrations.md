@@ -29,6 +29,8 @@ O script trata automaticamente:
 | Histórico com `20260807180759_init` aplicada, sem `0_init` | Marca `0_init` como aplicada (squash) |
 | Outras migrações aplicadas, `0_init` ausente | Marca `0_init` como aplicada |
 | Histórico **vazio**, schema completo no “head” | Baseline: marca **todas** as pastas em `prisma/migrations` como aplicadas |
+| Schema no **head**, histórico incompleto ou **P3018** no meio (`… already exists`) | `rolled-back` na falha + baseline das migrações ainda pendentes |
+| Só falta a **última** migration do repo e o schema ainda não tem o head novo | **Não** faz baseline — `migrate deploy` aplica a migration nova |
 
 Lógica testada em `lib/migrate-reconcile.ts` (`lib/migrate-reconcile.test.ts`).
 

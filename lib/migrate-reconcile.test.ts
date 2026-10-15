@@ -66,7 +66,8 @@ describe("planReconcileActions", () => {
         rolled_back_at: null,
       },
     ];
-    expect(planReconcileActions(rows, fullSchema, ALL)).toEqual([
+    const schemaAtHead = fullSchema;
+    expect(planReconcileActions(rows, schemaAtHead, ALL)).toEqual([
       {
         kind: "resolve",
         flag: "rolled-back",
@@ -77,12 +78,47 @@ describe("planReconcileActions", () => {
         flag: "applied",
         migration: SQUASHED_INIT_MIGRATION,
       },
+      {
+        kind: "baseline_all",
+        migrations: ["20260813_crm", "20261007_concorrencia_custom"],
+      },
     ]);
   });
 
   it("baseline completo quando há schema no head mas histórico vazio", () => {
     expect(planReconcileActions([], fullSchema, ALL)).toEqual([
       { kind: "baseline_all", migrations: ALL },
+    ]);
+  });
+
+  it("baseline migrações pendentes com schema no head e falha no meio (P3018)", () => {
+    const rows = [
+      {
+        migration_name: SQUASHED_INIT_MIGRATION,
+        finished_at: new Date(),
+        rolled_back_at: null,
+      },
+      {
+        migration_name: "20260813_ads_customind",
+        finished_at: new Date(),
+        rolled_back_at: null,
+      },
+      {
+        migration_name: "20260813_crm",
+        finished_at: null,
+        rolled_back_at: null,
+      },
+    ];
+    expect(planReconcileActions(rows, fullSchema, ALL)).toEqual([
+      {
+        kind: "resolve",
+        flag: "rolled-back",
+        migration: "20260813_crm",
+      },
+      {
+        kind: "baseline_all",
+        migrations: ["20260813_crm", "20261007_concorrencia_custom"],
+      },
     ]);
   });
 
