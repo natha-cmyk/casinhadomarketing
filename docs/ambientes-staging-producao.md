@@ -163,10 +163,12 @@ Workflows em `.github/workflows/` (mesmo espírito do **seajobs**: CI + migrate 
 
 | Secret | Valor |
 |--------|--------|
-| `DATABASE_URL_STAGING` | Pooler (6543) do branch dev — mesmo da Vercel Preview |
-| `DIRECT_URL_STAGING` | Direct (5432) do branch dev |
-| `DATABASE_URL_PRODUCTION` | Pooler do banco principal — mesmo da Vercel Production |
-| `DIRECT_URL_PRODUCTION` | Direct do banco principal |
+| `DATABASE_URL_STAGING` | **Transaction** pooler, porta **6543**, `?pgbouncer=true` (não use **6542**) |
+| `DIRECT_URL_STAGING` | **Session** pooler (5432 em `*.pooler.supabase.com`) — ver nota P1001 abaixo |
+| `DATABASE_URL_PRODUCTION` | Idem 6543 no banco principal |
+| `DIRECT_URL_PRODUCTION` | Session pooler 5432 no principal |
+
+**P1001 no GitHub Actions:** o host `db.xxx.supabase.co:5432` (aba “Direct”) muitas vezes **não responde** a partir dos runners do GitHub. Para `DIRECT_URL_*` nos secrets, use a string **Session pooler** do painel Supabase (Connect → Prisma / ORMs), não a “Direct connection”. `DATABASE_URL_*` segue **6543** Transaction. A Vercel Preview/Production pode usar o mesmo par.
 
 O workflow mapeia para `DATABASE_URL` / `DIRECT_URL` só no job (Prisma não precisa mudar).
 
