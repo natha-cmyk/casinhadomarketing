@@ -41,6 +41,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Generate Next.js route types
+        run: npx next typegen
+
       - name: Typecheck
         run: npx tsc --noEmit
 

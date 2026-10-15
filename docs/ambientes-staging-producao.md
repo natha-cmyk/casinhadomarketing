@@ -157,7 +157,7 @@ Workflows em `.github/workflows/` (mesmo espírito do **seajobs**: CI + migrate 
 | Workflow | Quando | O quê |
 |----------|--------|--------|
 | `ci.yml` | Push/PR em `staging` e `production` | `lint`, `tsc`, `npm test` |
-| `deploy-database.yml` | Push nessas branches se mudou `prisma/**` (ou manual) | `npm run db:deploy` no Postgres do ambiente |
+| `deploy-database.yml` | Push nessas branches se mudou `prisma/**` (ou manual) | `npm run db:deploy` → **Prisma** `migrate deploy` no Postgres (Supabase); não usa CLI `supabase db push` |
 
 **Secrets no repositório** (Settings → Secrets and variables → Actions):
 
