@@ -82,6 +82,7 @@ Importar **apenas** em server components, route handlers ou outros `lib/*` — n
 - Client singleton: `lib/prisma.ts`
 - Toda entidade de cliente: `workspaceId` no `where`/`data`
 - Migrations + RLS: ver `docs/arquitetura.md` e `.cursor/rules/prisma.mdc`
+- **Criar/aplicar migrations, CI, squash, baseline:** `docs/migrations.md`
 - Skill: **`prisma-client-api`**
 
 ## UI

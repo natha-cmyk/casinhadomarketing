@@ -63,7 +63,9 @@ jobs:
           filters: |
             database:
               - "prisma/**"
-              - "scripts/db-preflight.mjs"
+              - "lib/migrate-reconcile.ts"
+              - "scripts/migrate-reconcile.ts"
+              - "scripts/assert-db-env.mjs"
               - ".github/workflows/ci.yml"
 
   deploy-staging:

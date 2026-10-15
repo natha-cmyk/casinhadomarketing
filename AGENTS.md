@@ -26,7 +26,7 @@ npm run db:verify
 npm run build
 ```
 
-Banco: `npx prisma migrate dev` · `npm run db:seed` · Deploy: `npm run vercel-build`
+Banco: `npx prisma migrate dev` · `npm run db:deploy` (CI) · `docs/migrations.md` · Deploy: `npm run vercel-build`
 
 ## Documentação (divulgação progressiva)
 

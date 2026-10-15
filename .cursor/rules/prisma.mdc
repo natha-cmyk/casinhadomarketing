@@ -20,6 +20,7 @@ Leia também `docs/arquitetura.md` → Tenancy e RLS.
 - Todo dado de cliente: coluna `workspaceId` + relação `Workspace` + índice em `workspaceId`.
 - Comentários no schema são spec — mantenha alinhados ao código.
 - Migrations nomeadas em `prisma migrate dev --name descricao_curta`.
+- Fluxo CI, reconciliação retroativa (`0_init`), checklist de nova migration: **`docs/migrations.md`**.
 
 ## RLS (obrigatório em tabelas de tenant)
 

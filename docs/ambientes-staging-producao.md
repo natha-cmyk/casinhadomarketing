@@ -62,7 +62,7 @@ Configurar na Vercel em **Production** vs **Preview** (valores diferentes onde i
 
 ### Build e migrations
 
-- [ ] Migrations via GitHub Actions (`ci.yml`, jobs deploy-*) ou `npm run db:deploy` — não no build da Vercel.
+- [ ] Migrations via GitHub Actions (`ci.yml`, jobs deploy-*) ou `npm run db:deploy` — não no build da Vercel. Detalhes: `docs/migrations.md`.
 - [ ] Migrations aplicam no **principal** (Production) e no **branch dev** (Preview/staging) — manter os dois em dia ao mudar schema.
 - [ ] Seed (`npm run db:seed`) só no branch dev / local, não no banco de produção sem processo explícito.
 
