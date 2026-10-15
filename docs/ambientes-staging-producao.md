@@ -62,7 +62,7 @@ Configurar na Vercel em **Production** vs **Preview** (valores diferentes onde i
 
 ### Build e migrations
 
-- [ ] `vercel-build` roda `prisma migrate deploy` no banco da env do deploy.
+- [ ] Migrations via GitHub Actions (`deploy-database.yml`) ou `npm run db:deploy` — não no build da Vercel.
 - [ ] Migrations aplicam no **principal** (Production) e no **branch dev** (Preview/staging) — manter os dois em dia ao mudar schema.
 - [ ] Seed (`npm run db:seed`) só no branch dev / local, não no banco de produção sem processo explícito.
 
@@ -172,7 +172,12 @@ O workflow mapeia para `DATABASE_URL` / `DIRECT_URL` só no job (Prisma não pre
 
 Deploy manual: Actions → **Deploy database** → `workflow_dispatch` → escolher `staging` ou `production`.
 
-A Vercel continua com `vercel-build` (preflight + migrate + build) como rede de segurança; o workflow de banco roda **antes** quando há migration nova (e falha o pipeline se o migrate quebrar).
+**Migrations não rodam na Vercel** (`vercel-build` = `prisma generate` + `next build`). O Supabase costuma bloquear ou falhar conexão **direct :5432** a partir do build da Vercel (P1001); o migrate fica só no **Deploy database** (Actions) e no deploy manual com `npm run db:deploy`.
+
+Na Vercel, `DATABASE_URL` e `DIRECT_URL` ainda são obrigatórios em **runtime** (API/cron). Formato:
+
+- Começar com `postgresql://` ou `postgres://` (sem aspas no dashboard).
+- **Production:** pooler **6543** + `?pgbouncer=true` em `DATABASE_URL`; **Preview (staging):** URLs do **branch dev**, não do banco principal.
 
 ---
 

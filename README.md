@@ -69,4 +69,4 @@ Contrato canônico: [`AGENTS.md`](AGENTS.md). **Vibecoder (não-programador):** 
 | `npm run db:migrate` | `prisma migrate deploy` |
 | `npm run db:seed` | popula tabelas |
 | `npm run db:verify` | valida seed |
-| `vercel-build` | migrate + build (Vercel) |
+| `vercel-build` | generate + build (Vercel; migrate no CI) |

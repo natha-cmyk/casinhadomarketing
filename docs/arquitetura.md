@@ -119,7 +119,7 @@ Sem banco: fetch falha silenciosamente; UI usa defaults da store.
 
 ## Deploy
 
-- **Vercel:** `npm run vercel-build` (generate, preflight, migrate deploy, build); região `gru1`.
+- **Vercel:** `npm run vercel-build` (generate + build); migrate no CI (`db:deploy`); região `gru1`.
 - **EasyPanel:** Node 22 (`nixpacks.toml`).
 
 ## Segredos (nunca no client)
