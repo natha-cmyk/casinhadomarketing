@@ -44,7 +44,7 @@ async function loadMigrationRows(prisma: PrismaClient) {
 }
 
 async function loadSchemaSnapshot(prisma: PrismaClient) {
-  const [roleRow, userRow, headRow] = await Promise.all([
+  const [roleRow, userRow, headRow, crmRow] = await Promise.all([
     prisma.$queryRaw<{ exists: boolean }[]>`
       SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'Role') AS "exists"
     `,
@@ -64,12 +64,19 @@ async function loadSchemaSnapshot(prisma: PrismaClient) {
       HEAD_SCHEMA_MARKER.table,
       HEAD_SCHEMA_MARKER.column,
     ),
+    prisma.$queryRaw<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'CrmConfig'
+      ) AS "exists"
+    `,
   ]);
 
   return {
     hasRoleEnum: roleRow[0]?.exists === true,
     hasUserTable: userRow[0]?.exists === true,
     hasHeadSchemaMarker: headRow[0]?.exists === true,
+    hasCrmConfigTable: crmRow[0]?.exists === true,
   };
 }
 

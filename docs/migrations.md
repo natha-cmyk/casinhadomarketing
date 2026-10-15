@@ -36,6 +36,8 @@ Lógica testada em `lib/migrate-reconcile.ts` (`lib/migrate-reconcile.test.ts`).
 
 **Marcador de schema no head:** `HEAD_SCHEMA_MARKER` em `lib/migrate-reconcile.ts` (hoje `EnvConfig.concCategorias`). Ao adicionar uma migration que passa a ser o novo head do banco, **atualize esse marcador** para uma coluna/tabela que só exista depois dessa migration — senão o baseline automático pode não reconhecer bancos desatualizados.
 
+**Staging legado (sem coluna de head):** se existem `User` + enum `Role` + tabela `CrmConfig`, o reconcile trata como banco retroativo (baseline + `rolled-back` em falhas **P3009**).
+
 ## Criar uma migration nova (checklist)
 
 1. `npx prisma migrate dev --name descricao_curta` no banco de **dev** (branch Supabase ou local).  

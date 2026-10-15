@@ -23,6 +23,8 @@ export type SchemaSnapshot = {
   hasUserTable: boolean;
   /** Coluna da migration mais recente conhecida — schema “no head” do repo. */
   hasHeadSchemaMarker: boolean;
+  /** Tabela da migration `20260813_crm` — staging antigo sem coluna de head ainda. */
+  hasCrmConfigTable: boolean;
 };
 
 export type ReconcileAction =
@@ -39,6 +41,16 @@ function isFailed(row: MigrationRow): boolean {
 
 export function sortMigrationNames(names: string[]): string[] {
   return [...names].filter((n) => n !== "migration_lock.toml").sort();
+}
+
+/** Schema já reflete app em uso; histórico Prisma pode estar incompleto (staging legado). */
+export function schemaNeedsRetroactiveCatchUp(schema: SchemaSnapshot): boolean {
+  if (schema.hasHeadSchemaMarker) return true;
+  return (
+    schema.hasRoleEnum &&
+    schema.hasUserTable &&
+    schema.hasCrmConfigTable
+  );
 }
 
 function projectedApplied(
@@ -130,24 +142,24 @@ export function planReconcileActions(
     appliedNames.add(SQUASHED_INIT_MIGRATION);
   }
 
-  if (schema.hasHeadSchemaMarker) {
-    for (const row of failedRows) {
-      if (!hasRolledBack(actions, row.migration_name)) {
-        actions.push({
-          kind: "resolve",
-          flag: "rolled-back",
-          migration: row.migration_name,
-        });
-      }
+  // P3009: sempre limpar migrações falhas antes do deploy
+  for (const row of failedRows) {
+    if (!hasRolledBack(actions, row.migration_name)) {
+      actions.push({
+        kind: "resolve",
+        flag: "rolled-back",
+        migration: row.migration_name,
+      });
     }
+  }
 
+  if (schemaNeedsRetroactiveCatchUp(schema)) {
     const applied = projectedApplied(rows, actions);
     const missing = sorted.filter((m) => !applied.has(m));
     const latest = sorted[sorted.length - 1];
     const onlyNewHeadPending =
       missing.length === 1 &&
       missing[0] === latest &&
-      failedRows.length === 0 &&
       applied.size >= sorted.length - 1;
 
     if (missing.length > 0 && !onlyNewHeadPending) {

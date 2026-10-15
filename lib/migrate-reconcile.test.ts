@@ -10,12 +10,21 @@ const fullSchema = {
   hasRoleEnum: true,
   hasUserTable: true,
   hasHeadSchemaMarker: true,
+  hasCrmConfigTable: true,
 };
 
 const emptySchema = {
   hasRoleEnum: false,
   hasUserTable: false,
   hasHeadSchemaMarker: false,
+  hasCrmConfigTable: false,
+};
+
+const legacyStagingSchema = {
+  hasRoleEnum: true,
+  hasUserTable: true,
+  hasHeadSchemaMarker: false,
+  hasCrmConfigTable: true,
 };
 
 const ALL = ["0_init", "20260813_crm", "20261007_concorrencia_custom"];
@@ -126,7 +135,12 @@ describe("planReconcileActions", () => {
     expect(
       planReconcileActions(
         [],
-        { hasRoleEnum: true, hasUserTable: true, hasHeadSchemaMarker: false },
+        {
+          hasRoleEnum: true,
+          hasUserTable: true,
+          hasHeadSchemaMarker: false,
+          hasCrmConfigTable: false,
+        },
         ALL,
       ),
     ).toEqual([
@@ -134,6 +148,37 @@ describe("planReconcileActions", () => {
         kind: "resolve",
         flag: "applied",
         migration: SQUASHED_INIT_MIGRATION,
+      },
+    ]);
+  });
+
+  it("P3009: falha no CRM sem head marker mas com CrmConfig (staging legado)", () => {
+    const rows = [
+      {
+        migration_name: SQUASHED_INIT_MIGRATION,
+        finished_at: new Date(),
+        rolled_back_at: null,
+      },
+      {
+        migration_name: "20260813_ads_customind",
+        finished_at: new Date(),
+        rolled_back_at: null,
+      },
+      {
+        migration_name: "20260813_crm",
+        finished_at: null,
+        rolled_back_at: null,
+      },
+    ];
+    expect(planReconcileActions(rows, legacyStagingSchema, ALL)).toEqual([
+      {
+        kind: "resolve",
+        flag: "rolled-back",
+        migration: "20260813_crm",
+      },
+      {
+        kind: "baseline_all",
+        migrations: ["20260813_crm", "20261007_concorrencia_custom"],
       },
     ]);
   });
