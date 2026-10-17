@@ -130,6 +130,17 @@ async function removePhantomFailedInit(prisma: PrismaClient) {
   }
 }
 
+async function runDriftRepair(prisma: PrismaClient) {
+  const rows = await loadMigrationRows(prisma);
+  const driftPresent = await loadDriftMarkerPresence(prisma);
+  const driftActions = planDriftRepair(rows, driftPresent);
+  if (driftActions.length === 0) return;
+  console.log(
+    `[migrate-reconcile] drift: ${driftActions.length} migração(ões) sem objeto no schema — rolled-back para redeploy`,
+  );
+  await executeActions(driftActions);
+}
+
 async function executeActions(
   actions: ReturnType<typeof planReconcileActions>,
 ) {
@@ -174,27 +185,18 @@ async function main() {
 
     if (actions.length === 0) {
       console.log("[migrate-reconcile] nada a reconciliar");
-      return;
-    }
-
-    await executeActions(actions);
-
-    rows = await loadMigrationRows(prisma);
-    schema = await loadSchemaSnapshot(prisma);
-    actions = planReconcileActions(rows, schema, allOnDisk, options);
-    if (actions.length > 0) {
+    } else {
       await executeActions(actions);
+
+      rows = await loadMigrationRows(prisma);
+      schema = await loadSchemaSnapshot(prisma);
+      actions = planReconcileActions(rows, schema, allOnDisk, options);
+      if (actions.length > 0) {
+        await executeActions(actions);
+      }
     }
 
-    rows = await loadMigrationRows(prisma);
-    const driftPresent = await loadDriftMarkerPresence(prisma);
-    const driftActions = planDriftRepair(rows, driftPresent);
-    if (driftActions.length > 0) {
-      console.log(
-        `[migrate-reconcile] drift: ${driftActions.length} migração(ões) sem objeto no schema — rolled-back para redeploy`,
-      );
-      await executeActions(driftActions);
-    }
+    await runDriftRepair(prisma);
   } finally {
     await prisma.$disconnect().catch(() => {});
   }
