@@ -3,9 +3,9 @@ name: CI
 # Um workflow: check em todo push/PR; migrate só após check verde (push ou manual).
 on:
   push:
-    branches: [staging, production]
+    branches: [staging, main]
   pull_request:
-    branches: [staging, production]
+    branches: [staging, main]
   workflow_dispatch:
     inputs:
       environment:
@@ -110,7 +110,7 @@ jobs:
       (needs.changes.result == 'skipped' || needs.changes.outputs.database == 'true') &&
       (
         (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production') ||
-        (github.event_name == 'push' && github.ref == 'refs/heads/production')
+        (github.event_name == 'push' && github.ref == 'refs/heads/main')
       )
     runs-on: ubuntu-latest
     env:
