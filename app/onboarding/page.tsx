@@ -5,6 +5,7 @@ import { getActiveWorkspace, getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listWorkspaceAccounts } from "@/lib/profiles";
 import { OnboardingForm } from "@/components/onboarding/OnboardingForm";
+import { ProvisionFallback } from "@/components/ProvisionFallback";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Bem-vindo · Casinha do Marketing" };
@@ -14,7 +15,14 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 }
 
 export default async function OnboardingPage() {
-  const [ws, user] = await Promise.all([getActiveWorkspace(), getSessionUser()]);
+  let ws: Awaited<ReturnType<typeof getActiveWorkspace>>;
+  let user: Awaited<ReturnType<typeof getSessionUser>>;
+  try {
+    [ws, user] = await Promise.all([getActiveWorkspace(), getSessionUser()]);
+  } catch (e) {
+    console.error("[OnboardingPage] provision failed", e);
+    return <ProvisionFallback />;
+  }
   if (!ws) redirect("/");
   // NÃO redireciona se já onboarded: permite REVISAR o fluxo em /onboarding (pré-preenchido).
   // O gate de 1º acesso continua no layout autenticado (manda pra cá quem ainda não passou).

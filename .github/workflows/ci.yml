@@ -84,6 +84,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
       DIRECT_URL: ${{ secrets.DIRECT_URL_STAGING }}
+      MIGRATE_ALLOW_BULK_BASELINE: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -115,6 +116,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCTION }}
       DIRECT_URL: ${{ secrets.DIRECT_URL_PRODUCTION }}
+      MIGRATE_ALLOW_BULK_BASELINE: "0"
     steps:
       - uses: actions/checkout@v4
 

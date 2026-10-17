@@ -31,6 +31,22 @@ export type ReconcileAction =
   | { kind: "resolve"; flag: "rolled-back" | "applied"; migration: string }
   | { kind: "baseline_all"; migrations: string[] };
 
+/**
+ * `migrate resolve` / baseline só alteram `_prisma_migrations` (metadados).
+ * Nunca executam DELETE/UPDATE nas tabelas do app.
+ */
+export type ReconcileOptions = {
+  /**
+   * Baseline de várias migrações sem falha registrada (ex.: histórico vazio em staging).
+   * **Desligado em produção** — ver `MIGRATE_ALLOW_BULK_BASELINE` no CI.
+   */
+  allowBulkBaseline: boolean;
+};
+
+export const DEFAULT_RECONCILE_OPTIONS: ReconcileOptions = {
+  allowBulkBaseline: false,
+};
+
 function isApplied(row: MigrationRow): boolean {
   return row.finished_at != null;
 }
@@ -88,6 +104,7 @@ export function planReconcileActions(
   rows: MigrationRow[],
   schema: SchemaSnapshot,
   allMigrationNames: string[],
+  options: ReconcileOptions = DEFAULT_RECONCILE_OPTIONS,
 ): ReconcileAction[] {
   const actions: ReconcileAction[] = [];
   const sorted = sortMigrationNames(allMigrationNames);
@@ -164,7 +181,8 @@ export function planReconcileActions(
 
     if (missing.length > 0 && !onlyNewHeadPending) {
       const shouldCatchUp =
-        failedRows.length > 0 || missing.length >= 2;
+        failedRows.length > 0 ||
+        (options.allowBulkBaseline && missing.length >= 2);
       if (shouldCatchUp) {
         actions.push({ kind: "baseline_all", migrations: missing });
       }

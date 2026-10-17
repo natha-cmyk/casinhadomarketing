@@ -28,6 +28,8 @@ const legacyStagingSchema = {
 };
 
 const ALL = ["0_init", "20260813_crm", "20261007_concorrencia_custom"];
+const stagingOpts = { allowBulkBaseline: true };
+const productionOpts = { allowBulkBaseline: false };
 
 describe("sortMigrationNames", () => {
   it("coloca 0_init antes das datadas", () => {
@@ -94,10 +96,16 @@ describe("planReconcileActions", () => {
     ]);
   });
 
-  it("baseline completo quando há schema no head mas histórico vazio", () => {
-    expect(planReconcileActions([], fullSchema, ALL)).toEqual([
+  it("baseline completo quando há schema no head mas histórico vazio (staging)", () => {
+    expect(planReconcileActions([], fullSchema, ALL, stagingOpts)).toEqual([
       { kind: "baseline_all", migrations: ALL },
     ]);
+  });
+
+  it("produção: não faz baseline em massa sem falha registrada", () => {
+    expect(planReconcileActions([], fullSchema, ALL, productionOpts)).toEqual(
+      [],
+    );
   });
 
   it("baseline migrações pendentes com schema no head e falha no meio (P3018)", () => {

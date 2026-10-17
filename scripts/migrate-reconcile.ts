@@ -8,7 +8,15 @@ import {
   LEGACY_INIT_MIGRATION,
   planReconcileActions,
   sortMigrationNames,
+  type ReconcileOptions,
 } from "../lib/migrate-reconcile";
+
+function reconcileOptionsFromEnv(): ReconcileOptions {
+  const allow =
+    process.env.MIGRATE_ALLOW_BULK_BASELINE === "1" ||
+    process.env.MIGRATE_ALLOW_BULK_BASELINE === "true";
+  return { allowBulkBaseline: allow };
+}
 
 function runResolve(flag: "rolled-back" | "applied", migration: string) {
   execSync(`npx prisma migrate resolve --${flag} "${migration}"`, {
@@ -118,13 +126,22 @@ async function executeActions(
 async function main() {
   const prisma = new PrismaClient();
   const allOnDisk = listMigrationsFromDisk();
+  const options = reconcileOptionsFromEnv();
+
+  if (options.allowBulkBaseline) {
+    console.log("[migrate-reconcile] baseline em massa permitido (staging / opt-in)");
+  } else {
+    console.log(
+      "[migrate-reconcile] produção: só metadados; baseline em massa desligado",
+    );
+  }
 
   try {
     await removePhantomFailedInit(prisma);
 
     let rows = await loadMigrationRows(prisma);
     let schema = await loadSchemaSnapshot(prisma);
-    let actions = planReconcileActions(rows, schema, allOnDisk);
+    let actions = planReconcileActions(rows, schema, allOnDisk, options);
 
     if (actions.length === 0) {
       console.log("[migrate-reconcile] nada a reconciliar");
@@ -135,7 +152,7 @@ async function main() {
 
     rows = await loadMigrationRows(prisma);
     schema = await loadSchemaSnapshot(prisma);
-    actions = planReconcileActions(rows, schema, allOnDisk);
+    actions = planReconcileActions(rows, schema, allOnDisk, options);
     if (actions.length > 0) {
       await executeActions(actions);
     }

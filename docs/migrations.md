@@ -60,6 +60,24 @@ Workflow `.github/workflows/ci.yml`:
 
 Mudanças em `prisma/**`, `scripts/migrate-reconcile.ts`, `lib/migrate-reconcile.ts` ou `assert-db-env` disparam migrate no push.
 
+## Segurança em produção (dados)
+
+| Etapa | Toca tabelas do app? | O que faz |
+|-------|----------------------|-----------|
+| `migrate-reconcile` → `migrate resolve` | **Não** | Só atualiza `_prisma_migrations` (histórico Prisma) |
+| `migrate-reconcile` → baseline | **Não** | Marca migrações como aplicadas **sem** reexecutar o SQL |
+| `prisma migrate deploy` | **DDL apenas** | Roda o `.sql` das migrações **ainda não aplicadas** (CREATE/ALTER additivos no repo) |
+
+**Produção no GitHub Actions** (`deploy-production`):
+
+- `MIGRATE_ALLOW_BULK_BASELINE=0` — não faz baseline em massa (histórico vazio / várias pendentes sem falha).
+- Ainda permite `rolled-back` em migração **falha** (P3009) e baseline **só** nesse caso (metadados; não apaga linhas de `User`, `Workspace`, etc.).
+- **Staging** usa `MIGRATE_ALLOW_BULK_BASELINE=1` para alinhar banco legado.
+
+O reconcile **nunca** roda `DELETE`/`TRUNCATE` em tabelas de negócio. O `db-preflight` só remove linha **falha** fantasma de `20260807180759_init` em `_prisma_migrations`.
+
+Novas migrations devem ser **additivas** (`IF NOT EXISTS`, novas colunas). Evitar `DROP TABLE` / apagar dados em produção sem ADR e janela de manutenção.
+
 ## Problemas comuns
 
 | Erro | Causa | Correção |
