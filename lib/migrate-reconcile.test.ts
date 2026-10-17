@@ -200,11 +200,7 @@ describe("planDriftRepair", () => {
     const rows = [applied("20261007_concorrencia_custom")];
     const present = [true, true, false];
     expect(planDriftRepair(rows, present)).toEqual([
-      {
-        kind: "resolve",
-        flag: "rolled-back",
-        migration: "20261007_concorrencia_custom",
-      },
+      { kind: "unmark_applied", migration: "20261007_concorrencia_custom" },
     ]);
   });
 

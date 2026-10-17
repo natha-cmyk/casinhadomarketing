@@ -31,7 +31,7 @@ O script trata automaticamente:
 | Histórico **vazio**, schema completo no “head” | Baseline: marca **todas** as pastas em `prisma/migrations` como aplicadas |
 | Schema no **head**, histórico incompleto ou **P3018** no meio (`… already exists`) | `rolled-back` na falha + baseline das migrações ainda pendentes |
 | Só falta a **última** migration do repo e o schema ainda não tem o head novo | **Não** faz baseline — `migrate deploy` aplica a migration nova |
-| Migration **aplicada** em `_prisma_migrations` mas tabela/coluna não existe (drift) | `planDriftRepair`: `rolled-back` + `migrate deploy` reexecuta o SQL (`DRIFT_MARKERS` em `lib/migrate-reconcile.ts`) |
+| Migration **aplicada** em `_prisma_migrations` mas tabela/coluna não existe (drift) | `planDriftRepair`: remove a linha do histórico (`DRIFT_MARKERS`) + `migrate deploy` reexecuta o SQL (não usa `resolve --rolled-back` — P3012 em migração já concluída) |
 | Staging legado com `CrmConfig` mas **sem** marcador de head | **Não** faz baseline em massa — o deploy roda as migrations pendentes de verdade |
 
 Lógica testada em `lib/migrate-reconcile.ts` (`lib/migrate-reconcile.test.ts`).

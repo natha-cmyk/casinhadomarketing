@@ -47,6 +47,9 @@ export type ReconcileAction =
   | { kind: "resolve"; flag: "rolled-back" | "applied"; migration: string }
   | { kind: "baseline_all"; migrations: string[] };
 
+/** Drift: migration “aplicada” no histórico mas SQL não refletido no schema (P3012 se usar resolve --rolled-back). */
+export type DriftRepairAction = { kind: "unmark_applied"; migration: string };
+
 /**
  * `migrate resolve` / baseline só alteram `_prisma_migrations` (metadados).
  * Nunca executam DELETE/UPDATE nas tabelas do app.
@@ -217,14 +220,14 @@ export function planReconcileActions(
 export function planDriftRepair(
   rows: MigrationRow[],
   markerPresent: boolean[],
-): ReconcileAction[] {
-  const actions: ReconcileAction[] = [];
+): DriftRepairAction[] {
+  const actions: DriftRepairAction[] = [];
   for (let i = 0; i < DRIFT_MARKERS.length; i++) {
     if (markerPresent[i]) continue;
     const { migration } = DRIFT_MARKERS[i];
     const row = rows.find((r) => r.migration_name === migration);
     if (row && isApplied(row)) {
-      actions.push({ kind: "resolve", flag: "rolled-back", migration });
+      actions.push({ kind: "unmark_applied", migration });
     }
   }
   return actions;

@@ -130,15 +130,31 @@ async function removePhantomFailedInit(prisma: PrismaClient) {
   }
 }
 
+async function unmarkAppliedMigration(prisma: PrismaClient, migration: string) {
+  const allowed = new Set(DRIFT_MARKERS.map((m) => m.migration));
+  if (!allowed.has(migration)) {
+    throw new Error(`[migrate-reconcile] unmark bloqueado: ${migration}`);
+  }
+  const n = await prisma.$executeRawUnsafe(
+    `DELETE FROM "_prisma_migrations" WHERE migration_name = $1`,
+    migration,
+  );
+  console.log(
+    `[migrate-reconcile] drift: removida entrada aplicada de ${migration} (${n} linha(s)) — migrate deploy reaplica`,
+  );
+}
+
 async function runDriftRepair(prisma: PrismaClient) {
   const rows = await loadMigrationRows(prisma);
   const driftPresent = await loadDriftMarkerPresence(prisma);
   const driftActions = planDriftRepair(rows, driftPresent);
   if (driftActions.length === 0) return;
   console.log(
-    `[migrate-reconcile] drift: ${driftActions.length} migração(ões) sem objeto no schema — rolled-back para redeploy`,
+    `[migrate-reconcile] drift: ${driftActions.length} migração(ões) sem objeto no schema`,
   );
-  await executeActions(driftActions);
+  for (const action of driftActions) {
+    await unmarkAppliedMigration(prisma, action.migration);
+  }
 }
 
 async function executeActions(
