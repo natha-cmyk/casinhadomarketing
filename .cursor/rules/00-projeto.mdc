@@ -17,6 +17,7 @@ Leia **`AGENTS.md`** antes de codar. É o contrato canônico (stack, tenancy, co
 | Termos do domínio | `GLOSSARY.md` |
 | Standards (code-review) | `CODING_STANDARDS.md` |
 | Specs / tickets | `.scratch/README.md` |
+| Git, staging, QA, release | `docs/agents/git-workflow.md` |
 
 Não siga `docs/historico/` — material arquivado.
 
@@ -31,6 +32,7 @@ Carregue a **`SKILL.md`** da skill indicada em `AGENTS.md` → seção Skills **
 3. **Imports:** não importar `lib/zernio`, `lib/stripe`, `lib/llm` em `"use client"`.
 4. **Marca:** copy PT-BR; dizer **"LLM"**; erros e UI neutros (sem nome de fornecedor).
 5. **Prisma 7:** não subir sem ADR/migração explícita (v6 fixado).
+6. **Git:** `feat/*` → `staging` antes de `main`; `fix/*` idem, exceto hotfix explícito → `main` (ver `docs/agents/git-workflow.md`).
 
 ## Pronto
 

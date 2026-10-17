@@ -11,7 +11,7 @@ Referências no repo: `.env.example`, `docs/arquitetura.md`, `lib/email.ts` (`AP
 | Tópico | Decisão |
 |--------|---------|
 | **Vercel** | Um único projeto; ambientes **Production** + **Preview** |
-| **Branch produção** | `production` → deploy **Production** na Vercel |
+| **Branch produção** | `main` → deploy **Production** na Vercel |
 | **Branch staging** | `staging` → deploy **Preview** (staging oficial) |
 | **Domínio staging** | `https://staging.casinha.seahubcoworking.com.br` (já configurado na Vercel) |
 | **Domínio produção** | ex.: `https://casinha.seahubcoworking.com.br` (Production) |
@@ -22,7 +22,7 @@ Referências no repo: `.env.example`, `docs/arquitetura.md`, `lib/email.ts` (`AP
 
 | Camada | Produção | Staging |
 |--------|----------|---------|
-| Vercel | Env **Production**, branch `production` | Env **Preview**, branch `staging` |
+| Vercel | Env **Production**, branch `main` | Env **Preview**, branch `staging` |
 | URL | domínio de produção | `staging.casinha.seahubcoworking.com.br` |
 | Postgres | `DATABASE_URL` / `DIRECT_URL` do **banco principal** | URLs do **branch** dev no Supabase |
 | Supabase Auth | `NEXT_PUBLIC_SUPABASE_URL` + anon key (projeto único) | **Igual** (auth é do projeto, não do branch) |
@@ -37,8 +37,8 @@ Referências no repo: `.env.example`, `docs/arquitetura.md`, `lib/email.ts` (`AP
 
 ### Projeto e Git
 
-- [ ] **Settings → Git → Production Branch** = `production`.
-- [ ] Fluxo: merge para `staging` → deploy Preview no domínio staging; merge `staging` → `production` → deploy Production.
+- [ ] **Settings → Git → Production Branch** = `main`.
+- [ ] Fluxo de feature: branch a partir de `main` → merge em `staging` → QA no Preview; após OK, merge `staging` → `main` → Production. Detalhes: `docs/agents/git-workflow.md`.
 - [ ] Confirmar que `staging.casinha.seahubcoworking.com.br` está ligado ao branch **`staging`** (não a previews aleatórios de outras branches).
 - [ ] Opcional: desabilitar ou limitar deploy Preview de branches que não sejam `staging` (evita URLs órfãs com env errada).
 
@@ -70,14 +70,14 @@ Configurar na Vercel em **Production** vs **Preview** (valores diferentes onde i
 
 Rotas protegidas por `CRON_SECRET`: `crm-sync`, `health`, `purge-trash`, `reminders`.
 
-- [ ] Crons da Vercel rodam no contexto **Production** do projeto (branch `production`).
+- [ ] Crons da Vercel rodam no contexto **Production** do projeto (branch `main`).
 - [ ] Staging **não** deve depender de crons agendados na Vercel (ou aceitar que Preview não replica o mesmo schedule).
 - [ ] `CRON_SECRET` de Production ≠ Preview se alguém chamar cron manualmente no staging.
 
 ### Git (processo)
 
-- [ ] Proteção de branch `production` (revisão antes de deploy).
-- [ ] `main` (se existir): alinhar com o time se ainda recebe deploy ou só `production` / `staging`.
+- [ ] Proteção de branch `main` (revisão antes de deploy em produção).
+- [ ] Features integram em `staging` antes de merge em `main` — ver `docs/agents/git-workflow.md`.
 
 ---
 
@@ -145,7 +145,7 @@ Rotas protegidas por `CRON_SECRET`: `crm-sync`, `health`, `purge-trash`, `remind
 
 - [ ] Não commitar `.env`; não colar secrets de Production em Preview.
 - [ ] Após seed no branch dev: `npm run db:verify`.
-- [ ] Promover código: `staging` → `production`; schema segue via migrate em cada banco.
+- [ ] Promover código: `staging` → `main`; schema segue via migrate em cada banco.
 - [ ] Opcional: banner “Staging” com `VERCEL_ENV === 'preview'`.
 
 Um schema Prisma, **dois** Postgres (principal + branch) — um `vercel.json` por projeto.
@@ -156,7 +156,7 @@ Workflows em `.github/workflows/` (mesmo espírito do **seajobs**: CI + migrate 
 
 | Workflow | Quando | O quê |
 |----------|--------|--------|
-| `ci.yml` | Push/PR em `staging` e `production` | Job **check**: lint, typegen, `tsc`, testes |
+| `ci.yml` | Push/PR em `staging` e `main` | Job **check**: lint, typegen, `tsc`, testes |
 | `ci.yml` (mesmo run) | Após **check** verde: push com mudança em `prisma/**` ou **Run workflow** manual | Jobs **deploy-staging** / **deploy-production**: `npm run db:deploy` (Prisma no Postgres Supabase) |
 
 **Secrets no repositório** (Settings → Secrets and variables → Actions):
@@ -190,14 +190,14 @@ Na Vercel, `DATABASE_URL` e `DIRECT_URL` ainda são obrigatórios em **runtime**
 3. Auth redirects + Google OAuth para `staging.casinha.seahubcoworking.com.br`.
 4. Deploy branch `staging` → smoke test (login, provision, checkout test, webhook).
 5. Env **Production**: banco principal, Stripe live, `APP_URL` prod, crons.
-6. Deploy branch `production` → smoke test prod.
+6. Merge `staging` → `main` + push → smoke test prod.
 7. Cadastrar no GitHub os secrets `*_STAGING` e `*_PRODUCTION` (tabela acima).
 
 ---
 
 ## Matriz rápida (env × ambiente)
 
-| Variável | Preview (`staging`) | Production (`production`) |
+| Variável | Preview (`staging`) | Production (`main`) |
 |----------|---------------------|---------------------------|
 | `DATABASE_URL` / `DIRECT_URL` | Branch dev Supabase | Banco principal |
 | `NEXT_PUBLIC_SUPABASE_*` | Projeto (igual) | Projeto (igual) |

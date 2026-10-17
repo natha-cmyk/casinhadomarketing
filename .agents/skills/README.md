@@ -7,6 +7,7 @@ Skills instaladas via `skills-lock.json`. Restaurar: `npx skills experimental_in
 | Doc | Conteúdo |
 |---|---|
 | `docs/agents/issue-tracker.md` | Tickets em `.scratch/` |
+| `docs/agents/git-workflow.md` | Branches `main` / `staging`, QA, agentes |
 | `docs/agents/triage-labels.md` | Status de triage |
 | `docs/agents/domain.md` | Glossário + ADRs |
 | `.scratch/README.md` | Exemplo de spec/ticket |

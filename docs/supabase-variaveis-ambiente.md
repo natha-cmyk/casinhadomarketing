@@ -93,7 +93,7 @@ Mesmas regras: **6543** + `pgbouncer=true` vs **Session 5432** pooler. Hosts/cre
 
 ## 4. URLs do app (não vêm do Supabase)
 
-| Variável | Vercel Preview (branch `staging`) | Vercel Production (branch `production`) |
+| Variável | Vercel Preview (branch `staging`) | Vercel Production (branch `main`) |
 |----------|-----------------------------------|----------------------------------------|
 | `APP_URL` | `https://staging.casinha.seahubcoworking.com.br` | URL pública de produção |
 | `NEXT_PUBLIC_APP_URL` | igual `APP_URL` | igual `APP_URL` |

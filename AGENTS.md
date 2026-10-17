@@ -28,6 +28,18 @@ npm run build
 
 Banco: `npx prisma migrate dev` · `npm run db:deploy` (CI) · `docs/migrations.md` · Deploy: `npm run vercel-build`
 
+## Git e releases
+
+| Branch | Uso |
+|--------|-----|
+| **`main`** | Produção (Vercel Production). **Não** receber feature/fix direto sem QA. |
+| **`staging`** | Integração + QA (`staging.casinha…`). Destino do merge após desenvolvimento. |
+| **`feat/*` / `fix/*`** | Trabalho isolado; criar a partir de `main` atualizado. |
+
+**Fluxo para agentes:** atualizar `main` → branch (`feat/*` ou `fix/*`) → desenvolver (`implement` + `tdd`) → commit na branch → **`feat/*`:** merge em `staging` + push `staging` (QA) → release `staging` → `main` após OK. **`fix/*`:** mesmo padrão; **hotfix:** merge + push em `main` se o usuário pedir, depois alinhar `staging`.
+
+Passo a passo: **`docs/agents/git-workflow.md`**.
+
 ## Documentação (divulgação progressiva)
 
 | Tarefa | Ler |
@@ -38,6 +50,7 @@ Banco: `npx prisma migrate dev` · `npm run db:deploy` (CI) · `docs/migrations.
 | Auth, tenancy, RLS, integrações | `docs/arquitetura.md` |
 | Padrão página/view/API | `docs/padroes.md` |
 | Termos (Workspace, Perfil, Profile…) | `GLOSSARY.md` |
+| Git, staging, QA, release | `docs/agents/git-workflow.md` |
 
 **Não** usar `docs/historico/` como spec.
 
@@ -121,6 +134,7 @@ Ver `.env.example` (Postgres, Supabase, Zernio, Stripe, LLM, Resend, cron, admin
 3. Não importar `lib/zernio`, `lib/stripe`, `lib/llm` em `"use client"`.
 4. Não subir Prisma 7 sem migração explícita.
 5. Migration de tenant **sem** RLS quando a tabela tem `workspaceId` (exceto bootstrap documentado).
+6. **Git:** `feat/*` não vai direto a `main` (passar por `staging`/QA). `fix/*` pode ir a `main` em hotfix com pedido explícito — ver `docs/agents/git-workflow.md`.
 
 ## Definição de pronto
 
