@@ -32,18 +32,9 @@ export default function CadastroPage() {
       return;
     }
     if (data.session) {
-      // "Confirm email" desligado → já logado; provisiona antes de entrar no painel
-      const ready = await fetch("/api/whoami", { credentials: "same-origin" })
-        .then((r) => r.json().catch(() => null))
-        .catch(() => null);
-      if (!ready?.ok) {
-        setErr(
-          "Conta criada, mas não conseguimos preparar seu ambiente agora. Aguarde um instante e tente entrar com o mesmo e-mail e senha.",
-        );
-        return;
-      }
-      router.push("/");
+      // "Confirm email" desligado → já logado (mesmo fluxo do login)
       router.refresh();
+      router.push("/");
     } else {
       setOk("Cadastro criado. Confira seu e-mail para confirmar e depois entre.");
     }

@@ -5,13 +5,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { getActiveWorkspaceId } from "@/lib/auth";
+import { describeDbEnv, isPreviewDiagnosticsEnabled, pingDatabase } from "@/lib/db-env-diagnostics";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const user = await getSessionUser();
-    if (!user?.email) return NextResponse.json({ ok: false, error: "não logado" }, { status: 401 });
+    if (!user?.email) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "não logado",
+          hint: "Sessão não chegou ao servidor (cookies). Tente entrar de novo ou aguarde o redirect após o cadastro.",
+        },
+        { status: 401 },
+      );
+    }
     const wsId = await getActiveWorkspaceId();
     if (!wsId) return NextResponse.json({ ok: false, error: "sem workspace" }, { status: 401 });
 
@@ -32,6 +42,11 @@ export async function GET() {
       amostraPosts: postsSample.map((p) => ({ id: p.id, titulo: p.titulo, canal: p.canal, perfil: p.perfil, data: p.data })),
     });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
+    const body: Record<string, unknown> = { ok: false, error: String(e) };
+    if (isPreviewDiagnosticsEnabled()) {
+      body.dbEnv = describeDbEnv();
+      body.dbPing = await pingDatabase();
+    }
+    return NextResponse.json(body, { status: 500 });
   }
 }

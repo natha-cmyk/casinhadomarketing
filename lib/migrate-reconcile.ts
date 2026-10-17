@@ -12,6 +12,22 @@ export const HEAD_SCHEMA_MARKER = {
   column: "concCategorias",
 } as const;
 
+/** Migration ↔ objeto no Postgres; se a linha está “aplicada” mas o objeto não existe → drift. */
+export type DriftMarker =
+  | { migration: string; kind: "table"; table: string }
+  | { migration: string; kind: "column"; table: string; column: string };
+
+export const DRIFT_MARKERS: DriftMarker[] = [
+  { migration: "20260929_planilha_cell", kind: "table", table: "PlanilhaCell" },
+  { migration: "20260930_reports", kind: "table", table: "Report" },
+  {
+    migration: "20261007_concorrencia_custom",
+    kind: "column",
+    table: HEAD_SCHEMA_MARKER.table,
+    column: HEAD_SCHEMA_MARKER.column,
+  },
+];
+
 export type MigrationRow = {
   migration_name: string;
   finished_at: Date | string | null;
@@ -180,14 +196,36 @@ export function planReconcileActions(
       applied.size >= sorted.length - 1;
 
     if (missing.length > 0 && !onlyNewHeadPending) {
+      // Baseline só quando o schema já está no head — senão o deploy deve rodar o SQL de verdade.
       const shouldCatchUp =
-        failedRows.length > 0 ||
-        (options.allowBulkBaseline && missing.length >= 2);
+        schema.hasHeadSchemaMarker &&
+        (failedRows.length > 0 ||
+          (options.allowBulkBaseline && missing.length >= 2));
       if (shouldCatchUp) {
         actions.push({ kind: "baseline_all", migrations: missing });
       }
     }
   }
 
+  return actions;
+}
+
+/**
+ * Histórico diz “aplicada”, mas tabela/coluna da migration não existe (baseline indevido).
+ * Marca rolled-back para `migrate deploy` reexecutar o `.sql`.
+ */
+export function planDriftRepair(
+  rows: MigrationRow[],
+  markerPresent: boolean[],
+): ReconcileAction[] {
+  const actions: ReconcileAction[] = [];
+  for (let i = 0; i < DRIFT_MARKERS.length; i++) {
+    if (markerPresent[i]) continue;
+    const { migration } = DRIFT_MARKERS[i];
+    const row = rows.find((r) => r.migration_name === migration);
+    if (row && isApplied(row)) {
+      actions.push({ kind: "resolve", flag: "rolled-back", migration });
+    }
+  }
   return actions;
 }

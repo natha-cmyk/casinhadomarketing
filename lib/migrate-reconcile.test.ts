@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   LEGACY_INIT_MIGRATION,
+  planDriftRepair,
   planReconcileActions,
   SQUASHED_INIT_MIGRATION,
   sortMigrationNames,
@@ -184,10 +185,32 @@ describe("planReconcileActions", () => {
         flag: "rolled-back",
         migration: "20260813_crm",
       },
+    ]);
+  });
+});
+
+describe("planDriftRepair", () => {
+  const applied = (name: string) => ({
+    migration_name: name,
+    finished_at: new Date(),
+    rolled_back_at: null,
+  });
+
+  it("rolled-back quando migration aplicada mas marcador ausente", () => {
+    const rows = [applied("20261007_concorrencia_custom")];
+    const present = [true, true, false];
+    expect(planDriftRepair(rows, present)).toEqual([
       {
-        kind: "baseline_all",
-        migrations: ["20260813_crm", "20261007_concorrencia_custom"],
+        kind: "resolve",
+        flag: "rolled-back",
+        migration: "20261007_concorrencia_custom",
       },
     ]);
+  });
+
+  it("não faz nada se coluna já existe", () => {
+    const rows = [applied("20261007_concorrencia_custom")];
+    const present = [true, true, true];
+    expect(planDriftRepair(rows, present)).toEqual([]);
   });
 });

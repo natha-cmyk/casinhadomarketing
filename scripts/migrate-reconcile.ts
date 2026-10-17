@@ -4,8 +4,10 @@ import { execSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import {
+  DRIFT_MARKERS,
   HEAD_SCHEMA_MARKER,
   LEGACY_INIT_MIGRATION,
+  planDriftRepair,
   planReconcileActions,
   sortMigrationNames,
   type ReconcileOptions,
@@ -88,6 +90,33 @@ async function loadSchemaSnapshot(prisma: PrismaClient) {
   };
 }
 
+async function loadDriftMarkerPresence(prisma: PrismaClient): Promise<boolean[]> {
+  const checks = await Promise.all(
+    DRIFT_MARKERS.map((marker) => {
+      if (marker.kind === "table") {
+        return prisma.$queryRawUnsafe<{ exists: boolean }[]>(
+          `SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = $1
+          ) AS "exists"`,
+          marker.table,
+        );
+      }
+      return prisma.$queryRawUnsafe<{ exists: boolean }[]>(
+        `SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = $1
+            AND column_name = $2
+        ) AS "exists"`,
+        marker.table,
+        marker.column,
+      );
+    }),
+  );
+  return checks.map((rows) => rows[0]?.exists === true);
+}
+
 async function removePhantomFailedInit(prisma: PrismaClient) {
   const n = await prisma.$executeRawUnsafe(
     `DELETE FROM "_prisma_migrations"
@@ -155,6 +184,16 @@ async function main() {
     actions = planReconcileActions(rows, schema, allOnDisk, options);
     if (actions.length > 0) {
       await executeActions(actions);
+    }
+
+    rows = await loadMigrationRows(prisma);
+    const driftPresent = await loadDriftMarkerPresence(prisma);
+    const driftActions = planDriftRepair(rows, driftPresent);
+    if (driftActions.length > 0) {
+      console.log(
+        `[migrate-reconcile] drift: ${driftActions.length} migração(ões) sem objeto no schema — rolled-back para redeploy`,
+      );
+      await executeActions(driftActions);
     }
   } finally {
     await prisma.$disconnect().catch(() => {});
