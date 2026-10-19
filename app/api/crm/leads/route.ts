@@ -119,7 +119,9 @@ export async function GET(req: Request) {
     let totalValue = 0, pipelineValue = 0, wonValue = 0, won = 0, lost = 0, open = 0;
 
     const rows = leads.map((l) => {
-      const task = rawTaskOf(l.raw);
+      // Só reinterpreta como ClickUp quando o lead veio do sync nativo — webhook grava colunas + _parsed
+      // no raw; se o JSON do CRM trouxer `custom_fields`, não confundir com task ClickUp.
+      const task = l.source === "clickup" ? rawTaskOf(l.raw) : null;
       const p = parsedOf(l.raw);
 
       // interpretação AO VIVO quando há task cru; senão usa o gravado (webhook/colunas).
