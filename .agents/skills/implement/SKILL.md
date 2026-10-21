@@ -20,4 +20,4 @@ Once done, use /code-review to review the work.
 
 Commit on the **feature branch** (never commit new feature work directly on `main`).
 
-When shipping: **`feat/*`** → merge into **`staging`** + `git push origin staging` (QA). **`fix/*`** → same by default; if the user asks for a **hotfix** or direct prod fix → merge into **`main`** + `git push origin main`, then merge `main` into **`staging`** and push `staging` to realign. Never push **`feat/*`** straight to `main`. Production release of validated work: merge `staging` → `main` only when the user requests it after QA.
+When shipping: **`feat/*`** → merge into **`staging`** + `git push origin staging` (QA). **`fix/*`** → same by default; if the user asks for a **hotfix** or direct prod fix → merge **`fix/<slug>`** into **`main`** + `git push origin main`, then merge `main` into **`staging`** and push `staging` to realign. Never merge **`staging`** into **`main`**. After QA, production release (when the user requests it): merge the approved **`feat/<slug>`** or **`fix/<slug>`** into **`main`** — not `staging`.
