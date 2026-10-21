@@ -38,7 +38,7 @@ Referências no repo: `.env.example`, `docs/arquitetura.md`, `lib/email.ts` (`AP
 ### Projeto e Git
 
 - [ ] **Settings → Git → Production Branch** = `main`.
-- [ ] Fluxo de feature: branch a partir de `main` → merge em `staging` → QA no Preview; após OK, merge `staging` → `main` → Production. Detalhes: `docs/agents/git-workflow.md`.
+- [ ] Fluxo de feature: branch a partir de `main` → merge em `staging` → QA no Preview; após OK, merge da **branch da feature** (`feat/*` / `fix/*`) em `main` → Production (**nunca** `staging` → `main`). Detalhes: `docs/agents/git-workflow.md`.
 - [ ] Confirmar que `staging.casinha.seahubcoworking.com.br` está ligado ao branch **`staging`** (não a previews aleatórios de outras branches).
 - [ ] Opcional: desabilitar ou limitar deploy Preview de branches que não sejam `staging` (evita URLs órfãs com env errada).
 
@@ -77,7 +77,7 @@ Rotas protegidas por `CRON_SECRET`: `crm-sync`, `health`, `purge-trash`, `remind
 ### Git (processo)
 
 - [ ] Proteção de branch `main` (revisão antes de deploy em produção).
-- [ ] Features integram em `staging` antes de merge em `main` — ver `docs/agents/git-workflow.md`.
+- [ ] Features integram em `staging` para QA; produção recebe merge da branch aprovada em `main` (não merge de `staging`) — ver `docs/agents/git-workflow.md`.
 
 ---
 
@@ -145,7 +145,7 @@ Rotas protegidas por `CRON_SECRET`: `crm-sync`, `health`, `purge-trash`, `remind
 
 - [ ] Não commitar `.env`; não colar secrets de Production em Preview.
 - [ ] Após seed no branch dev: `npm run db:verify`.
-- [ ] Promover código: `staging` → `main`; schema segue via migrate em cada banco.
+- [ ] Promover código: merge da branch **`feat/*` / `fix/*`** aprovada em `main` (não `staging` → `main`); schema segue via migrate em cada banco.
 - [ ] Opcional: banner “Staging” com `VERCEL_ENV === 'preview'`.
 
 Um schema Prisma, **dois** Postgres (principal + branch) — um `vercel.json` por projeto.
@@ -190,7 +190,7 @@ Na Vercel, `DATABASE_URL` e `DIRECT_URL` ainda são obrigatórios em **runtime**
 3. Auth redirects + Google OAuth para `staging.casinha.seahubcoworking.com.br`.
 4. Deploy branch `staging` → smoke test (login, provision, checkout test, webhook).
 5. Env **Production**: banco principal, Stripe live, `APP_URL` prod, crons.
-6. Merge `staging` → `main` + push → smoke test prod.
+6. Merge da branch aprovada (`feat/*` / `fix/*`) em `main` + push → smoke test prod (não merge `staging`).
 7. Cadastrar no GitHub os secrets `*_STAGING` e `*_PRODUCTION` (tabela acima).
 
 ---
