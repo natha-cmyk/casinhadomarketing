@@ -2,7 +2,7 @@
 // Concorrência — CRUD por workspace (persistido). Começa vazio.
 // Categorias LIVRES por workspace + canais flexíveis (tipo + URL) por concorrente.
 // Logo espelha automaticamente o avatar do Instagram (fallback: clearbit do domínio → inicial).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore, newId, type ConcItem, type ConcChannel } from "@/lib/store";
 import { Segmented, type SegOption } from "@/components/ui";
 
@@ -36,9 +36,13 @@ function PiconEl({ tipo }: { tipo: string }) {
   );
 }
 
-function CompCard({ c, cats }: { c: ConcItem; cats: { id: string; label: string }[] }) {
+// normaliza URL: adiciona https:// se vier sem protocolo
+const norm = (u: string) => (/^https?:/i.test(u) ? u : `https://${u}`);
+
+function CompCard({ c, cats, autoEdit }: { c: ConcItem; cats: { id: string; label: string }[]; autoEdit?: boolean }) {
   const update = useStore((s) => s.updateConc);
   const remove = useStore((s) => s.removeConc);
+  const [editing, setEditing] = useState(!!autoEdit);
 
   const hide = (e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = "none"; };
 
@@ -53,12 +57,54 @@ function CompCard({ c, cats }: { c: ConcItem; cats: { id: string; label: string 
         ? `https://logo.clearbit.com/${c.dominio}`
         : "";
 
-  // presença: ig + site + canais (dedupe por tipo)
-  const presenca: string[] = [];
-  if (igHandle) presenca.push("instagram");
-  if (c.dominio) presenca.push("site");
-  for (const ch of c.canais || []) if (ch.tipo && !presenca.includes(ch.tipo)) presenca.push(ch.tipo);
+  // presença: ig + site + canais (dedupe por tipo), com URL p/ abrir o canal
+  const presenca: { tipo: string; url: string }[] = [];
+  if (igHandle) presenca.push({ tipo: "instagram", url: `https://instagram.com/${igHandle}` });
+  if (c.dominio) presenca.push({ tipo: "site", url: norm(c.dominio) });
+  for (const ch of c.canais || []) {
+    if (ch.tipo && !presenca.some((p) => p.tipo === ch.tipo)) {
+      presenca.push({ tipo: ch.tipo, url: ch.url ? norm(ch.url) : "" });
+    }
+  }
 
+  const logo = (
+    <div className="comp-logo">
+      {isEmoji ? (
+        <span className="comp-emoji">{ov}</span>
+      ) : (
+        <>
+          {imgSrc && <img src={imgSrc} alt="" loading="lazy" onError={hide} />}
+          <span>{(c.nome || "?")[0]}</span>
+        </>
+      )}
+    </div>
+  );
+
+  // ── modo publicado: visualização limpa, só o que está preenchido ──
+  if (!editing) {
+    const sub = igHandle ? `@${igHandle}` : (c.dominio || "");
+    return (
+      <div className="comp-card">
+        <button className="comp-editbtn" onClick={() => setEditing(true)} aria-label="Editar" title="Editar">✎</button>
+        {logo}
+        <h4>{c.nome || "Sem nome"}</h4>
+        {sub && <div className="ig">{sub}</div>}
+        {presenca.length > 0 && (
+          <div className="comp-icons">
+            {presenca.map((p) => (p.url ? (
+              <a key={p.tipo} className="picon-link" href={p.url} target="_blank" rel="noopener noreferrer" aria-label={meta(p.tipo).label}>
+                <PiconEl tipo={p.tipo} />
+              </a>
+            ) : (
+              <PiconEl key={p.tipo} tipo={p.tipo} />
+            )))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── modo edição: formulário completo + Remover + Concluir ──
   const canais = c.canais || [];
   const setCanais = (next: ConcChannel[]) => update(c.id, { canais: next });
   const addCanal = () => setCanais([...canais, { tipo: "linkedin", url: "" }]);
@@ -67,21 +113,11 @@ function CompCard({ c, cats }: { c: ConcItem; cats: { id: string; label: string 
 
   return (
     <div className="comp-card">
-      <button className="comp-editbtn" onClick={() => remove(c.id)} aria-label="Remover" title="Remover">✕</button>
-      <div className="comp-logo">
-        {isEmoji ? (
-          <span className="comp-emoji">{ov}</span>
-        ) : (
-          <>
-            {imgSrc && <img src={imgSrc} alt="" loading="lazy" onError={hide} />}
-            <span>{(c.nome || "?")[0]}</span>
-          </>
-        )}
-      </div>
+      {logo}
       <input className="comp-in" value={c.nome} placeholder="Nome" onChange={(e) => update(c.id, { nome: e.target.value })} style={{ marginBottom: 6 }} />
       {presenca.length > 0 && (
         <div className="comp-icons" style={{ marginBottom: 8 }}>
-          {presenca.map((t) => <PiconEl key={t} tipo={t} />)}
+          {presenca.map((p) => <PiconEl key={p.tipo} tipo={p.tipo} />)}
         </div>
       )}
       <div style={{ display: "grid", gap: 6 }}>
@@ -118,6 +154,12 @@ function CompCard({ c, cats }: { c: ConcItem; cats: { id: string; label: string 
           {cats.map((cat) => <option key={cat.id} value={cat.id}>{cat.label}</option>)}
           {c.categoria && !cats.some((cat) => cat.id === c.categoria) && <option value={c.categoria}>{c.categoria}</option>}
         </select>
+
+        {/* rodapé do editor: remover (só aqui) + concluir */}
+        <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+          <button type="button" className="btn-link" style={{ justifyContent: "center", padding: "6px 10px", fontSize: 12, color: "var(--red)" }} onClick={() => remove(c.id)}>✕ Remover</button>
+          <button type="button" className="btn-link" style={{ justifyContent: "center", padding: "6px 10px", fontSize: 12, flex: 1 }} onClick={() => setEditing(false)}>✓ Concluir</button>
+        </div>
       </div>
     </div>
   );
@@ -142,6 +184,10 @@ export default function ConcorrenciaView() {
 
   const [manage, setManage] = useState(false);
   const [novaCat, setNovaCat] = useState("");
+  const [autoEditId, setAutoEditId] = useState<string | null>(null); // novo card abre em edição
+  // consome a flag depois que o card novo montou (o editing dele é semente de mount);
+  // evita que trocar de aba e voltar reabra o card em edição.
+  useEffect(() => { if (autoEditId) setAutoEditId(null); }, [autoEditId]);
 
   // tabs efetivas: concCategorias (fonte de verdade) ou derivadas dos concorrentes existentes
   const derived = useMemo(() => {
@@ -161,7 +207,9 @@ export default function ConcorrenciaView() {
 
   const add = () => {
     const categoria = sel !== "geral" ? sel : cats[0]?.id || "";
-    addConc({ id: newId("conc"), nome: "Novo concorrente", ig: "", canais: [], categoria, ordem: concorrentes.length });
+    const id = newId("conc");
+    addConc({ id, nome: "Novo concorrente", ig: "", canais: [], categoria, ordem: concorrentes.length });
+    setAutoEditId(id);
   };
 
   const onAddCat = () => {
@@ -243,7 +291,7 @@ export default function ConcorrenciaView() {
         </div>
       ) : (
         <div className="comp-grid">
-          {list.map((c) => <CompCard key={c.id} c={c} cats={cats} />)}
+          {list.map((c) => <CompCard key={c.id} c={c} cats={cats} autoEdit={c.id === autoEditId} />)}
         </div>
       )}
     </>
