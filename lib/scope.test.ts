@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  civilToday,
   daysInMonth,
   quarterOf,
   scopeLabelText,
@@ -18,6 +19,14 @@ describe("escopo / período", () => {
   it("daysInMonth usa calendário do ano", () => {
     expect(daysInMonth(2026, 1)).toBe(28);
     expect(daysInMonth(2024, 1)).toBe(29);
+    expect(daysInMonth(2028, 1)).toBe(29);
+    expect(daysInMonth(2026, 0)).toBe(31);
+  });
+
+  it("civilToday segue America/Fortaleza, não o UTC do processo", () => {
+    // 01/01 02:00 UTC ainda é 31/12 em Fortaleza (UTC−3)
+    expect(civilToday(new Date("2026-01-01T02:00:00Z"))).toEqual({ year: 2025, month: 11, day: 31 });
+    expect(civilToday(new Date("2026-01-01T03:00:00Z"))).toEqual({ year: 2026, month: 0, day: 1 });
   });
 
   it("weekRange formata intervalo da semana no mês", () => {

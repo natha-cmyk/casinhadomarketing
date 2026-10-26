@@ -6,7 +6,8 @@
 // devolver demografia, retorna erro amigável. Scoped por workspace ativo.
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getActiveWorkspaceId } from "@/lib/auth";
+import { getActiveWorkspace } from "@/lib/auth";
+import { findWorkspaceAccount } from "@/lib/profiles";
 import { demographics, type DemographicsResponse } from "@/lib/zernio";
 
 export const dynamic = "force-dynamic";
@@ -84,7 +85,7 @@ function doresFromSegmento(segmento?: string): string[] {
 
 export async function POST(req: Request) {
   try {
-    const ws = await getActiveWorkspaceId();
+    const ws = await getActiveWorkspace();
     if (!ws) return NextResponse.json({ error: "unauth" }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
@@ -94,11 +95,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "platform/accountId ausentes" }, { status: 400 });
     if (!DEMO_PLATFORMS.has(platform))
       return NextResponse.json({ error: "Esta rede não expõe demografia de audiência." }, { status: 400 });
+    const account = await findWorkspaceAccount(ws, accountId);
+    if (!account) return NextResponse.json({ error: "conta não encontrada" }, { status: 404 });
 
     // demografia real da audiência + segmento do perfil (pras dores)
     const [demoRes, perfil] = await Promise.all([
-      demographics(accountId, { platform }).catch(() => null),
-      prisma.perfil.findUnique({ where: { workspaceId: ws } }).catch(() => null),
+      demographics(account._id, { platform }).catch(() => null),
+      prisma.perfil.findUnique({ where: { workspaceId: ws.id } }).catch(() => null),
     ]);
 
     if (!demoRes)

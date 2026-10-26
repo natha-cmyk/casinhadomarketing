@@ -11,7 +11,8 @@ import { Ic } from "@/components/Ic";
 import { Spinner } from "@/components/Spinner";
 import { REDES } from "@/lib/seed-data";
 import { fmt, money, pct, kfmt } from "@/lib/format";
-import { daysInMonth, type Period } from "@/lib/scope";
+import { type Period } from "@/lib/scope";
+import { periodRange, POLICY_ADS, type PeriodScope } from "@/lib/period";
 
 // ── tipos da rota /api/zernio/ads ──
 interface AdTotals {
@@ -45,8 +46,7 @@ const objetivoPt = (o?: string) => (o ? OBJETIVO_PT[o] || o.replace(/^OUTCOME_/,
 // cache de módulo (stale-while-revalidate) por intervalo
 const ADS_CACHE = new Map<string, AdAccountData[]>();
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dateRange = (scope: PeriodScope) => periodRange(scope, POLICY_ADS);
 // CTR já vem em pontos percentuais (1.19 = 1,19%); pct() espera fração, então dividimos
 const pctv = (percent: number) => pct((Number(percent) || 0) / 100);
 // ISO (YYYY-MM-DD) → dd/mm, para a narrativa
@@ -64,29 +64,6 @@ function narrativaGeral(g: AdTotals, since: string, until: string): string | nul
     ? parts[0]
     : parts.slice(0, -1).join(", ") + " e " + parts[parts.length - 1];
   return `No período de ${ddmm(since)} a ${ddmm(until)}, a empresa ${body}.`;
-}
-
-function dateRange(scope: { period: Period; year: number; month: number; quarter: number; week: number }) {
-  const { period, year, month, quarter, week } = scope;
-  let since: Date, until: Date;
-  if (period === "semana") {
-    // janela = os 7 dias da semana selecionada no mês (W1=1–7, W2=8–14, W3=15–21, W4=22–fim)
-    const last = daysInMonth(year, month);
-    const startDay = week * 7 + 1;
-    const endDay = Math.min(startDay + 6, last);
-    since = new Date(year, month, startDay);
-    until = new Date(year, month, endDay);
-  } else if (period === "trimestre") {
-    since = new Date(year, quarter * 3, 1);
-    until = new Date(year, quarter * 3 + 2, daysInMonth(year, quarter * 3 + 2));
-  } else if (period === "ano") {
-    since = new Date(year, 0, 1);
-    until = new Date(year, 11, 31);
-  } else {
-    since = new Date(year, month, 1);
-    until = new Date(year, month, daysInMonth(year, month));
-  }
-  return { since: iso(since), until: iso(until) };
 }
 
 // meses (y,m) dentro do escopo — pra filtrar os canais manuais

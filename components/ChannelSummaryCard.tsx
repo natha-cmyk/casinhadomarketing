@@ -8,10 +8,9 @@ import type { CSSProperties } from "react";
 import { Ic } from "@/components/Ic";
 import { fmt, kfmt } from "@/lib/format";
 import { REDES } from "@/lib/seed-data";
+import { redeOf } from "@/lib/rede";
 
-// plataforma da integração → id da rede (Casinha)
-const REDE_ID: Record<string, string> = { twitter: "x" };
-const redeId = (platform: string) => REDE_ID[platform] || platform;
+const redeId = (platform: string) => redeOf(platform);
 
 // id da rede → nome legível (selo). Cai no id se a rede não estiver no catálogo.
 const REDE_LABEL: Record<string, string> = Object.fromEntries(REDES.map((r) => [r.id, r.label]));

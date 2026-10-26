@@ -10,8 +10,9 @@
 // daily, top, content, linkTaps, stories, bestTime, demographics }.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
+import { findWorkspaceAccount } from "@/lib/profiles";
 import { cached, periodClosed } from "@/lib/ttl-cache";
-import { cachedImmutable } from "@/lib/analytics-cache";
+import { cachedImmutable, insightsWorthKeeping } from "@/lib/analytics-cache";
 import {
   accountInsightsFull, followerHistory, keyMetricSeries, dailyMetrics,
   postAnalytics, profileLinkTaps, listStories, bestTime, demographics,
@@ -138,6 +139,8 @@ export async function GET(req: Request) {
     const platform = q.get("platform");
     const accountId = q.get("accountId");
     if (!platform || !accountId) return NextResponse.json({ error: "platform/accountId ausentes" }, { status: 400 });
+    const account = await findWorkspaceAccount(ws, accountId);
+    if (!account) return NextResponse.json({ error: "conta não encontrada" }, { status: 404 });
     const since = q.get("since") ?? undefined;
     const until = q.get("until") ?? undefined;
     const range = { since, until };
@@ -200,7 +203,7 @@ export async function GET(req: Request) {
 
     return { insights, followers, keySeries, daily, top, content, recent, linkTaps, stories, bestTime: bestSlots, demographics: demo };
     };
-    const payload = periodClosed(until) ? await cachedImmutable(cacheKey, compute) : await cached(cacheKey, 30_000, compute);
+    const payload = periodClosed(until) ? await cachedImmutable(cacheKey, compute, insightsWorthKeeping) : await cached(cacheKey, 30_000, compute);
 
     return NextResponse.json(payload);
   } catch (e) {

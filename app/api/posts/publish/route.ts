@@ -8,13 +8,11 @@ import type { PostStatus } from "@prisma/client";
 import { getActiveWorkspace } from "@/lib/auth";
 import { publishPost, type MediaItemInput } from "@/lib/zernio";
 import { listWorkspaceAccounts } from "@/lib/profiles";
+import { platOf } from "@/lib/rede";
 import { logEvent } from "@/lib/events";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // publicar com mídia é assíncrono e pode levar dezenas de segundos
-
-// id da rede (Casinha) → plataforma Zernio. Só "x" diverge (→ twitter); o resto é 1:1.
-const REDE_TO_PLAT: Record<string, string> = { x: "twitter" };
 
 // status Zernio → status local (PostStatus).
 const STATUS_MAP: Record<string, PostStatus> = {
@@ -63,7 +61,7 @@ export async function POST(req: Request) {
     const platforms: { platform: string; accountId: string; customContent?: string; platformSpecificData?: Record<string, unknown> }[] = [];
     const canaisIgnorados: string[] = [];
     for (const redeId of post.contas || []) {
-      const plat = REDE_TO_PLAT[redeId] || redeId;
+      const plat = platOf(redeId);
       const acc = accounts.find((a) => a.platform === plat && (a as { enabled?: boolean }).enabled !== false);
       if (acc) {
         const ov = overrides[redeId] || {};

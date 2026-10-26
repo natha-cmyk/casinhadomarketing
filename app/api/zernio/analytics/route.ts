@@ -2,6 +2,7 @@
 // Insights de uma conta conectada (do profile do workspace).
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
+import { findWorkspaceAccount } from "@/lib/profiles";
 import { accountInsights } from "@/lib/zernio";
 
 export async function GET(req: Request) {
@@ -14,8 +15,10 @@ export async function GET(req: Request) {
     const accountId = q.get("accountId");
     if (!platform || !accountId)
       return NextResponse.json({ error: "platform/accountId ausentes" }, { status: 400 });
+    const account = await findWorkspaceAccount(ws, accountId);
+    if (!account) return NextResponse.json({ error: "conta não encontrada" }, { status: 404 });
 
-    const data = await accountInsights(platform, accountId, {
+    const data = await accountInsights(platform, account._id, {
       since: q.get("since") ?? undefined,
       until: q.get("until") ?? undefined,
       metrics: q.get("metrics") ?? undefined,

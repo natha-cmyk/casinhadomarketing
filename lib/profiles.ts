@@ -4,10 +4,9 @@
 import type { Workspace } from "@prisma/client";
 import { prisma } from "./prisma";
 import { listAccounts, createProfile, type ZernioAccount } from "./zernio";
+import { platOf } from "./rede";
 
-// id da rede (Casinha) → plataforma da integração (só x diverge)
-const REDE_TO_PLAT: Record<string, string> = { x: "twitter" };
-export const platOf = (redeOrPlat: string) => REDE_TO_PLAT[redeOrPlat] || redeOrPlat;
+export { platOf, redeOf } from "./rede";
 
 // todos os profileIds do workspace (primário + extras), sem duplicar
 export async function getProfileIds(ws: Workspace): Promise<string[]> {
@@ -39,6 +38,14 @@ export async function listWorkspaceAccounts(ws: Workspace): Promise<ZernioAccoun
   for (const arr of lists) for (const a of arr) if (a?._id && !seen.has(a._id)) { seen.add(a._id); out.push(a); }
   acctCache.set(key, { at: Date.now(), data: out });
   return out;
+}
+
+// Conta pedida por id só segue se estiver na lista deste workspace.
+export async function findWorkspaceAccount(ws: Workspace, accountId: string): Promise<ZernioAccount | null> {
+  const id = accountId.trim();
+  if (!id) return null;
+  const accounts = await listWorkspaceAccounts(ws);
+  return accounts.find((a) => a._id === id) ?? null;
 }
 
 // garante que o profile primário do workspace exista + esteja registrado em WorkspaceProfile

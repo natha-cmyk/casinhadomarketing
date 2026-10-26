@@ -4,19 +4,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncClickupLeads } from "@/lib/crm-sync";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  // valida o disparo do Vercel Cron (evita chamada pública abusar do endpoint)
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-    }
-  }
+  const denied = cronDenied(req);
+  if (denied) return denied;
 
   const configs = await prisma.crmConfig.findMany({
     where: { provider: "clickup", NOT: [{ clickupToken: null }, { clickupListId: null }] },

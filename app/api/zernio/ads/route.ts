@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { listAdAccounts, adsInsights, googleAdsInsights, type AdInsightRow } from "@/lib/zernio";
+import { getAdminUser } from "@/lib/admin";
 import { listWorkspaceAccounts } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
@@ -119,7 +120,7 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams;
     const since = q.get("since") ?? undefined;
     const until = q.get("until") ?? undefined;
-    const debug = q.get("debug") === "1";
+    const debug = q.get("debug") === "1" && !!(await getAdminUser());
 
     const accounts = await listWorkspaceAccounts(ws); // agrega profiles (multi-conta)
 

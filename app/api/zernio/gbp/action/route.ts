@@ -8,7 +8,7 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { gbpSetLocation, gbpReplyReview } from "@/lib/zernio";
-import { listWorkspaceAccounts } from "@/lib/profiles";
+import { findWorkspaceAccount, listWorkspaceAccounts } from "@/lib/profiles";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +26,15 @@ export async function POST(req: Request) {
     };
     const action = body.action;
 
-    // resolve a conta googlebusiness do profile do workspace, se não veio explícita
+    // conta explícita tem de ser deste workspace; senão resolve a googlebusiness dele
     let accountId = body.accountId;
-    if (!accountId) {
+    if (accountId) {
+      const owned = await findWorkspaceAccount(ws, accountId);
+      if (!owned) return NextResponse.json({ error: "conta não encontrada" }, { status: 404 });
+      accountId = owned._id;
+    } else {
       if (!ws.zernioProfileId) return NextResponse.json({ error: "sem profile" }, { status: 400 });
-      const accounts = await listWorkspaceAccounts(ws).catch(() => []); // agrega profiles (multi-conta)
+      const accounts = await listWorkspaceAccounts(ws).catch(() => []);
       accountId = accounts.find((a) => a.platform === "googlebusiness")?._id;
       if (!accountId) return NextResponse.json({ error: "conta googlebusiness não encontrada" }, { status: 404 });
     }

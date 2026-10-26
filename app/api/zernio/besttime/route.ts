@@ -2,6 +2,7 @@
 // dia×hora) da conta, pra sugerir horário no agendamento. Best-effort: erro → lista vazia.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
+import { findWorkspaceAccount } from "@/lib/profiles";
 import { bestTime } from "@/lib/zernio";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +14,10 @@ export async function GET(req: Request) {
   const accountId = u.searchParams.get("accountId");
   const platform = u.searchParams.get("platform");
   if (!accountId || !platform) return NextResponse.json({ slots: [] });
+  const account = await findWorkspaceAccount(ws, accountId);
+  if (!account) return NextResponse.json({ slots: [] }, { status: 404 });
   try {
-    const slots = await bestTime(accountId, platform);
+    const slots = await bestTime(account._id, platform);
     return NextResponse.json({ slots });
   } catch {
     return NextResponse.json({ slots: [] });

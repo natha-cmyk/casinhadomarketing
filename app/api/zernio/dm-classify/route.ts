@@ -3,6 +3,7 @@
 // Categorias fixas; menção/resposta de story é detectada estruturalmente antes da LLM.
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
+import { findWorkspaceAccount } from "@/lib/profiles";
 import { resolveLlm } from "@/lib/llm";
 import { listConversations, convText, type InboxConversation } from "@/lib/zernio";
 import { cached } from "@/lib/ttl-cache";
@@ -53,12 +54,14 @@ export async function GET(req: Request) {
     const accountId = q.get("accountId") || undefined;
     const platform = q.get("platform") || undefined;
     if (!accountId) return NextResponse.json({ ok: true, disabled: true, message: "conta ausente" });
+    const account = await findWorkspaceAccount(ws, accountId);
+    if (!account) return NextResponse.json({ ok: true, disabled: true, message: "conta não encontrada" });
 
     const llm = await resolveLlm(ws.id);
     if (!llm) return NextResponse.json({ ok: true, disabled: true, message: "Conecte uma LLM em Personalização → Conexões pra classificar as DMs por tipo." });
 
     const payload = await cached(`dmclass:${ws.id}:${accountId}:${platform}`, 5 * 60_000, async () => {
-      const convs = await listConversations({ accountId, platform, limit: 50 }).catch(() => [] as InboxConversation[]);
+      const convs = await listConversations({ accountId: account._id, platform, limit: 50 }).catch(() => [] as InboxConversation[]);
       // separa story mentions/replies (estrutural) do resto (LLM)
       const counts: Record<string, number> = {};
       const bump = (c: string) => { counts[c] = (counts[c] || 0) + 1; };

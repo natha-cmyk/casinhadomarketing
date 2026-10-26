@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { cached } from "@/lib/ttl-cache";
 import { buildPlanilha } from "@/lib/planilha/build";
-import { CUR_YEAR } from "@/lib/scope";
+import { curYear } from "@/lib/scope";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,7 +21,8 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams;
     const tab = TABS.has(q.get("tab") || "") ? (q.get("tab") as string) : "insights";
     const yearRaw = Number(q.get("year"));
-    const year = Number.isInteger(yearRaw) && yearRaw >= 2020 && yearRaw <= CUR_YEAR + 1 ? yearRaw : CUR_YEAR;
+    const yearNow = curYear();
+    const year = Number.isInteger(yearRaw) && yearRaw >= 2020 && yearRaw <= yearNow + 1 ? yearRaw : yearNow;
 
     const key = `planilha:${ws}:${year}:${tab}`;
     const payload = await cached(key, 60_000, async () => {

@@ -17,6 +17,7 @@ import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { PostModal } from "./PostModal";
 import { BibliotecaPanel } from "./BibliotecaPanel";
 import { savePosts, deletePostApi } from "@/lib/api";
+import { redeOf } from "@/lib/rede";
 
 // ícone (nome em ICONS) e COR DE MARCA por canal — usados na apresentação como ponto de identificação.
 const CANAL_ICONE: Record<string, string> = {
@@ -33,9 +34,6 @@ const CANAL_MARCA: Record<string, string> = {
 const iconeCanal = (nome: string) => CANAL_ICONE[nome] || "";
 const corMarca = (nome: string, fallback: string) => CANAL_MARCA[nome] || fallback;
 
-// plataforma Zernio → id da rede (Casinha): twitter → x
-const PLAT_REV: Record<string, string> = { twitter: "x" };
-
 // Canais manuais de conteúdo agora são gerenciados pelo usuário (store.calManuais).
 // NÃO são contas conectadas: só registro de conteúdo, sem publicação síncrona.
 
@@ -48,7 +46,7 @@ type ZAccount = {
 };
 
 // id da rede (Casinha) de uma conta Zernio (twitter→x).
-const redeIdOf = (a: ZAccount) => PLAT_REV[a.platform] || a.platform;
+const redeIdOf = (a: ZAccount) => redeOf(a.platform);
 
 // Nome do perfil de uma conta (displayName/username, com fallback).
 function nomePerfil(a: ZAccount): string {

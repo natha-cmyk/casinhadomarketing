@@ -8,6 +8,23 @@ import { startTrial } from "@/lib/stripe-checkout";
 
 export const dynamic = "force-dynamic";
 
+// Marca o link como usado só se ainda estiver livre. Dois POSTs ao mesmo tempo:
+// um ganha, o outro recebe already — não abre dois trials.
+async function claimSignupLink(id: string, email: string | null) {
+  const claimed = await prisma.signupLink.updateMany({
+    where: { id, usadoEm: null },
+    data: { usadoPorEmail: email, usadoEm: new Date() },
+  });
+  return claimed.count === 1;
+}
+
+async function releaseSignupLink(id: string) {
+  await prisma.signupLink.updateMany({
+    where: { id },
+    data: { usadoPorEmail: null, usadoEm: null },
+  });
+}
+
 export async function POST(req: Request) {
   const [ws, user] = await Promise.all([getActiveWorkspace(), getSessionUser()]);
   if (!ws || !user) return NextResponse.json({ ok: false }, { status: 401 });
@@ -21,18 +38,28 @@ export async function POST(req: Request) {
   if (link.nomeAcao) await prisma.workspace.update({ where: { id: ws.id }, data: { origem: link.nomeAcao } }).catch(() => {});
   if (link.usadoEm) return NextResponse.json({ ok: true, already: true }); // já usado
 
+  const email = user.email || null;
+
   // não recria se o workspace já tem assinatura no Stripe
   const sub = await prisma.subscription.findUnique({ where: { workspaceId: ws.id } });
   if (sub?.stripeSubscriptionId) {
-    await prisma.signupLink.update({ where: { id: link.id }, data: { usadoPorEmail: user.email, usadoEm: new Date() } });
+    await claimSignupLink(link.id, email);
     return NextResponse.json({ ok: true, already: true });
   }
 
   if (link.trialDays > 0) {
     if (!stripeConfigured()) return NextResponse.json({ ok: false, error: "pagamento não configurado" }, { status: 503 });
+    const won = await claimSignupLink(link.id, email);
+    if (!won) return NextResponse.json({ ok: true, already: true });
     const r = await startTrial({ workspaceId: ws.id, email: user.email || undefined, plano: link.plano as Plano, trialDays: link.trialDays });
-    if (!r.ok) return NextResponse.json({ ok: false, error: r.error }, { status: 400 });
+    if (!r.ok) {
+      await releaseSignupLink(link.id);
+      return NextResponse.json({ ok: false, error: r.error }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, trialDays: link.trialDays });
   }
-  await prisma.signupLink.update({ where: { id: link.id }, data: { usadoPorEmail: user.email, usadoEm: new Date() } });
+
+  const won = await claimSignupLink(link.id, email);
+  if (!won) return NextResponse.json({ ok: true, already: true });
   return NextResponse.json({ ok: true, trialDays: link.trialDays });
 }

@@ -8,14 +8,16 @@ import { useStore } from "@/lib/store";
 import { PageHead, BarRow, IconBtn } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
 import { fmt, money } from "@/lib/format";
-import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
+import { computeDelta } from "@/lib/scope";
+import { periodRange, POLICY_CRM, type PeriodScope } from "@/lib/period";
 import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { CRM_PROVIDERS, crmProvider } from "@/lib/crm/providers";
 
 // ── tipos ──
 interface CrmConfig {
   provider: string;
-  clickupToken: string | null;
+  clickupToken?: string | null;
+  hasClickupToken?: boolean;
   clickupListId: string | null;
   fieldMap: Record<string, string>;
   webhookSecret: string | null;
@@ -70,23 +72,7 @@ interface LeadsData {
   campaignHealth?: { key: string; total: number; won: number; lost: number; open: number; value: number; conv: number; byQualification: { key: string; count: number }[]; lossTop: { key: string; count: number }[] }[];
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-function dateRange(scope: { period: Period; year: number; month: number; quarter: number }) {
-  const { period, year, month, quarter } = scope;
-  let since: Date, until: Date;
-  if (period === "trimestre") {
-    since = new Date(year, quarter * 3, 1);
-    until = new Date(year, quarter * 3 + 2, daysInMonth(year, quarter * 3 + 2));
-  } else if (period === "ano") {
-    since = new Date(year, 0, 1);
-    until = new Date(year, 11, 31);
-  } else {
-    since = new Date(year, month, 1);
-    until = new Date(year, month, daysInMonth(year, month));
-  }
-  return { since: iso(since), until: iso(until) };
-}
+const dateRange = (scope: PeriodScope) => periodRange(scope, POLICY_CRM);
 
 // dimensões que o sync sabe interpretar (mesmas chaves do fieldMap no backend).
 const FIELD_KEYS: { k: string; lbl: string; hint: string }[] = [
@@ -359,7 +345,9 @@ function ConnectCard({
   fields?: LeadsData["availableFields"];
 }) {
   const [mode, setMode] = useState<string>(config?.provider === "webhook" ? "webhook" : "clickup");
-  const [token, setToken] = useState(config?.clickupToken ?? "");
+  const [token, setToken] = useState("");
+  const hasToken = Boolean(config?.hasClickupToken);
+  const tokenReady = token.trim().length > 0 || hasToken;
   const [listId, setListId] = useState(config?.clickupListId ?? "");
   const [fieldMap, setFieldMap] = useState<Record<string, string>>(config?.fieldMap ?? {});
   const [saving, setSaving] = useState(false);
@@ -383,12 +371,18 @@ function ConnectCard({
     return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [fields, fieldMap]);
 
+  function clickupPatch(extra?: Partial<CrmConfig>): Partial<CrmConfig> {
+    const patch: Partial<CrmConfig> = { provider: "clickup", clickupListId: listId, fieldMap };
+    if (token.trim()) patch.clickupToken = token.trim();
+    return { ...patch, ...extra };
+  }
+
   async function detectFields() {
-    if (!token.trim() || !listId.trim()) return;
+    if (!tokenReady || !listId.trim()) return;
     setDetecting(true);
     setDetectErr(null);
-    // persiste token+listId (o GET lê a config salva) preservando o mapa atual
-    const saved = await onSave({ provider: "clickup", clickupToken: token, clickupListId: listId, fieldMap });
+    // persiste listId (e token novo, se digitado). Token em branco mantém o já salvo.
+    const saved = await onSave(clickupPatch());
     if (!saved) {
       setDetecting(false);
       setDetectErr("Não foi possível salvar a conexão antes de detectar.");
@@ -412,7 +406,7 @@ function ConnectCard({
 
   async function saveClickup() {
     setSaving(true);
-    const saved = await onSave({ provider: "clickup", clickupToken: token, clickupListId: listId, fieldMap });
+    const saved = await onSave(clickupPatch());
     setSaving(false);
     if (saved) onDone();
   }
@@ -485,9 +479,25 @@ function ConnectCard({
               className="field-edit"
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder="pk_..."
+              placeholder={hasToken ? "Token já configurado — cole outro só para trocar" : "pk_..."}
               autoComplete="off"
             />
+            {hasToken && (
+              <button
+                className="btn-link"
+                type="button"
+                style={{ marginTop: 6, fontSize: 12 }}
+                disabled={saving}
+                onClick={async () => {
+                  setSaving(true);
+                  const saved = await onSave(clickupPatch({ clickupToken: null }));
+                  setSaving(false);
+                  if (saved) setToken("");
+                }}
+              >
+                Remover token
+              </button>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
             <div style={{ flex: 1 }}>
@@ -502,7 +512,7 @@ function ConnectCard({
             <button
               className="btn-link"
               onClick={detectFields}
-              disabled={detecting || !token.trim() || !listId.trim()}
+              disabled={detecting || !tokenReady || !listId.trim()}
               type="button"
             >
               {detecting ? "Detectando…" : "Detectar campos"}
@@ -562,7 +572,7 @@ function ConnectCard({
           <button
             className="btn-link ig"
             onClick={saveClickup}
-            disabled={saving || !token.trim() || !listId.trim()}
+            disabled={saving || !tokenReady || !listId.trim()}
             type="button"
           >
             {saving ? "Salvando…" : "Conectar ClickUp"}

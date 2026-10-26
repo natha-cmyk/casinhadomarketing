@@ -14,7 +14,8 @@ import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { ProfilePreview } from "@/components/views/ProfilePreview";
 import { lineChart, barChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
-import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
+import { computeDelta } from "@/lib/scope";
+import { periodRange, POLICY_SOCIAL, type PeriodScope } from "@/lib/period";
 import { REDES } from "@/lib/seed-data";
 import { indShown } from "@/lib/indicators";
 import type {
@@ -64,8 +65,7 @@ const GENDER_PT: Record<string, string> = {
 // fontes das conversas (inbox) → PT
 const SOURCE_PT: Record<string, string> = { contact: "Cliente", platform: "Nós", recipient: "Lidas" };
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dateRange = (scope: PeriodScope) => periodRange(scope, POLICY_SOCIAL);
 
 // razões calculadas (retornam fração; null se falta base)
 type MetricMap = Record<string, { total: number }>;
@@ -147,31 +147,6 @@ interface InboxData {
 // keyed por platform|accountId|since|until (o mesmo formato serve atual e comparação).
 const INS_CACHE = new Map<string, Combined>();
 const INBOX_CACHE = new Map<string, InboxData>();
-
-function dateRange(scope: { period: Period; year: number; month: number; quarter: number; week: number }) {
-  const { period, year, month, quarter, week } = scope;
-  let since: Date, until: Date;
-  if (period === "semana") {
-    // janela = os 7 dias da semana selecionada dentro do mês (W1=1–7, W2=8–14, W3=15–21, W4=22–fim)
-    const last = daysInMonth(year, month);
-    const startDay = week * 7 + 1;
-    const endDay = Math.min(startDay + 6, last);
-    since = new Date(year, month, startDay);
-    until = new Date(year, month, endDay);
-  } else if (period === "trimestre") {
-    since = new Date(year, quarter * 3, 1);
-    until = new Date(year, quarter * 3 + 2, daysInMonth(year, quarter * 3 + 2));
-  } else if (period === "ano") {
-    until = new Date(year, 11, 31);
-    since = new Date(year, 9, 2);
-  } else {
-    since = new Date(year, month, 1);
-    until = new Date(year, month, daysInMonth(year, month));
-  }
-  const cap = 90 * 864e5;
-  if (until.getTime() - since.getTime() > cap) since = new Date(until.getTime() - cap);
-  return { since: iso(since), until: iso(until) };
-}
 
 const keyOf = (platform: string, accountId: string, since: string, until: string) =>
   `${platform}|${accountId}|${since}|${until}`;

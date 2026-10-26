@@ -13,12 +13,12 @@ import { ChannelSummaryCard, ChannelBrandIcon } from "@/components/ChannelSummar
 import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { PlanilhaPanel } from "@/components/planilha/PlanilhaPanel";
 import { fmt, kfmt, sum } from "@/lib/format";
-import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
+import { computeDelta } from "@/lib/scope";
+import { periodRange, POLICY_SOCIAL, type PeriodScope } from "@/lib/period";
+import { redeOf } from "@/lib/rede";
 
-const redeCor = (p: string) =>
-  REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.cor || "#121111";
-const redeLabel = (p: string) =>
-  REDES.find((r) => r.id === p || (r.id === "x" && p === "twitter"))?.label || p;
+const redeCor = (p: string) => REDES.find((r) => r.id === redeOf(p))?.cor || "#121111";
+const redeLabel = (p: string) => REDES.find((r) => r.id === redeOf(p))?.label || p;
 
 interface AccountSummary {
   platform: string;
@@ -30,32 +30,7 @@ interface AccountSummary {
   locations?: { id: string; name: string; address?: string }[]; // fichas do GBP
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-// janela de datas a partir do escopo temporal da toolbar (mesma lógica dos painéis de canal)
-function dateRange(scope: { period: Period; year: number; month: number; quarter: number; week: number }) {
-  const { period, year, month, quarter, week } = scope;
-  let since: Date, until: Date;
-  if (period === "semana") {
-    const last = daysInMonth(year, month);
-    const startDay = week * 7 + 1;
-    since = new Date(year, month, startDay);
-    until = new Date(year, month, Math.min(startDay + 6, last));
-  } else if (period === "trimestre") {
-    since = new Date(year, quarter * 3, 1);
-    until = new Date(year, quarter * 3 + 2, daysInMonth(year, quarter * 3 + 2));
-  } else if (period === "ano") {
-    until = new Date(year, 11, 31);
-    since = new Date(year, 9, 2);
-  } else {
-    since = new Date(year, month, 1);
-    until = new Date(year, month, daysInMonth(year, month));
-  }
-  const cap = 90 * 864e5;
-  if (until.getTime() - since.getTime() > cap) since = new Date(until.getTime() - cap);
-  return { since: iso(since), until: iso(until) };
-}
+const dateRange = (scope: PeriodScope) => periodRange(scope, POLICY_SOCIAL);
 
 // cache de módulo (stale-while-revalidate) keyed por since|until
 const SUMMARY_CACHE = new Map<string, AccountSummary[]>();

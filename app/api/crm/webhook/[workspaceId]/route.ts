@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseWebhookLeadBody } from "@/lib/crm/webhook-ingest";
 import { bust } from "@/lib/ttl-cache";
+import { secretEquals } from "@/lib/secret-eq";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/crm/webhook
       return NextResponse.json({ ok: false, error: "CRM não conectado." }, { status: 404 });
     }
     const secret = req.headers.get("x-crm-secret");
-    if (!secret || secret !== cfg.webhookSecret) {
+    if (!secret || !secretEquals(secret, cfg.webhookSecret)) {
       return NextResponse.json({ ok: false, error: "Segredo inválido." }, { status: 401 });
     }
 

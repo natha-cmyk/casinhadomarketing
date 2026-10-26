@@ -16,7 +16,7 @@ import { Chart } from "@/components/Chart";
 import { Spinner } from "@/components/Spinner";
 import { lineChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
-import { daysInMonth, type Period } from "@/lib/scope";
+import { periodRange, POLICY_SOCIAL, type PeriodScope } from "@/lib/period";
 import { REDES } from "@/lib/seed-data";
 import type {
   GbpPerformance, GbpKeywordsResp, GbpLocationsResp, GbpMediaResp, GbpReviewsResp, GbpDetails, GbpLocation, GbpReview,
@@ -44,32 +44,7 @@ interface GbpData {
   reviews: GbpReviewsResp | null; details: GbpDetails | null; error?: string;
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-// janela de datas do escopo (mesma lógica do painel social)
-function dateRange(scope: { period: Period; year: number; month: number; quarter: number; week: number }) {
-  const { period, year, month, quarter, week } = scope;
-  let since: Date, until: Date;
-  if (period === "semana") {
-    const last = daysInMonth(year, month);
-    const startDay = week * 7 + 1;
-    since = new Date(year, month, startDay);
-    until = new Date(year, month, Math.min(startDay + 6, last));
-  } else if (period === "trimestre") {
-    since = new Date(year, quarter * 3, 1);
-    until = new Date(year, quarter * 3 + 2, daysInMonth(year, quarter * 3 + 2));
-  } else if (period === "ano") {
-    until = new Date(year, 11, 31);
-    since = new Date(year, 9, 2);
-  } else {
-    since = new Date(year, month, 1);
-    until = new Date(year, month, daysInMonth(year, month));
-  }
-  const cap = 90 * 864e5;
-  if (until.getTime() - since.getTime() > cap) since = new Date(until.getTime() - cap);
-  return { since: iso(since), until: iso(until) };
-}
+const dateRange = (scope: PeriodScope) => periodRange(scope, POLICY_SOCIAL);
 
 // estrelas (média) — inteiras + meia
 function Stars({ rating, size = 15 }: { rating: number; size?: number }) {
