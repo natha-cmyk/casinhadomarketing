@@ -6,6 +6,8 @@ import { getActiveWorkspace } from "@/lib/auth";
 import { listAdAccounts, adsInsights, googleAdsInsights, type AdInsightRow } from "@/lib/zernio";
 import { getAdminUser } from "@/lib/admin";
 import { listWorkspaceAccounts } from "@/lib/profiles";
+import { isoDateRange } from "@/lib/iso-date";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -128,18 +130,19 @@ export async function GET(req: Request) {
     if (debug) {
       const isG = (p: string) => { const s = p.toLowerCase(); return s.includes("google") && s.includes("ads"); };
       const gAccts = accounts.filter((a) => isG(String(a.platform || "")));
-      const gDetail = await Promise.all(gAccts.map(async (a) => {
+      const gDetailPromise = Promise.all(gAccts.map(async (a) => {
         const status = (a as { adsStatus?: string; status?: string }).adsStatus ?? (a as { status?: string }).status;
         const st = String(status ?? "").toLowerCase();
         const conectado = st !== "disconnected" && st !== "revoked" && st !== "error" && st !== "expired";
         let customers: unknown = "não consultado (status não conectado)";
         let gaqlSample: unknown = null;
-        if (conectado && since && until) {
+        if (conectado && isoDateRange(since, until)) {
           const custs = await listAdAccounts(a._id).then((d) => d.accounts).catch((e) => ({ erro: String(e).slice(0, 120) }));
           customers = custs;
           const first = Array.isArray(custs) ? custs[0] : null;
           if (first) {
-            const gaql = `SELECT campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'`;
+            const bounds = isoDateRange(since, until)!;
+            const gaql = `SELECT campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${bounds.since}' AND '${bounds.until}'`;
             gaqlSample = await googleAdsInsights(a._id, first.id, gaql).then((r) => ({ chaves: Object.keys(r || {}), linhas: gRows(r).length, amostra: gRows(r).slice(0, 2) })).catch((e) => ({ erro: String(e).slice(0, 160) }));
           }
         }
@@ -148,7 +151,7 @@ export async function GET(req: Request) {
       // META: mostra CADA conexão Meta (facebook/instagram) + as ad accounts que ela resolve + o gasto
       // cru de cada uma. Se o mesmo act_XXX aparece em 2 conexões, confirma a contagem em dobro.
       const metaConns = accounts.filter((a) => ADS_PLATFORMS.has(a.platform) && (a.adsStatus === "connected" || a.adsStatus === "active"));
-      const metaDetail = await Promise.all(metaConns.map(async (a) => {
+      const metaDetailPromise = Promise.all(metaConns.map(async (a) => {
         const adAccts = await listAdAccounts(a._id).then((d) => d.accounts).catch(() => [] as { id: string; name?: string }[]);
         const accts = (since && until) ? await Promise.all(adAccts.map(async (act) => {
           const tot = await adsInsights(a._id, act.id, { since, until }).then((d) => d.data?.[0]).catch(() => undefined);
@@ -156,6 +159,7 @@ export async function GET(req: Request) {
         })) : adAccts.map((act) => ({ adAccountId: act.id, name: act.name }));
         return { platform: a.platform, connId: a._id, adsStatus: a.adsStatus, adAccounts: accts };
       }));
+      const [gDetail, metaDetail] = await Promise.all([gDetailPromise, metaDetailPromise]);
       return NextResponse.json({
         ok: true, debug: true,
         totalContas: accounts.length,
@@ -172,7 +176,7 @@ export async function GET(req: Request) {
     const seen = new Set<string>();
     const conns = adConnected.filter((a) => (seen.has(a._id) ? false : (seen.add(a._id), true)));
 
-    const perConn = await Promise.all(
+    const metaAccountsPromise = Promise.all(
       conns.map(async (conn) => {
         const adAccts = await listAdAccounts(conn._id).then((d) => d.accounts).catch(() => []);
         const usable = adAccts.filter((a) => a.selectable !== false);
@@ -231,15 +235,18 @@ export async function GET(req: Request) {
     });
     const gseen = new Set<string>();
     const gConns = gConnected.filter((a) => (gseen.has(a._id) ? false : (gseen.add(a._id), true)));
-    const gPer = (since && until) ? await Promise.all(gConns.map(async (conn) => {
+    const bounds = isoDateRange(since, until);
+    const googleAccountsPromise = bounds ? Promise.all(gConns.map(async (conn) => {
       const custs = await listAdAccounts(conn._id).then((d) => d.accounts).catch(() => []);
       return Promise.all(custs.map(async (cust) => {
-        const gaql = `SELECT campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${since}' AND '${until}'`;
+        const gaql = `SELECT campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions FROM campaign WHERE segments.date BETWEEN '${bounds.since}' AND '${bounds.until}'`;
         const resp = await googleAdsInsights(conn._id, cust.id, gaql).catch(() => ({}));
         const camps = gRows(resp).map(parseGoogleCampaign).filter((c) => c.spend > 0 || c.impressions > 0).sort((a, b) => b.spend - a.spend);
         return { zernioAccountId: conn._id, platform: "googleads", id: cust.id, name: cust.name || cust.id, currency: cust.currency || "BRL", totals: googleTotals(camps), campaigns: camps };
       }));
-    })) : [];
+    })) : Promise.resolve([]);
+
+    const [perConn, gPer] = await Promise.all([metaAccountsPromise, googleAccountsPromise]);
 
     // merge Meta + Google Ads, dedup por ad account id
     const allAccts = [...perConn.flat(), ...gPer.flat()];
@@ -252,6 +259,6 @@ export async function GET(req: Request) {
     }
     return NextResponse.json({ ok: true, accounts: [...byId.values()] });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e), accounts: [] }, { status: 502 });
+    return NextResponse.json({ ok: false, error: clientError("zernio/ads", e, "Falha ao carregar mídia paga."), accounts: [] }, { status: 502 });
   }
 }

@@ -5,6 +5,7 @@
 // (since/until). Empty state preservado: nada conectado → CTA p/ Personalização. Sem números fixos.
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/lib/store";
 import { REDES } from "@/lib/seed-data";
 import { PageHead, KpiCard } from "@/components/ui";
@@ -16,6 +17,7 @@ import { fmt, kfmt, sum } from "@/lib/format";
 import { computeDelta } from "@/lib/scope";
 import { periodRange, POLICY_SOCIAL, type PeriodScope } from "@/lib/period";
 import { redeOf } from "@/lib/rede";
+import { scopedCache } from "@/lib/client-cache";
 
 const redeCor = (p: string) => REDES.find((r) => r.id === redeOf(p))?.cor || "#121111";
 const redeLabel = (p: string) => REDES.find((r) => r.id === redeOf(p))?.label || p;
@@ -32,22 +34,25 @@ interface AccountSummary {
 
 const dateRange = (scope: PeriodScope) => periodRange(scope, POLICY_SOCIAL);
 
-// cache de módulo (stale-while-revalidate) keyed por since|until
-const SUMMARY_CACHE = new Map<string, AccountSummary[]>();
+// cache de módulo (stale-while-revalidate) keyed por since|until, escopado pelo workspace
+const summaryCache = scopedCache<AccountSummary[]>();
 
 export function PainelView() {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+    scenario: st.scenario, cmp: st.cmp, setPanelSnapshot: st.setPanelSnapshot,
+  })));
   const storeAccounts = useStore((st) => st.zernioAccounts);
   const [mode, setMode] = useState<"rica" | "planilha">("rica");
   const range = dateRange(s);
   const cacheKey = `${range.since}|${range.until}`;
 
-  const [accounts, setAccounts] = useState<AccountSummary[] | null>(SUMMARY_CACHE.get(cacheKey) ?? null);
-  const [loading, setLoading] = useState(!SUMMARY_CACHE.get(cacheKey));
+  const [accounts, setAccounts] = useState<AccountSummary[] | null>(summaryCache.get(cacheKey) ?? null);
+  const [loading, setLoading] = useState(!summaryCache.get(cacheKey));
 
   useEffect(() => {
     let alive = true;
-    const cached = SUMMARY_CACHE.get(cacheKey);
+    const cached = summaryCache.get(cacheKey);
     if (cached) {
       setAccounts(cached);
       setLoading(false);
@@ -59,7 +64,7 @@ export function PainelView() {
       .then((d: { accounts?: AccountSummary[] }) => {
         if (!alive) return;
         const list = Array.isArray(d?.accounts) ? d.accounts : [];
-        SUMMARY_CACHE.set(cacheKey, list);
+        summaryCache.set(cacheKey, list);
         setAccounts(list);
       })
       .catch(() => {})
@@ -73,7 +78,7 @@ export function PainelView() {
   // ── comparação (sinalização de variação verde/vermelho): busca o período B quando "Comparar" liga ──
   const cmpRange = dateRange({ period: s.cmp.period, year: s.cmp.year, month: s.cmp.month, quarter: s.cmp.quarter, week: s.cmp.week });
   const cmpKey = `${cmpRange.since}|${cmpRange.until}`;
-  const [cmpAccounts, setCmpAccounts] = useState<AccountSummary[] | null>(SUMMARY_CACHE.get(cmpKey) ?? null);
+  const [cmpAccounts, setCmpAccounts] = useState<AccountSummary[] | null>(summaryCache.get(cmpKey) ?? null);
   useEffect(() => {
     if (!s.scenario) return;
     let alive = true;
@@ -82,7 +87,7 @@ export function PainelView() {
       .then((d: { accounts?: AccountSummary[] }) => {
         if (!alive) return;
         const listB = Array.isArray(d?.accounts) ? d.accounts : [];
-        SUMMARY_CACHE.set(cmpKey, listB);
+        summaryCache.set(cmpKey, listB);
         setCmpAccounts(listB);
       })
       .catch(() => {});

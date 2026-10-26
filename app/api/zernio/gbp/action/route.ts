@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { gbpSetLocation, gbpReplyReview } from "@/lib/zernio";
 import { findWorkspaceAccount, listWorkspaceAccounts } from "@/lib/profiles";
+import { upstreamHttpStatus } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -57,9 +58,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: "ação inválida" }, { status: 400 });
   } catch (e) {
-    // erros amigáveis a partir do corpo da Zernio (o client lança `Zernio <status>: <corpo>`)
-    const msg = String(e);
-    const status = /Zernio 403/.test(msg) ? 403 : /Zernio 4\d\d/.test(msg) ? 400 : 502;
+    console.error("[gbp/action]", e);
+    const code = upstreamHttpStatus(e);
+    const status = code === 403 ? 403 : code != null && code >= 400 && code < 500 ? 400 : 502;
     const friendly =
       status === 403
         ? "Sem permissão para esta ação na conta do Google conectada."

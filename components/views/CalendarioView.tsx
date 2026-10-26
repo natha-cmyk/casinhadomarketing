@@ -1,6 +1,7 @@
 "use client";
 // Calendário de conteúdo: grid mensal, fila de agendamentos e barra de contas.
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useStore, type PostItem } from "@/lib/store";
 import {
   CANAL_POST_COLORS,
@@ -164,7 +165,22 @@ function feriadosLista(y: number, uf: string): [string, string][] {
 }
 
 export function CalendarioView() {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    posts: st.posts,
+    zernioAccounts: st.zernioAccounts,
+    calCanal: st.calCanal,
+    calPerfil: st.calPerfil,
+    calCV: st.calCV,
+    calMonth: st.calMonth,
+    calYear: st.calYear,
+    set: st.set,
+    updatePost: st.updatePost,
+    addPost: st.addPost,
+    deletePost: st.deletePost,
+    calManuais: st.calManuais,
+    ufFeriado: st.ufFeriado,
+    postModal: st.postModal,
+  })));
   const {
     posts,
     zernioAccounts,

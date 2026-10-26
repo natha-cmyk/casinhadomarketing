@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { findWorkspaceAccount } from "@/lib/profiles";
 import { accountInsights } from "@/lib/zernio";
+import { clientError } from "@/lib/route-error";
 
 export async function GET(req: Request) {
   try {
@@ -25,6 +26,6 @@ export async function GET(req: Request) {
     });
     return NextResponse.json(data);
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 502 });
+    return NextResponse.json({ error: clientError("zernio/analytics", e, "Não foi possível carregar as métricas.") }, { status: 502 });
   }
 }

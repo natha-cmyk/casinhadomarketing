@@ -4,6 +4,7 @@
 // campanhas, e canal pago manual (completo). Conexões espelham o Calendário.
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useShallow } from "zustand/react/shallow";
 import { useStore, newId, type ManualAd } from "@/lib/store";
 import { PageHead, KpiCard, MiniStat } from "@/components/ui";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
@@ -13,6 +14,7 @@ import { REDES } from "@/lib/seed-data";
 import { fmt, money, pct, kfmt } from "@/lib/format";
 import { type Period } from "@/lib/scope";
 import { periodRange, POLICY_ADS, type PeriodScope } from "@/lib/period";
+import { scopedCache } from "@/lib/client-cache";
 
 // ── tipos da rota /api/zernio/ads ──
 interface AdTotals {
@@ -44,7 +46,7 @@ const OBJETIVO_PT: Record<string, string> = {
 const objetivoPt = (o?: string) => (o ? OBJETIVO_PT[o] || o.replace(/^OUTCOME_/, "").toLowerCase() : "—");
 
 // cache de módulo (stale-while-revalidate) por intervalo
-const ADS_CACHE = new Map<string, AdAccountData[]>();
+const adsCache = scopedCache<AdAccountData[]>();
 
 const dateRange = (scope: PeriodScope) => periodRange(scope, POLICY_ADS);
 // CTR já vem em pontos percentuais (1.19 = 1,19%); pct() espera fração, então dividimos
@@ -81,7 +83,9 @@ const emptyTotals = (): AdTotals => ({
 });
 
 export function AdsView() {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+  })));
   const zernioAccounts = useStore((st) => st.zernioAccounts);
   const manualAds = useStore((st) => st.manualAds);
 
@@ -102,14 +106,14 @@ export function AdsView() {
     if (!hasAdsConn) { setData([]); return; }
     const key = `${range.since}|${range.until}`;
     let alive = true;
-    const cached = ADS_CACHE.get(key);
+    const cached = adsCache.get(key);
     if (cached) { setData(cached); setLoading(false); } else { setLoading(true); }
     setErr(null);
     fetch(`/api/zernio/ads?since=${range.since}&until=${range.until}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
-        if (d?.ok && Array.isArray(d.accounts)) { ADS_CACHE.set(key, d.accounts); setData(d.accounts); }
+        if (d?.ok && Array.isArray(d.accounts)) { adsCache.set(key, d.accounts); setData(d.accounts); }
         else if (!cached) setErr(d?.error || "Falha ao carregar mídia paga.");
       })
       .catch((e) => alive && !cached && setErr(String(e)))
@@ -452,7 +456,9 @@ function highlightFor(c: AdCampaign, cpl: number): { l: string; n: React.ReactNo
 
 // conteúdo da linha expandida — grupos temáticos + dados manuais da campanha
 function CampaignExpand({ c, adAccountId }: { c: AdCampaign; adAccountId?: string }) {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+  })));
   const manualCampaigns = useStore((st) => st.manualCampaigns);
   const removeManualCampaign = useStore((st) => st.removeManualCampaign);
   const [formOpen, setFormOpen] = useState(false);
@@ -546,7 +552,7 @@ function CampaignExpand({ c, adAccountId }: { c: AdCampaign; adAccountId?: strin
 }
 
 function ManualCampaignForm({ adAccountId, campaignName, onClose }: { adAccountId: string; campaignName: string; onClose: () => void }) {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({ year: st.year, month: st.month })));
   const addManualCampaign = useStore((st) => st.addManualCampaign);
   const [f, setF] = useState({ ano: s.year, mes: s.month, vendas: 0, receita: 0, leadsQualificados: 0, obs: "" });
   const nnum = (v: string) => Number(String(v).replace(/\./g, "").replace(",", ".")) || 0;
@@ -592,7 +598,7 @@ function ManualForm({ onClose }: { onClose: () => void }) {
   const addManualAd = useStore((st) => st.addManualAd);
   const manualAds = useStore((st) => st.manualAds);
   const removeManualAd = useStore((st) => st.removeManualAd);
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({ year: st.year, month: st.month })));
   const [f, setF] = useState<Partial<ManualAd>>({
     nome: "", plataforma: "Meta Ads", ano: s.year, mes: s.month, campanha: "",
     gasto: 0, impressoes: 0, cliques: 0, ctr: 0, cpc: 0, cpm: 0, conversoes: 0,

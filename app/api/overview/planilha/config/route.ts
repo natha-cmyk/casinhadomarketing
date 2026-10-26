@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { bust } from "@/lib/ttl-cache";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,6 +43,6 @@ export async function PUT(req: Request) {
     bust(`planilha:${ws}:`);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: String(e).slice(0, 160) }, { status: 500 });
+    return NextResponse.json({ error: clientError("planilha/config", e, "Não foi possível salvar a planilha.") }, { status: 500 });
   }
 }

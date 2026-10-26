@@ -10,6 +10,7 @@
 // resposta fica associada à ficha sincronizada no momento.
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
+import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/lib/store";
 import { PageHead, KpiCard, BarRow, MiniStat } from "@/components/ui";
 import { Chart } from "@/components/Chart";
@@ -17,6 +18,7 @@ import { Spinner } from "@/components/Spinner";
 import { lineChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
 import { periodRange, POLICY_SOCIAL, type PeriodScope } from "@/lib/period";
+import { scopedCache } from "@/lib/client-cache";
 import { REDES } from "@/lib/seed-data";
 import type {
   GbpPerformance, GbpKeywordsResp, GbpLocationsResp, GbpMediaResp, GbpReviewsResp, GbpDetails, GbpLocation, GbpReview,
@@ -60,11 +62,14 @@ function Stars({ rating, size = 15 }: { rating: number; size?: number }) {
   return <span style={{ display: "inline-flex", gap: 1 }}>{items}</span>;
 }
 
-const CACHE = new Map<string, GbpData>();
+const gbpCache = scopedCache<GbpData>();
 const keyOf = (a: string, s: string, u: string) => `${a}|${s}|${u}`;
 
 export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string }) {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+    zernioAccounts: st.zernioAccounts,
+  })));
   const meta = REDES.find((r) => r.id === rede);
   const label = meta?.label || "Google Business";
   const eyebrow = `CANAIS · ${label.toUpperCase()}`;
@@ -84,7 +89,7 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
     if (!acct) return;
     const key = keyOf(acct._id, range.since, range.until);
     let alive = true;
-    const cached = CACHE.get(key);
+    const cached = gbpCache.get(key);
     if (cached) { setData(cached); setLoading(false); } else { setData(null); setLoading(true); }
     setErr(null);
     fetch(`/api/zernio/gbp?accountId=${acct._id}&since=${range.since}&until=${range.until}`, { cache: "no-store" })
@@ -92,7 +97,7 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
       .then((d: GbpData) => {
         if (!alive) return;
         if (d?.error) { if (!cached) setErr(String(d.error)); }
-        else { CACHE.set(key, d); setData(d); }
+        else { gbpCache.set(key, d); setData(d); }
       })
       .catch((e) => alive && !cached && setErr(String(e)))
       .finally(() => alive && setLoading(false));
@@ -150,13 +155,13 @@ export function GoogleBusinessView({ rede = "googlebusiness" }: { rede?: string 
       if (!res.ok || j?.error) throw new Error(j?.error || "Falha ao trocar a ficha.");
       // re-busca os dados (agora refletem a nova ficha) — invalida o cache do período
       const key = keyOf(acct._id, range.since, range.until);
-      CACHE.delete(key);
+      gbpCache.delete(key);
       const d: GbpData = await fetch(
         `/api/zernio/gbp?accountId=${acct._id}&since=${range.since}&until=${range.until}`,
         { cache: "no-store" }
       ).then((r) => r.json());
       if (d?.error) throw new Error(String(d.error));
-      CACHE.set(key, d);
+      gbpCache.set(key, d);
       setData(d);
       setSelLoc(d.activeLocationId ?? id);
     } catch (e) {

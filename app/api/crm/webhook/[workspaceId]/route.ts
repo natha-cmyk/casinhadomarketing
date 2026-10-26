@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { parseWebhookLeadBody } from "@/lib/crm/webhook-ingest";
 import { bust } from "@/lib/ttl-cache";
 import { secretEquals } from "@/lib/secret-eq";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,6 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/crm/webhook
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: clientError("crm/webhook", e, "Não foi possível gravar o lead.") }, { status: 500 });
   }
 }

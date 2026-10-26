@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { logEvent } from "@/lib/events";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,6 @@ export async function POST(req: Request) {
     await logEvent(wsId, "onboarding.completed", empresa);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: String(e).slice(0, 200) }, { status: 500 });
+    return NextResponse.json({ error: clientError("onboarding", e, "Não foi possível salvar agora.") }, { status: 500 });
   }
 }

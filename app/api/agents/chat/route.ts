@@ -83,7 +83,8 @@ function streamOpenAICompat(base: string, defModel: string, system: string, hist
         }
         controller.close();
       } catch (e) {
-        const msg = e instanceof Error && e.name === "AbortError" ? "tempo de conexão esgotado" : String(e).slice(0, 120);
+        console.error("[agents/chat]", e);
+        const msg = e instanceof Error && e.name === "AbortError" ? "tempo de conexão esgotado" : "tente de novo";
         controller.enqueue(encoder.encode(`\n\n[não consegui falar com a LLM agora: ${msg}]`));
         controller.close();
       } finally {
@@ -114,7 +115,8 @@ async function streamAnthropic(system: string, history: Msg[], apiKey: string, m
           }
         }
       } catch (e) {
-        controller.enqueue(encoder.encode(`\n\n[não consegui gerar a resposta agora: ${String(e).slice(0, 120)}]`));
+        console.error("[agents/chat]", e);
+        controller.enqueue(encoder.encode("\n\n[não consegui gerar a resposta agora]"));
       } finally {
         controller.close();
       }

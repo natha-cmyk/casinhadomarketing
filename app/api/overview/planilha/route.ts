@@ -6,6 +6,7 @@ import { getActiveWorkspaceId } from "@/lib/auth";
 import { cached } from "@/lib/ttl-cache";
 import { buildPlanilha } from "@/lib/planilha/build";
 import { curYear } from "@/lib/scope";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,6 +33,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json(payload);
   } catch (e) {
-    return NextResponse.json({ error: String(e).slice(0, 200) }, { status: 500 });
+    return NextResponse.json({ error: clientError("planilha", e, "Não foi possível carregar a planilha.") }, { status: 500 });
   }
 }

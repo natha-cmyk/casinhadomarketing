@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { findWorkspaceAccount } from "@/lib/profiles";
 import { inboxVolume, inboxResponseTime, inboxSourceBreakdown } from "@/lib/zernio";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ volume, responseTime, sources });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 502 });
+    return NextResponse.json({ error: clientError("zernio/inbox", e, "Não foi possível carregar as conversas.") }, { status: 502 });
   }
 }

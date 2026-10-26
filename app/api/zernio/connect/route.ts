@@ -5,6 +5,7 @@ import { getActiveWorkspace } from "@/lib/auth";
 import { connectUrl, connectAdsUrl } from "@/lib/zernio";
 import { ensurePrimaryProfile, targetProfileForConnect } from "@/lib/profiles";
 import { logEvent } from "@/lib/events";
+import { clientError } from "@/lib/route-error";
 
 export async function GET(req: Request) {
   try {
@@ -31,6 +32,6 @@ export async function GET(req: Request) {
     const { authUrl } = await connectUrl(platform, profileId, redirect);
     return NextResponse.json({ authUrl });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 502 });
+    return NextResponse.json({ error: clientError("zernio/connect", e, "Não foi possível iniciar a conexão.") }, { status: 502 });
   }
 }

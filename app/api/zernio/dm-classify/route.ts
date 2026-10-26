@@ -7,6 +7,7 @@ import { findWorkspaceAccount } from "@/lib/profiles";
 import { resolveLlm } from "@/lib/llm";
 import { listConversations, convText, type InboxConversation } from "@/lib/zernio";
 import { cached } from "@/lib/ttl-cache";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -88,6 +89,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ ok: true, ...payload });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e).slice(0, 200) }, { status: 502 });
+    return NextResponse.json({ ok: false, error: clientError("zernio/dm-classify", e, "Não consegui classificar agora.") }, { status: 502 });
   }
 }

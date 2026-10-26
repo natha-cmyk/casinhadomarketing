@@ -5,6 +5,7 @@ import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import { syncSubscription } from "@/lib/stripe-sync";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,6 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ received: true });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e).slice(0, 200) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: clientError("stripe/webhook", e, "falha ao processar") }, { status: 500 });
   }
 }

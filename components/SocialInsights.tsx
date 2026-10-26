@@ -5,7 +5,9 @@ import {
   type CSSProperties, type ReactElement, type ReactNode, type HTMLAttributes,
 } from "react";
 import Link from "next/link";
+import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/lib/store";
+import { scopedCache } from "@/lib/client-cache";
 import { PageHead, KpiCard, DeltaChip, BarRow, MiniStat } from "@/components/ui";
 import { Ic } from "@/components/Ic";
 import { Chart } from "@/components/Chart";
@@ -145,8 +147,8 @@ interface InboxData {
 
 // caches de módulo (stale-while-revalidate): re-visitas abrem na hora, revalida em background.
 // keyed por platform|accountId|since|until (o mesmo formato serve atual e comparação).
-const INS_CACHE = new Map<string, Combined>();
-const INBOX_CACHE = new Map<string, InboxData>();
+const insCache = scopedCache<Combined>();
+const inboxCache = scopedCache<InboxData>();
 
 const keyOf = (platform: string, accountId: string, since: string, until: string) =>
   `${platform}|${accountId}|${since}|${until}`;
@@ -451,7 +453,13 @@ function PanelHelp({ label, onClose }: { label: string; onClose: () => void }) {
 }
 
 export function SocialInsights({ rede }: { rede: string }) {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+    scenario: st.scenario, cmp: st.cmp,
+    zernioAccounts: st.zernioAccounts, selectedAccount: st.selectedAccount, setSelectedAccount: st.setSelectedAccount,
+    paineis: st.paineis, manualStats: st.manualStats, setManualStat: st.setManualStat,
+    setPanelSnapshot: st.setPanelSnapshot,
+  })));
   const platform = zplat(rede);
   const meta = REDES.find((r) => r.id === rede);
   const label = meta?.label || rede;
@@ -526,8 +534,8 @@ export function SocialInsights({ rede }: { rede: string }) {
     let alive = true;
 
     // stale-while-revalidate: mostra o cache na hora, revalida em background
-    const cachedCur = INS_CACHE.get(curKey);
-    const cachedCmp = cmpKey ? INS_CACHE.get(cmpKey) : null;
+    const cachedCur = insCache.get(curKey);
+    const cachedCmp = cmpKey ? insCache.get(cmpKey) : null;
     if (cachedCur) {
       setData(cachedCur);
       setLoading(false);
@@ -557,7 +565,7 @@ export function SocialInsights({ rede }: { rede: string }) {
       fetchPart(cur.since, cur.until, "extras").then((ex) => {
         if (!alive || !ex || ex.error) return;
         setData((prev) => ({ ...(prev || EMPTY_COMBINED), daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null }));
-        INS_CACHE.set(curKey, { ...EMPTY_COMBINED, ...(cachedCur || {}), insights: core.insights ?? null, followers: core.followers ?? null, keySeries: core.keySeries ?? null, daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null } as Combined);
+        insCache.set(curKey, { ...EMPTY_COMBINED, ...(cachedCur || {}), insights: core.insights ?? null, followers: core.followers ?? null, keySeries: core.keySeries ?? null, daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null } as Combined);
       });
     });
     // comparação: KPIs (core) + cards pesados (extras) do período B — pra TODOS os widgets compararem
@@ -565,12 +573,12 @@ export function SocialInsights({ rede }: { rede: string }) {
     if (cmpR && cmpKey) fetchPart(cmpR.since, cmpR.until, "core").then((c) => {
       if (!alive || !c || c.error) return;
       const base = { ...EMPTY_COMBINED, insights: c.insights ?? null, followers: c.followers ?? null, keySeries: c.keySeries ?? null } as Combined;
-      INS_CACHE.set(cmpKey, base);
+      insCache.set(cmpKey, base);
       setCmpData(base);
       fetchPart(cmpR.since, cmpR.until, "extras").then((cx) => {
         if (!alive || !cx || cx.error) return;
         const full = { ...base, daily: cx.daily ?? null, top: cx.top ?? null, content: cx.content ?? null, recent: cx.recent ?? null, linkTaps: cx.linkTaps ?? null, stories: cx.stories ?? null, bestTime: cx.bestTime ?? null, demographics: cx.demographics ?? null } as Combined;
-        INS_CACHE.set(cmpKey, full);
+        insCache.set(cmpKey, full);
         setCmpData(full);
       });
     });
@@ -591,11 +599,11 @@ export function SocialInsights({ rede }: { rede: string }) {
     let alive = true;
     const load = (since: string, until: string, set: (d: InboxData | null) => void) => {
       const key = keyOf(platform, acct._id, since, until);
-      const cached = INBOX_CACHE.get(key);
+      const cached = inboxCache.get(key);
       if (cached) set(cached);
       fetch(`/api/zernio/inbox?accountId=${acct._id}&platform=${platform}&since=${since}&until=${until}`, { cache: "no-store" })
         .then((r) => r.json())
-        .then((d: InboxData & { error?: string }) => { if (!alive || d?.error) return; INBOX_CACHE.set(key, d); set(d); })
+        .then((d: InboxData & { error?: string }) => { if (!alive || d?.error) return; inboxCache.set(key, d); set(d); })
         .catch(() => {});
     };
     load(cur.since, cur.until, setInbox);

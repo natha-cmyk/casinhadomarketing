@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { getActiveWorkspace } from "@/lib/auth";
 import { findWorkspaceAccount } from "@/lib/profiles";
 import { demographics, type DemographicsResponse } from "@/lib/zernio";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -190,6 +191,6 @@ export async function POST(req: Request) {
       meta: { platform, rede, accountId },
     });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 502 });
+    return NextResponse.json({ error: clientError("persona/gerar", e, "Não foi possível gerar a persona agora.") }, { status: 502 });
   }
 }

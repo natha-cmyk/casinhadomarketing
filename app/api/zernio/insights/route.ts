@@ -13,6 +13,7 @@ import { getActiveWorkspace } from "@/lib/auth";
 import { findWorkspaceAccount } from "@/lib/profiles";
 import { cached, periodClosed } from "@/lib/ttl-cache";
 import { cachedImmutable, insightsWorthKeeping } from "@/lib/analytics-cache";
+import { clientError } from "@/lib/route-error";
 import {
   accountInsightsFull, followerHistory, keyMetricSeries, dailyMetrics,
   postAnalytics, profileLinkTaps, listStories, bestTime, demographics,
@@ -207,6 +208,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json(payload);
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 502 });
+    return NextResponse.json({ error: clientError("zernio/insights", e, "Não foi possível carregar as métricas.") }, { status: 502 });
   }
 }

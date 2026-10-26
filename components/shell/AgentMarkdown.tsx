@@ -3,12 +3,14 @@
 // `código`, listas (- / 1.), parágrafos e quebras. Tudo como nós React (escapado).
 import React from "react";
 
+const INLINE_RE = /(\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_)/g;
+
 // tokeniza inline: **negrito**, *itálico* / _itálico_, `código`
 function inline(text: string, keyBase: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  const re = /(\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_)/g;
+  INLINE_RE.lastIndex = 0;
   let last = 0, m: RegExpExecArray | null, i = 0;
-  while ((m = re.exec(text))) {
+  while ((m = INLINE_RE.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const k = `${keyBase}-${i++}`;
     if (m[2] != null) out.push(<strong key={k}>{m[2]}</strong>);

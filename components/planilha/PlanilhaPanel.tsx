@@ -13,9 +13,10 @@ import { PlanilhaAnual } from "./PlanilhaAnual";
 import { PlanilhaOrganize } from "./PlanilhaOrganize";
 import { GeracaoCharts } from "./GeracaoCharts";
 import { Spinner } from "@/components/Spinner";
+import { scopedCache } from "@/lib/client-cache";
 
-// cache de módulo (stale-while-revalidate) por `ano|aba`
-const CACHE = new Map<string, PlanilhaPayload>();
+// cache de módulo (stale-while-revalidate) por `ano|aba`, escopado pelo workspace
+const planilhaCache = scopedCache<PlanilhaPayload>();
 
 // nome de cada aba no canto fixo da planilha (como na planilha original)
 const CORNER: Record<string, { main: string; sub: string }> = {
@@ -45,14 +46,14 @@ export function PlanilhaPanel() {
   if (storeYear !== prevStoreYear) { setPrevStoreYear(storeYear); setYear(storeYear); }
 
   const key = `${year}|${tab}`;
-  const [payload, setPayload] = useState<PlanilhaPayload | null>(CACHE.get(key) ?? null);
-  const [loading, setLoading] = useState<boolean>(!CACHE.get(key));
+  const [payload, setPayload] = useState<PlanilhaPayload | null>(planilhaCache.get(key) ?? null);
+  const [loading, setLoading] = useState<boolean>(!planilhaCache.get(key));
 
   // ao trocar (ano|aba), prepara a partir do cache em tempo de render — evita setState dentro do efeito
   const [prevKey, setPrevKey] = useState<string>(key);
   if (key !== prevKey) {
     setPrevKey(key);
-    const c = CACHE.get(key) ?? null;
+    const c = planilhaCache.get(key) ?? null;
     setPayload(c);
     setLoading(!c);
   }
@@ -63,7 +64,7 @@ export function PlanilhaPanel() {
       .then((r) => r.json())
       .then((d: PlanilhaPayload) => {
         if (!alive || !d || (d as { error?: string }).error) return;
-        CACHE.set(`${d.year}|${d.tab}`, d);
+        planilhaCache.set(`${d.year}|${d.tab}`, d);
         setPayload(d);
       })
       .catch(() => {})
@@ -99,7 +100,7 @@ export function PlanilhaPanel() {
       rd.months[monthIdx] = kind === "text" ? texto : valor;
       data[rowKey] = rd;
       const np = { ...p, data };
-      CACHE.set(`${year}|${tab}`, np);
+      planilhaCache.set(`${year}|${tab}`, np);
       return np;
     });
     fetch("/api/overview/planilha/cell", {
@@ -117,7 +118,7 @@ export function PlanilhaPanel() {
   const hiddenSet = new Set(config.hidden);
   const customKeys = new Set(config.custom.map((c) => c.key));
   const persistConfig = (next: PlanilhaConfig) => {
-    setPayload((p) => { if (!p) return p; const np = { ...p, config: next }; CACHE.set(`${year}|${tab}`, np); return np; });
+    setPayload((p) => { if (!p) return p; const np = { ...p, config: next }; planilhaCache.set(`${year}|${tab}`, np); return np; });
     fetch("/api/overview/planilha/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ tab, hidden: next.hidden, custom: next.custom, order: next.order }) }).catch(() => {});
   };
   const toggleHide = (key: string) => {

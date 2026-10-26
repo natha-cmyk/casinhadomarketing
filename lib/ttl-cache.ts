@@ -1,7 +1,10 @@
 // Micro-cache TTL em memória (por instância serverless). Colapsa requests repetidos das
 // rotas de analytics (mesmo workspace + período) dentro da janela TTL. Some no cold start.
-type Entry = { at: number; v: unknown };
-const store = new Map<string, Entry>();
+export type TtlEntry = { at: number; ttl: number; v: unknown };
+
+const MAX_ENTRIES = 500;
+const store = new Map<string, TtlEntry>();
+const inflight = new Map<string, Promise<unknown>>();
 
 // Data de HOJE em Natal/RN (America/Fortaleza, UTC−3, sem horário de verão), como "yyyy-mm-dd".
 function hojeFortaleza(): string {
@@ -19,20 +22,49 @@ export function periodClosed(until: string | null | undefined): boolean {
   return !!until && until < hojeFortaleza();
 }
 
+// Remove expirados pelo TTL de cada entrada (não pelo TTL de quem chamou) e, se ainda
+// passar do teto, as mais antigas. A leitura continua usando o TTL do chamador.
+export function pruneTtlStore(target: Map<string, TtlEntry>, maxEntries: number, now = Date.now()): void {
+  if (target.size <= maxEntries) return;
+  for (const [k, e] of target) {
+    if (now - e.at >= e.ttl) target.delete(k);
+  }
+  while (target.size > maxEntries) {
+    const oldest = target.keys().next().value;
+    if (oldest === undefined) break;
+    target.delete(oldest);
+  }
+}
+
 // invalida entradas cujo key começa com `prefix` (ex.: após gravar célula manual da planilha).
+// Também solta o in-flight: o resultado que ainda vai chegar não regrava dado velho por cima.
 export function bust(prefix: string): void {
   for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
+  for (const k of inflight.keys()) if (k.startsWith(prefix)) inflight.delete(k);
 }
 
 export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const hit = store.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.v as T;
-  const v = await fn();
-  store.set(key, { at: Date.now(), v });
-  // limpeza preguiçosa: se crescer muito, remove os mais velhos
-  if (store.size > 500) {
-    const cutoff = Date.now() - ttlMs;
-    for (const [k, e] of store) if (e.at < cutoff) store.delete(k);
-  }
-  return v;
+  const pending = inflight.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const p = fn()
+    .then((v) => {
+      if (inflight.get(key) === p) {
+        store.set(key, { at: Date.now(), ttl: ttlMs, v });
+        pruneTtlStore(store, MAX_ENTRIES);
+      }
+      return v;
+    })
+    .finally(() => {
+      if (inflight.get(key) === p) inflight.delete(key);
+    });
+  inflight.set(key, p);
+  return p;
+}
+
+export function resetTtlCacheForTests(): void {
+  store.clear();
+  inflight.clear();
 }

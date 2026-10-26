@@ -13,6 +13,7 @@ import {
   gbpPerformance, gbpSearchKeywords, gbpLocations, gbpMedia, gbpReviews, gbpLocationDetails,
 } from "@/lib/zernio";
 import { findWorkspaceAccount, listWorkspaceAccounts } from "@/lib/profiles";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,6 @@ export async function GET(req: Request) {
       accountId, activeLocationId, performance, keywords, locations, media, reviews, details,
     });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 502 });
+    return NextResponse.json({ error: clientError("zernio/gbp", e, "Não foi possível carregar o perfil.") }, { status: 502 });
   }
 }

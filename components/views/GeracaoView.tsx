@@ -4,6 +4,7 @@
 // por canal, categoria, produto, qualificação, status/etapa e motivo de perda, respeitando
 // o período da toolbar. O usuário mapeia os campos personalizados do ClickUp por dimensão.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/lib/store";
 import { PageHead, BarRow, IconBtn } from "@/components/ui";
 import { Spinner } from "@/components/Spinner";
@@ -103,7 +104,10 @@ const OUTCOME = {
 } as const;
 
 export function GeracaoView() {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+    scenario: st.scenario, cmp: st.cmp, setPanelSnapshot: st.setPanelSnapshot,
+  })));
   const range = useMemo(() => dateRange(s), [s.period, s.year, s.month, s.quarter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [config, setConfig] = useState<CrmConfig | null>(null);

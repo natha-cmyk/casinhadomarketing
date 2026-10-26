@@ -125,7 +125,8 @@ export async function POST(req: Request) {
       else if (/\b409\b|duplicate|dedup/i.test(msg))
         friendly = "Conteúdo idêntico já foi publicado nas últimas 24h. Ajuste a legenda para publicar de novo.";
       else if (/\b401\b/i.test(msg)) friendly = "Sessão da integração expirou. Reconecte o canal em Personalização.";
-      return NextResponse.json({ ok: false, error: friendly, detail: msg.slice(0, 300) }, { status: 502 });
+      console.error("[posts/publish]", msg);
+      return NextResponse.json({ ok: false, error: friendly }, { status: 502 });
     }
 
     const zStatus = res?.post?.status || (publishNow ? "published" : "scheduled");
@@ -137,8 +138,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, status, zernioPostId, canaisIgnorados });
   } catch (e) {
+    console.error("[posts/publish]", e);
     return NextResponse.json(
-      { ok: false, error: "Erro ao agendar. Tente novamente.", detail: String(e).slice(0, 200) },
+      { ok: false, error: "Erro ao agendar. Tente novamente." },
       { status: 500 }
     );
   }

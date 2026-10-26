@@ -6,6 +6,7 @@ import { getActiveWorkspace } from "@/lib/auth";
 import { disconnectAccount } from "@/lib/zernio";
 import { findWorkspaceAccount } from "@/lib/profiles";
 import { logEvent } from "@/lib/events";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,6 @@ export async function POST(req: Request) {
     void logEvent(ws.id, "channel.disconnect", String(alvo.platform || ""), { accountId });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 502 });
+    return NextResponse.json({ ok: false, error: clientError("zernio/disconnect", e, "Não foi possível desconectar agora.") }, { status: 502 });
   }
 }

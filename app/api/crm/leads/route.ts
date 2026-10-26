@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { interpretTask, type ClickUpTask, type Interpreted } from "@/lib/crm-sync";
 import { cached, periodTtl } from "@/lib/ttl-cache";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -232,6 +233,6 @@ export async function GET(req: Request) {
     });
     return NextResponse.json(payload);
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: clientError("crm/leads", e, "Falha ao carregar os leads.") }, { status: 500 });
   }
 }

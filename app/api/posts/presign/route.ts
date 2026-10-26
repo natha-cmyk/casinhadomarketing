@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { presignMedia } from "@/lib/zernio";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,6 @@ export async function POST(req: Request) {
     const r = await presignMedia({ filename, contentType, size: b.size });
     return NextResponse.json({ uploadUrl: r.uploadUrl, publicUrl: r.publicUrl });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 502 });
+    return NextResponse.json({ error: clientError("posts/presign", e, "não foi possível preparar o upload") }, { status: 502 });
   }
 }
