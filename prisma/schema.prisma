@@ -402,7 +402,8 @@ model Concorrente {
   linkedin     Boolean       @default(false) // legado — coerência mantida a partir de `canais`
   youtube      Boolean       @default(false) // legado — coerência mantida a partir de `canais`
   dominio      String?
-  categoria    String        @default("") // categoria LIVRE por workspace (era enum CompCategoria)
+  categoria    String        @default("") // legado/compat: 1ª categoria (código antigo lê daqui); fonte de verdade = `categorias`
+  categorias   Json          @default("[]") // [catId, ...] — múltiplas categorias por concorrente
   canais       Json          @default("[]") // [{ tipo, url }] — canais flexíveis com URL
   iconOverride String?
   ordem        Int           @default(0)
