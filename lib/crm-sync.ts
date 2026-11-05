@@ -1,13 +1,14 @@
 // Núcleo do sync ClickUp → Lead (usado pela rota /api/crm/sync E pelo cron diário).
 // Incremental por padrão (date_updated_gt = lastSyncAt); full reprocessa tudo.
 import { prisma } from "@/lib/prisma";
+import { CRM_FIELD_KEYS, type CrmFieldKey } from "./crm-fields";
 
 interface ClickUpOption { id: string; name?: string; label?: string; orderindex?: unknown }
 interface ClickUpCustomField { id: string; name: string; type: string; value?: unknown; type_config?: { options?: ClickUpOption[] } }
 interface ClickUpTask { id: string; name?: string; status?: { status?: string; type?: string }; date_created?: string; custom_fields?: ClickUpCustomField[]; parent?: string | null; archived?: boolean }
 
-type Dim = "channel" | "category" | "product" | "qualification" | "stage" | "status" | "value" | "lossReason" | "campaign";
-const DIMS: Dim[] = ["channel", "category", "product", "qualification", "stage", "status", "value", "lossReason", "campaign"];
+type Dim = CrmFieldKey;
+const DIMS: readonly Dim[] = CRM_FIELD_KEYS;
 const SYNONYMS: Record<Dim, string[]> = {
   channel: ["canal", "origem", "source", "fonte"],
   campaign: ["campanha", "campaign", "campanha de marketing", "acao de marketing", "ação de marketing", "nome da acao", "nome da ação"],

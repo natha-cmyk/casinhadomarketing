@@ -9,18 +9,27 @@ export const MONTHS_FULL = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
-// mês/ano ATUAIS (dinâmicos) — o painel abre sempre no mês corrente.
-// o analytics real (via integração) é ancorado na data de hoje, então acompanha.
-const _now = new Date();
-export const CUR_YEAR = _now.getFullYear();
-export const CUR_MONTH = _now.getMonth(); // 0-index
+// Calendário civil do negócio (Natal/RN). Não congela no import do módulo:
+// um isolate que atravessa a meia-noite continua no dia certo.
+export const BUSINESS_TZ = "America/Fortaleza";
 
-export const DIM: Record<number, number[]> = {
-  2024: [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
-  2025: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
-  2026: [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31],
-};
-export const daysInMonth = (y: number, m: number) => (DIM[y] || DIM[2026])[m];
+export function civilToday(now = new Date(), timeZone = BUSINESS_TZ): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const n = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
+  return { year: n("year"), month: n("month") - 1, day: n("day") };
+}
+
+export const curYear = (now?: Date) => civilToday(now).year;
+export const curMonth = (now?: Date) => civilToday(now).month;
+
+export function daysInMonth(y: number, m: number): number {
+  return new Date(y, m + 1, 0).getDate();
+}
 export const quarterOf = (m: number) => Math.floor(m / 3);
 export function weekRange(y: number, m: number, w: number) {
   const last = daysInMonth(y, m);

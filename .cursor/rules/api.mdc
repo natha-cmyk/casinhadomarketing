@@ -12,7 +12,7 @@ Leia `docs/padroes.md` → seção API. Skill: **`codebase-design`** (seams serv
 
 - Rotas do **painel do cliente:** `getActiveWorkspaceId()` ou `getActiveWorkspace()` de `lib/auth.ts` no início; `401` se null.
 - Rotas **admin:** `getAdminUser()` de `lib/admin.ts`; `403` se null.
-- **Cron:** `Authorization: Bearer $CRON_SECRET` quando `CRON_SECRET` está setado.
+- **Cron:** `Authorization: Bearer $CRON_SECRET`. Sem o secret, a rota responde 401.
 - **Stripe webhook:** validar `STRIPE_WEBHOOK_SECRET` — não usar sessão de usuário.
 - **CRM webhook:** `app/api/crm/webhook/[workspaceId]` — validar origem/conteúdo conforme implementação existente.
 

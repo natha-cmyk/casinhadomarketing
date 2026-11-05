@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,7 +22,7 @@ export async function GET(req: Request) {
     });
     return NextResponse.json({ reports });
   } catch (e) {
-    return NextResponse.json({ reports: [], error: String(e).slice(0, 160) }, { status: 500 });
+    return NextResponse.json({ reports: [], error: clientError("reports", e, "Não foi possível concluir agora.") }, { status: 500 });
   }
 }
 
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true, report: r });
   } catch (e) {
-    return NextResponse.json({ error: String(e).slice(0, 160) }, { status: 500 });
+    return NextResponse.json({ error: clientError("reports", e, "Não foi possível concluir agora.") }, { status: 500 });
   }
 }
 
@@ -57,6 +58,6 @@ export async function DELETE(req: Request) {
     await prisma.report.deleteMany({ where: { id, workspaceId: ws } });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: String(e).slice(0, 160) }, { status: 500 });
+    return NextResponse.json({ error: clientError("reports", e, "Não foi possível concluir agora.") }, { status: 500 });
   }
 }

@@ -4,8 +4,9 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { disconnectAccount } from "@/lib/zernio";
-import { listWorkspaceAccounts } from "@/lib/profiles";
+import { findWorkspaceAccount } from "@/lib/profiles";
 import { logEvent } from "@/lib/events";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +19,13 @@ export async function POST(req: Request) {
     const accountId = String(body.accountId || "").trim();
     if (!accountId) return NextResponse.json({ ok: false, error: "accountId ausente" }, { status: 400 });
 
-    // segurança: só desconecta conta que está nos profiles DESTE workspace
-    const accounts = await listWorkspaceAccounts(ws);
-    const alvo = accounts.find((a) => a._id === accountId);
+    const alvo = await findWorkspaceAccount(ws, accountId);
     if (!alvo) return NextResponse.json({ ok: false, error: "conta não pertence a este workspace" }, { status: 403 });
 
     await disconnectAccount(accountId);
     void logEvent(ws.id, "channel.disconnect", String(alvo.platform || ""), { accountId });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 502 });
+    return NextResponse.json({ ok: false, error: clientError("zernio/disconnect", e, "Não foi possível desconectar agora.") }, { status: 502 });
   }
 }

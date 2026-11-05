@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { getActiveWorkspace } from "@/lib/auth";
 import { listWorkspaceAccounts } from "@/lib/profiles";
+import { clientError } from "@/lib/route-error";
 
 export async function GET() {
   try {
@@ -11,6 +12,6 @@ export async function GET() {
     const accounts = await listWorkspaceAccounts(ws);
     return NextResponse.json({ ok: true, accounts });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e), accounts: [] }, { status: 502 });
+    return NextResponse.json({ ok: false, error: clientError("zernio/accounts", e, "Não foi possível carregar as contas."), accounts: [] }, { status: 502 });
   }
 }

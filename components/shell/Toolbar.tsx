@@ -1,5 +1,6 @@
 "use client";
 import { usePathname } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/lib/store";
 import { META, TEMPORAL, usesCompare, viewForPath } from "@/lib/nav";
 import { MONTHS, MONTHS_FULL, scopeLabelText, type Period, type Scope } from "@/lib/scope";
@@ -19,7 +20,12 @@ export function Toolbar() {
   const meta = META[view];
   const temporal = TEMPORAL.includes(view);
 
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+    scenario: st.scenario, cmp: st.cmp,
+    setPeriod: st.setPeriod, setMonth: st.setMonth, setWeek: st.setWeek, setQuarter: st.setQuarter, setYear: st.setYear,
+    toggleScenario: st.toggleScenario, setCmp: st.setCmp,
+  })));
   const scope: Scope = { period: s.period, year: s.year, month: s.month, week: s.week, quarter: s.quarter };
 
   const openNav = () => document.body.classList.toggle("nav-open");

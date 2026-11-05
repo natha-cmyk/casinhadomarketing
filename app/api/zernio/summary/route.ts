@@ -13,6 +13,7 @@ import { getActiveWorkspace } from "@/lib/auth";
 import { listWorkspaceAccounts } from "@/lib/profiles";
 import { cached, periodClosed } from "@/lib/ttl-cache";
 import { cachedImmutable } from "@/lib/analytics-cache";
+import { clientError } from "@/lib/route-error";
 import {
   accountInsightsFull, youtubeChannelInsights, linkedinAggregate,
   gbpPerformance, gbpLocations, postAnalytics,
@@ -154,6 +155,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ accounts: summaries });
   } catch (e) {
     // painel degrada para o empty-state em vez de quebrar
-    return NextResponse.json({ accounts: [], error: String(e) });
+    return NextResponse.json({ accounts: [], error: clientError("zernio/summary", e, "Não foi possível carregar o resumo.") });
   }
 }

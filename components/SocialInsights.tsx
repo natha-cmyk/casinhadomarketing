@@ -5,7 +5,9 @@ import {
   type CSSProperties, type ReactElement, type ReactNode, type HTMLAttributes,
 } from "react";
 import Link from "next/link";
+import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/lib/store";
+import { scopedCache } from "@/lib/client-cache";
 import { PageHead, KpiCard, DeltaChip, BarRow, MiniStat } from "@/components/ui";
 import { Ic } from "@/components/Ic";
 import { Chart } from "@/components/Chart";
@@ -14,7 +16,8 @@ import { WidgetBoard, WidgetEditButton } from "@/components/WidgetBoard";
 import { ProfilePreview } from "@/components/views/ProfilePreview";
 import { lineChart, barChart, type LineSeries } from "@/lib/charts";
 import { fmt, kfmt, sum } from "@/lib/format";
-import { daysInMonth, computeDelta, type Period } from "@/lib/scope";
+import { computeDelta } from "@/lib/scope";
+import { periodRange, POLICY_SOCIAL, type PeriodScope } from "@/lib/period";
 import { REDES } from "@/lib/seed-data";
 import { indShown } from "@/lib/indicators";
 import type {
@@ -64,8 +67,7 @@ const GENDER_PT: Record<string, string> = {
 // fontes das conversas (inbox) → PT
 const SOURCE_PT: Record<string, string> = { contact: "Cliente", platform: "Nós", recipient: "Lidas" };
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dateRange = (scope: PeriodScope) => periodRange(scope, POLICY_SOCIAL);
 
 // razões calculadas (retornam fração; null se falta base)
 type MetricMap = Record<string, { total: number }>;
@@ -145,33 +147,8 @@ interface InboxData {
 
 // caches de módulo (stale-while-revalidate): re-visitas abrem na hora, revalida em background.
 // keyed por platform|accountId|since|until (o mesmo formato serve atual e comparação).
-const INS_CACHE = new Map<string, Combined>();
-const INBOX_CACHE = new Map<string, InboxData>();
-
-function dateRange(scope: { period: Period; year: number; month: number; quarter: number; week: number }) {
-  const { period, year, month, quarter, week } = scope;
-  let since: Date, until: Date;
-  if (period === "semana") {
-    // janela = os 7 dias da semana selecionada dentro do mês (W1=1–7, W2=8–14, W3=15–21, W4=22–fim)
-    const last = daysInMonth(year, month);
-    const startDay = week * 7 + 1;
-    const endDay = Math.min(startDay + 6, last);
-    since = new Date(year, month, startDay);
-    until = new Date(year, month, endDay);
-  } else if (period === "trimestre") {
-    since = new Date(year, quarter * 3, 1);
-    until = new Date(year, quarter * 3 + 2, daysInMonth(year, quarter * 3 + 2));
-  } else if (period === "ano") {
-    until = new Date(year, 11, 31);
-    since = new Date(year, 9, 2);
-  } else {
-    since = new Date(year, month, 1);
-    until = new Date(year, month, daysInMonth(year, month));
-  }
-  const cap = 90 * 864e5;
-  if (until.getTime() - since.getTime() > cap) since = new Date(until.getTime() - cap);
-  return { since: iso(since), until: iso(until) };
-}
+const insCache = scopedCache<Combined>();
+const inboxCache = scopedCache<InboxData>();
 
 const keyOf = (platform: string, accountId: string, since: string, until: string) =>
   `${platform}|${accountId}|${since}|${until}`;
@@ -476,7 +453,13 @@ function PanelHelp({ label, onClose }: { label: string; onClose: () => void }) {
 }
 
 export function SocialInsights({ rede }: { rede: string }) {
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+    scenario: st.scenario, cmp: st.cmp,
+    zernioAccounts: st.zernioAccounts, selectedAccount: st.selectedAccount, setSelectedAccount: st.setSelectedAccount,
+    paineis: st.paineis, manualStats: st.manualStats, setManualStat: st.setManualStat,
+    setPanelSnapshot: st.setPanelSnapshot,
+  })));
   const platform = zplat(rede);
   const meta = REDES.find((r) => r.id === rede);
   const label = meta?.label || rede;
@@ -551,8 +534,8 @@ export function SocialInsights({ rede }: { rede: string }) {
     let alive = true;
 
     // stale-while-revalidate: mostra o cache na hora, revalida em background
-    const cachedCur = INS_CACHE.get(curKey);
-    const cachedCmp = cmpKey ? INS_CACHE.get(cmpKey) : null;
+    const cachedCur = insCache.get(curKey);
+    const cachedCmp = cmpKey ? insCache.get(cmpKey) : null;
     if (cachedCur) {
       setData(cachedCur);
       setLoading(false);
@@ -582,7 +565,7 @@ export function SocialInsights({ rede }: { rede: string }) {
       fetchPart(cur.since, cur.until, "extras").then((ex) => {
         if (!alive || !ex || ex.error) return;
         setData((prev) => ({ ...(prev || EMPTY_COMBINED), daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null }));
-        INS_CACHE.set(curKey, { ...EMPTY_COMBINED, ...(cachedCur || {}), insights: core.insights ?? null, followers: core.followers ?? null, keySeries: core.keySeries ?? null, daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null } as Combined);
+        insCache.set(curKey, { ...EMPTY_COMBINED, ...(cachedCur || {}), insights: core.insights ?? null, followers: core.followers ?? null, keySeries: core.keySeries ?? null, daily: ex.daily ?? null, top: ex.top ?? null, content: ex.content ?? null, recent: ex.recent ?? null, linkTaps: ex.linkTaps ?? null, stories: ex.stories ?? null, bestTime: ex.bestTime ?? null, demographics: ex.demographics ?? null } as Combined);
       });
     });
     // comparação: KPIs (core) + cards pesados (extras) do período B — pra TODOS os widgets compararem
@@ -590,12 +573,12 @@ export function SocialInsights({ rede }: { rede: string }) {
     if (cmpR && cmpKey) fetchPart(cmpR.since, cmpR.until, "core").then((c) => {
       if (!alive || !c || c.error) return;
       const base = { ...EMPTY_COMBINED, insights: c.insights ?? null, followers: c.followers ?? null, keySeries: c.keySeries ?? null } as Combined;
-      INS_CACHE.set(cmpKey, base);
+      insCache.set(cmpKey, base);
       setCmpData(base);
       fetchPart(cmpR.since, cmpR.until, "extras").then((cx) => {
         if (!alive || !cx || cx.error) return;
         const full = { ...base, daily: cx.daily ?? null, top: cx.top ?? null, content: cx.content ?? null, recent: cx.recent ?? null, linkTaps: cx.linkTaps ?? null, stories: cx.stories ?? null, bestTime: cx.bestTime ?? null, demographics: cx.demographics ?? null } as Combined;
-        INS_CACHE.set(cmpKey, full);
+        insCache.set(cmpKey, full);
         setCmpData(full);
       });
     });
@@ -616,11 +599,11 @@ export function SocialInsights({ rede }: { rede: string }) {
     let alive = true;
     const load = (since: string, until: string, set: (d: InboxData | null) => void) => {
       const key = keyOf(platform, acct._id, since, until);
-      const cached = INBOX_CACHE.get(key);
+      const cached = inboxCache.get(key);
       if (cached) set(cached);
       fetch(`/api/zernio/inbox?accountId=${acct._id}&platform=${platform}&since=${since}&until=${until}`, { cache: "no-store" })
         .then((r) => r.json())
-        .then((d: InboxData & { error?: string }) => { if (!alive || d?.error) return; INBOX_CACHE.set(key, d); set(d); })
+        .then((d: InboxData & { error?: string }) => { if (!alive || d?.error) return; inboxCache.set(key, d); set(d); })
         .catch(() => {});
     };
     load(cur.since, cur.until, setInbox);

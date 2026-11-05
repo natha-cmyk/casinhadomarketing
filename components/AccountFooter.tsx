@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { supabaseConfigured } from "@/lib/supabase/env";
+import { clearClientCaches } from "@/lib/client-cache";
 
 // Rodapé da sidebar: e-mail do usuário logado + sair. Se o Supabase não estiver
 // configurado (anon key vazia), mostra o status antigo de prévia.
@@ -19,6 +20,7 @@ export function AccountFooter() {
 
   async function sair() {
     const supabase = createClient();
+    clearClientCaches();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();

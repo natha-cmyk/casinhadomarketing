@@ -1,6 +1,8 @@
 // Client server-side da Zernio (REST puro — não há SDK Node). Base + auth via env.
 // NUNCA importar isto em componente client: a chave é secreta.
 // Docs: https://docs.zernio.com/  ·  base https://zernio.com/api/v1
+import { accountsForProfile } from "./account-scope";
+
 const BASE = "https://zernio.com/api/v1";
 
 function apiKey(): string {
@@ -57,19 +59,13 @@ export async function listAccounts(profileId?: string) {
   const qs = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
   const data = await zernio<{ accounts: ZernioAccount[] }>(`/accounts${qs}`);
   // filtro defensivo por profile (caso a API não filtre no server)
-  if (profileId) {
-    data.accounts = data.accounts.filter((a) => {
-      const p = a.profileId;
-      const id = typeof p === "string" ? p : p?._id;
-      return !id || id === profileId;
-    });
-  }
+  if (profileId) data.accounts = accountsForProfile(data.accounts ?? [], profileId);
   return data;
 }
 
 // DELETE /accounts/{accountId} — desconecta uma conta conectada (social ou ads).
 export async function disconnectAccount(accountId: string) {
-  return zernio<{ success?: boolean; message?: string }>(`/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" }).catch(() => ({ success: true }));
+  return zernio<{ success?: boolean; message?: string }>(`/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" });
 }
 
 // POST /profiles — cria um profile (1 por workspace). Retorna profile._id

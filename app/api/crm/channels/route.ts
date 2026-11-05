@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { cached } from "@/lib/ttl-cache";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,6 @@ export async function GET() {
     });
     return NextResponse.json({ ok: true, channels });
   } catch (e) {
-    return NextResponse.json({ ok: false, channels: [], error: String(e).slice(0, 160) }, { status: 500 });
+    return NextResponse.json({ ok: false, channels: [], error: clientError("crm/channels", e, "Não foi possível carregar os canais.") }, { status: 500 });
   }
 }

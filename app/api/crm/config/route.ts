@@ -5,30 +5,17 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { logEvent } from "@/lib/events";
+import { cleanFieldMap } from "@/lib/crm-fields";
+import { nextClickupToken, toPublicCrmConfig } from "@/lib/crm-public";
 
 export const dynamic = "force-dynamic";
-
-// dimensões do lead que o sync sabe interpretar (o fieldMap mapeia dimensão -> nome do campo ClickUp).
-const FIELD_KEYS = ["channel", "category", "product", "qualification", "status", "value", "lossReason"] as const;
-
-// mantém só chaves conhecidas, valores como string aparada; descarta vazios (heurística assume o resto).
-function cleanFieldMap(input: unknown): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (input && typeof input === "object") {
-    for (const k of FIELD_KEYS) {
-      const v = (input as Record<string, unknown>)[k];
-      if (typeof v === "string" && v.trim()) out[k] = v.trim();
-    }
-  }
-  return out;
-}
 
 export async function GET() {
   try {
     const ws = await getActiveWorkspaceId();
     if (!ws) return NextResponse.json(null, { status: 401 });
-    const config = await prisma.crmConfig.findUnique({ where: { workspaceId: ws } });
-    return NextResponse.json({ config, workspaceId: ws });
+    const row = await prisma.crmConfig.findUnique({ where: { workspaceId: ws } });
+    return NextResponse.json({ config: toPublicCrmConfig(row), workspaceId: ws });
   } catch {
     return NextResponse.json(null, { status: 503 });
   }
@@ -48,7 +35,7 @@ export async function PUT(req: Request) {
 
     const data = {
       provider,
-      clickupToken: (b.clickupToken ?? existing?.clickupToken ?? "") || null,
+      clickupToken: nextClickupToken(b.clickupToken, existing?.clickupToken),
       clickupListId: (b.clickupListId ?? existing?.clickupListId ?? "") || null,
       fieldMap: b.fieldMap !== undefined ? cleanFieldMap(b.fieldMap) : existing?.fieldMap ?? {},
       webhookSecret,
@@ -60,7 +47,7 @@ export async function PUT(req: Request) {
       update: data,
     });
     void logEvent(ws, "crm.configured", provider);
-    return NextResponse.json({ config, workspaceId: ws });
+    return NextResponse.json({ config: toPublicCrmConfig(config), workspaceId: ws });
   } catch {
     return NextResponse.json({ error: "db" }, { status: 503 });
   }

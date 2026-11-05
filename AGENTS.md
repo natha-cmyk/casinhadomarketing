@@ -32,11 +32,11 @@ Banco: `npx prisma migrate dev` · `npm run db:deploy` (CI) · `docs/migrations.
 
 | Branch | Uso |
 |--------|-----|
-| **`main`** | Produção (Vercel Production). **Não** receber feature/fix direto sem QA. |
-| **`staging`** | Integração + QA (`staging.casinha…`). Destino do merge após desenvolvimento. |
+| **`main`** | Produção (Vercel Production). Recebe merge da **branch aprovada** (`feat/*` / `fix/*`) após QA — **nunca** merge de `staging`. |
+| **`staging`** | Integração + QA (`staging.casinha…`). Destino do merge após desenvolvimento; **não** promove para `main`. |
 | **`feat/*` / `fix/*`** | Trabalho isolado; criar a partir de `main` atualizado. |
 
-**Fluxo para agentes:** atualizar `main` → branch (`feat/*` ou `fix/*`) → desenvolver (`implement` + `tdd`) → commit na branch → **`feat/*`:** merge em `staging` + push `staging` (QA) → release `staging` → `main` após OK. **`fix/*`:** mesmo padrão; **hotfix:** merge + push em `main` se o usuário pedir, depois alinhar `staging`.
+**Fluxo para agentes:** atualizar `main` → branch (`feat/*` ou `fix/*`) → desenvolver (`implement` + `tdd`) → commit na branch → merge em `staging` + push `staging` (QA) → após OK, release: merge **`feat/<slug>` ou `fix/<slug>`** em `main` (não `staging`). **`fix/*` hotfix:** merge da branch `fix/*` em `main` se o usuário pedir, depois alinhar `staging`.
 
 Passo a passo: **`docs/agents/git-workflow.md`**.
 
@@ -134,7 +134,7 @@ Ver `.env.example` (Postgres, Supabase, Zernio, Stripe, LLM, Resend, cron, admin
 3. Não importar `lib/zernio`, `lib/stripe`, `lib/llm` em `"use client"`.
 4. Não subir Prisma 7 sem migração explícita.
 5. Migration de tenant **sem** RLS quando a tabela tem `workspaceId` (exceto bootstrap documentado).
-6. **Git:** `feat/*` não vai direto a `main` (passar por `staging`/QA). `fix/*` pode ir a `main` em hotfix com pedido explícito — ver `docs/agents/git-workflow.md`.
+6. **Git:** `feat/*` passa por `staging`/QA antes de `main`; produção = merge da **branch da feature**, **nunca** `staging` → `main`. `fix/*` hotfix em `main` só com pedido explícito — ver `docs/agents/git-workflow.md`.
 
 ## Definição de pronto
 

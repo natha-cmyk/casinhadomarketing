@@ -16,9 +16,7 @@ import {
   FUNIL_POST,
   REDES,
 } from "@/lib/seed-data";
-
-// plataforma Zernio → id da rede (Casinha): twitter → x
-const PLAT_REV: Record<string, string> = { twitter: "x" };
+import { platOf, redeOf } from "@/lib/rede";
 // Canais manuais de conteúdo agora vêm do store (store.calManuais). Só registro, sem publicação síncrona.
 
 type ZAccount = {
@@ -32,7 +30,7 @@ type ZAccount = {
 };
 
 // id da rede (Casinha) de uma conta Zernio (twitter→x).
-const redeIdOf = (a: ZAccount) => PLAT_REV[a.platform] || a.platform;
+const redeIdOf = (a: ZAccount) => redeOf(a.platform);
 
 // Contas SOCIAIS realmente conectadas = enabled === true e a rede não é "ads".
 function contasSociais(accounts: ZAccount[]): ZAccount[] {
@@ -72,9 +70,6 @@ function perfisConectados(accounts: ZAccount[]): string[] {
   return out;
 }
 
-// id da rede (Casinha) → plataforma Zernio (x → twitter).
-const platOfRede = (id: string) => (id === "x" ? "twitter" : id);
-
 // Formatos válidos por canal (rótulo da rede). Canal manual / desconhecido → lista completa.
 const FORMATS_BY_CANAL: Record<string, string[]> = {
   Instagram: ["Reels", "Carrossel", "Post único", "Story"],
@@ -103,7 +98,7 @@ function sugestaoFunil(formato: string, cta: string): string {
 function perfisDoCanal(accounts: ZAccount[], canalLabel: string): string[] {
   const rede = REDES.find((r) => r.label === canalLabel);
   if (!rede) return []; // canal manual → sem perfil social forçado
-  const plat = platOfRede(rede.id);
+  const plat = platOf(rede.id);
   const out: string[] = [];
   const seen = new Set<string>();
   for (const a of contasSociais(accounts)) {
@@ -330,7 +325,7 @@ export function PostModal() {
   const [sugHoras, setSugHoras] = useState<string[]>([]);
   useEffect(() => {
     const rede = REDES.find((r) => r.label === f.canal);
-    const plat = rede ? platOfRede(rede.id) : null;
+    const plat = rede ? platOf(rede.id) : null;
     const acc = plat
       ? (zernioAccounts as ZAccount[]).find((a) => a.platform === plat && (a.displayName || a.username) === f.perfil)
       : null;

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { connectionsReminderEmail } from "@/lib/email-templates";
 import { logEvent } from "@/lib/events";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -23,11 +24,8 @@ function temConexao(ws: { zernioProfileId: string | null; profiles: unknown[]; e
 }
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  const denied = cronDenied(req);
+  if (denied) return denied;
 
   const tresDiasAtras = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
   const workspaces = await prisma.workspace.findMany({

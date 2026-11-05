@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { describeDbEnv, isPreviewDiagnosticsEnabled, pingDatabase } from "@/lib/db-env-diagnostics";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export async function GET() {
       amostraPosts: postsSample.map((p) => ({ id: p.id, titulo: p.titulo, canal: p.canal, perfil: p.perfil, data: p.data })),
     });
   } catch (e) {
-    const body: Record<string, unknown> = { ok: false, error: String(e) };
+    const body: Record<string, unknown> = { ok: false, error: clientError("whoami", e, "Não foi possível consultar a sessão.") };
     if (isPreviewDiagnosticsEnabled()) {
       body.dbEnv = describeDbEnv();
       body.dbPing = await pingDatabase();

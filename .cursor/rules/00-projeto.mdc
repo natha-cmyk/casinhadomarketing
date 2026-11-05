@@ -32,7 +32,7 @@ Carregue a **`SKILL.md`** da skill indicada em `AGENTS.md` → seção Skills **
 3. **Imports:** não importar `lib/zernio`, `lib/stripe`, `lib/llm` em `"use client"`.
 4. **Marca:** copy PT-BR; dizer **"LLM"**; erros e UI neutros (sem nome de fornecedor).
 5. **Prisma 7:** não subir sem ADR/migração explícita (v6 fixado).
-6. **Git:** `feat/*` → `staging` antes de `main`; `fix/*` idem, exceto hotfix explícito → `main` (ver `docs/agents/git-workflow.md`).
+6. **Git:** `feat/*` → `staging` (QA) → `main` só via merge da **branch da feature**; **nunca** `staging` → `main`. `fix/*` idem; hotfix explícito → merge `fix/*` em `main` (ver `docs/agents/git-workflow.md`).
 
 ## Pronto
 

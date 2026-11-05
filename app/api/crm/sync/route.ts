@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { syncClickupLeads } from "@/lib/crm-sync";
 import { logEvent } from "@/lib/events";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,7 +50,7 @@ export async function GET() {
 
     return NextResponse.json({ ok: true, fields });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: clientError("crm/sync", e, "Não foi possível falar com o CRM.") }, { status: 500 });
   }
 }
 
@@ -65,6 +66,6 @@ export async function POST(req: Request) {
     void logEvent(ws, "crm.synced", `${r.imported} lead(s)`, { incremental: r.incremental, full, activeCount: r.activeCount, staleRemoved: r.staleRemoved, subtasks: r.subtasks });
     return NextResponse.json({ ok: true, imported: r.imported, incremental: r.incremental, activeCount: r.activeCount, staleRemoved: r.staleRemoved, subtasks: r.subtasks });
   } catch (e) {
-    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: clientError("crm/sync", e, "Não foi possível falar com o CRM.") }, { status: 500 });
   }
 }
