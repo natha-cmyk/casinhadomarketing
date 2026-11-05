@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 import { bust } from "@/lib/ttl-cache";
+import { clientError } from "@/lib/route-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,6 +44,6 @@ export async function POST(req: Request) {
     bust(`planilha:${ws}:${ano}:${tab}`);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: String(e).slice(0, 160) }, { status: 500 });
+    return NextResponse.json({ error: clientError("planilha/cell", e, "Não foi possível salvar a célula.") }, { status: 500 });
   }
 }

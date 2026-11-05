@@ -2,6 +2,7 @@
 // Biblioteca de relatórios + geração via Assistente (Panteão). Escopado pelo painel atual.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/lib/store";
 import { AGENTS_META, panelOfView, type AgentKey } from "@/lib/agents-meta";
 import { scopeLabelText } from "@/lib/scope";
@@ -89,7 +90,9 @@ function Markdown({ text }: { text: string }): ReactNode {
 
 export function ReportsModal({ view, onClose }: { view: string; onClose: () => void }) {
   const panel = panelOfView(view);
-  const s = useStore();
+  const s = useStore(useShallow((st) => ({
+    period: st.period, year: st.year, month: st.month, week: st.week, quarter: st.quarter,
+  })));
   const scope = { period: s.period, year: s.year, month: s.month, week: s.week, quarter: s.quarter };
   const periodLabel = scopeLabelText(scope);
   const snapshots = useStore((st) => st.snapshots);

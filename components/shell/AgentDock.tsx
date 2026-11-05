@@ -149,16 +149,22 @@ export function AgentDock() {
   // histórico do chat — persiste local com validade de 7 dias (renova a cada uso)
   const allMsgs = useStore((s) => s.agentMsgs);
   const [histReady, setHistReady] = useState(false);
-  const HKEY = "casinha_agent_hist";
+  const HKEY = "agenthist:v1";
+  const HKEY_PREV = "casinha_agent_hist";
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(HKEY);
+      const raw = localStorage.getItem(HKEY) ?? localStorage.getItem(HKEY_PREV);
       if (raw) {
         const { savedAt, msgs } = JSON.parse(raw);
-        if (savedAt && Date.now() - savedAt < 7 * 864e5 && msgs && typeof msgs === "object") {
+        const fresh = savedAt && Date.now() - savedAt < 7 * 864e5 && msgs && typeof msgs === "object";
+        if (fresh) {
           useStore.getState().set({ agentMsgs: msgs });
-        } else localStorage.removeItem(HKEY);
+          if (!localStorage.getItem(HKEY)) localStorage.setItem(HKEY, JSON.stringify({ savedAt, msgs }));
+        } else {
+          localStorage.removeItem(HKEY);
+        }
       }
+      localStorage.removeItem(HKEY_PREV);
     } catch { /* histórico corrompido: ignora */ }
     setHistReady(true);
   }, []);

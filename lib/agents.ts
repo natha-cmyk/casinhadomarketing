@@ -7,7 +7,8 @@
 // TODO(agents): tool-calling p/ buscar dado sob demanda + relatório PDF server-side + edições como rascunho.
 import type { Workspace } from "@prisma/client";
 import { prisma } from "./prisma";
-import { MONTHS_FULL, daysInMonth, weekRange, quarterOf, type Period, type Scope } from "./scope";
+import { MONTHS_FULL, weekRange, quarterOf, civilToday, type Period, type Scope } from "./scope";
+import { periodRange, POLICY_AGENT } from "./period";
 
 export type AgentKey = "poseidon" | "apollo" | "athena" | "dionisio";
 
@@ -89,15 +90,7 @@ function periodLabel(s: Scope): string {
   return `${MONTHS_FULL[month]} de ${year}`;
 }
 function isoRange(s: Scope): { since: string; until: string } {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const { period, year, month, week, quarter } = s;
-  let start: Date, end: Date;
-  if (period === "semana") { const [d1, d2] = weekRange(year, month, week).split("–").map(Number); start = new Date(year, month, d1); end = new Date(year, month, d2); }
-  else if (period === "trimestre") { const q = quarter ?? quarterOf(month); start = new Date(year, q * 3, 1); end = new Date(year, q * 3 + 2, daysInMonth(year, q * 3 + 2)); }
-  else if (period === "ano") { start = new Date(year, 0, 1); end = new Date(year, 11, 31); }
-  else { start = new Date(year, month, 1); end = new Date(year, month, daysInMonth(year, month)); }
-  return { since: iso(start), until: iso(end) };
+  return periodRange({ ...s, quarter: s.quarter ?? quarterOf(s.month) }, POLICY_AGENT);
 }
 
 const nBR = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
@@ -244,10 +237,10 @@ export async function buildContext(
 
 // normaliza o Scope recebido do client
 export function normalizeScope(s: { period?: string; year?: number; month?: number; week?: number; quarter?: number } | undefined): Scope {
-  const now = new Date();
+  const today = civilToday();
   const period = (["semana", "mes", "trimestre", "ano"].includes(String(s?.period)) ? s!.period : "mes") as Period;
-  const year = Number.isFinite(Number(s?.year)) ? Number(s!.year) : now.getFullYear();
-  const month = Number.isFinite(Number(s?.month)) ? Number(s!.month) : now.getMonth();
+  const year = Number.isFinite(Number(s?.year)) ? Number(s!.year) : today.year;
+  const month = Number.isFinite(Number(s?.month)) ? Number(s!.month) : today.month;
   const week = Number.isFinite(Number(s?.week)) ? Number(s!.week) : 0;
   const quarter = Number.isFinite(Number(s?.quarter)) ? Number(s!.quarter) : quarterOf(month);
   return { period, year, month, week, quarter };

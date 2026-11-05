@@ -3,12 +3,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceId } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const ws = await getActiveWorkspaceId();
     if (!ws) return NextResponse.json(null, { status: 401 });
     const c = await prisma.envConfig.findUnique({ where: { workspaceId: ws } });
-    return NextResponse.json(c);
+    return NextResponse.json(c, { headers: { "x-workspace-id": ws } });
   } catch {
     return NextResponse.json(null, { status: 503 });
   }

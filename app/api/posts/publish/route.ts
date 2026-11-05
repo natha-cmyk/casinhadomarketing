@@ -8,13 +8,11 @@ import type { PostStatus } from "@prisma/client";
 import { getActiveWorkspace } from "@/lib/auth";
 import { publishPost, type MediaItemInput } from "@/lib/zernio";
 import { listWorkspaceAccounts } from "@/lib/profiles";
+import { platOf } from "@/lib/rede";
 import { logEvent } from "@/lib/events";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // publicar com mídia é assíncrono e pode levar dezenas de segundos
-
-// id da rede (Casinha) → plataforma Zernio. Só "x" diverge (→ twitter); o resto é 1:1.
-const REDE_TO_PLAT: Record<string, string> = { x: "twitter" };
 
 // status Zernio → status local (PostStatus).
 const STATUS_MAP: Record<string, PostStatus> = {
@@ -63,7 +61,7 @@ export async function POST(req: Request) {
     const platforms: { platform: string; accountId: string; customContent?: string; platformSpecificData?: Record<string, unknown> }[] = [];
     const canaisIgnorados: string[] = [];
     for (const redeId of post.contas || []) {
-      const plat = REDE_TO_PLAT[redeId] || redeId;
+      const plat = platOf(redeId);
       const acc = accounts.find((a) => a.platform === plat && (a as { enabled?: boolean }).enabled !== false);
       if (acc) {
         const ov = overrides[redeId] || {};
@@ -127,7 +125,8 @@ export async function POST(req: Request) {
       else if (/\b409\b|duplicate|dedup/i.test(msg))
         friendly = "Conteúdo idêntico já foi publicado nas últimas 24h. Ajuste a legenda para publicar de novo.";
       else if (/\b401\b/i.test(msg)) friendly = "Sessão da integração expirou. Reconecte o canal em Personalização.";
-      return NextResponse.json({ ok: false, error: friendly, detail: msg.slice(0, 300) }, { status: 502 });
+      console.error("[posts/publish]", msg);
+      return NextResponse.json({ ok: false, error: friendly }, { status: 502 });
     }
 
     const zStatus = res?.post?.status || (publishNow ? "published" : "scheduled");
@@ -139,8 +138,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, status, zernioPostId, canaisIgnorados });
   } catch (e) {
+    console.error("[posts/publish]", e);
     return NextResponse.json(
-      { ok: false, error: "Erro ao agendar. Tente novamente.", detail: String(e).slice(0, 200) },
+      { ok: false, error: "Erro ao agendar. Tente novamente." },
       { status: 500 }
     );
   }

@@ -46,37 +46,42 @@ export async function PUT(req: Request) {
     const posts: PostIn[] = Array.isArray(b.posts) ? b.posts : [];
     // IMPORTANTE: salvar é APENAS upsert. NUNCA apagamos aqui — um carregamento vazio
     // (falha transitória do GET) não pode mais destruir posts. Exclusão só via DELETE explícito.
-    // BLINDAGEM MULTI-TENANT: o id é PK global; nunca tocamos um post que pertença a OUTRO
-    // workspace (mesmo que um id colida). Se o id já existe noutro tenant, geramos um novo id.
-    const ids = posts.map((p) => p.id).filter(Boolean);
-    const existentes = ids.length
-      ? await prisma.post.findMany({ where: { id: { in: ids } }, select: { id: true, workspaceId: true } })
-      : [];
-    const donoDe = new Map(existentes.map((e) => [e.id, e.workspaceId]));
-    const remapped: { from: string; to: string }[] = [];
-    for (const p of posts) {
-      const fields = {
-        data: toDate(p.y, p.m, p.d), hora: p.hora, titulo: p.titulo, canal: p.canal, perfil: p.perfil,
-        colab: p.colab, pilar: p.pilar, formato: p.formato, funil: p.funil, legenda: p.legenda,
-        cta: p.cta, hashtags: p.hashtags, arquivo: p.arquivo, status: p.status as PostStatus, contas: p.contas,
-        notas: p.notas ?? "", linkRef: p.linkRef ?? "", roteiro: p.roteiro ?? "",
-        overrides: (p.overrides && typeof p.overrides === "object" ? p.overrides : {}) as object,
-        media: (Array.isArray(p.media) ? p.media : []) as object[],
-      };
-      const dono = donoDe.get(p.id);
-      if (dono && dono !== ws) {
-        // id colide com post de OUTRO workspace → cria com id novo (não sobrescreve o alheio)
-        const novo = `${p.id}_${crypto.randomUUID()}`;
-        await prisma.post.create({ data: { id: novo, workspaceId: ws, ...fields } });
-        remapped.push({ from: p.id, to: novo });
-      } else {
-        await prisma.post.upsert({
-          where: { id: p.id },
-          create: { id: p.id, workspaceId: ws, ...fields },
-          update: fields, // só atualiza quando o id é deste workspace (ou ainda não existe)
-        });
+    if (!posts.length) return NextResponse.json({ ok: true, remapped: [] });
+    // Uma transação: falha no meio não deixa metade do calendário gravada.
+    const remapped = await prisma.$transaction(async (tx) => {
+      // BLINDAGEM MULTI-TENANT: o id é PK global; nunca tocamos um post que pertença a OUTRO
+      // workspace (mesmo que um id colida). Se o id já existe noutro tenant, geramos um novo id.
+      const ids = posts.map((p) => p.id).filter(Boolean);
+      const existentes = ids.length
+        ? await tx.post.findMany({ where: { id: { in: ids } }, select: { id: true, workspaceId: true } })
+        : [];
+      const donoDe = new Map(existentes.map((e) => [e.id, e.workspaceId]));
+      const out: { from: string; to: string }[] = [];
+      for (const p of posts) {
+        const fields = {
+          data: toDate(p.y, p.m, p.d), hora: p.hora, titulo: p.titulo, canal: p.canal, perfil: p.perfil,
+          colab: p.colab, pilar: p.pilar, formato: p.formato, funil: p.funil, legenda: p.legenda,
+          cta: p.cta, hashtags: p.hashtags, arquivo: p.arquivo, status: p.status as PostStatus, contas: p.contas,
+          notas: p.notas ?? "", linkRef: p.linkRef ?? "", roteiro: p.roteiro ?? "",
+          overrides: (p.overrides && typeof p.overrides === "object" ? p.overrides : {}) as object,
+          media: (Array.isArray(p.media) ? p.media : []) as object[],
+        };
+        const dono = donoDe.get(p.id);
+        if (dono && dono !== ws) {
+          // id colide com post de OUTRO workspace → cria com id novo (não sobrescreve o alheio)
+          const novo = `${p.id}_${crypto.randomUUID()}`;
+          await tx.post.create({ data: { id: novo, workspaceId: ws, ...fields } });
+          out.push({ from: p.id, to: novo });
+        } else {
+          await tx.post.upsert({
+            where: { id: p.id },
+            create: { id: p.id, workspaceId: ws, ...fields },
+            update: fields, // só atualiza quando o id é deste workspace (ou ainda não existe)
+          });
+        }
       }
-    }
+      return out;
+    }, { maxWait: 5_000, timeout: 120_000 });
     // devolve remapeamentos pro cliente atualizar os ids locais (evita recriar duplicado no próximo save)
     return NextResponse.json({ ok: true, remapped });
   } catch {

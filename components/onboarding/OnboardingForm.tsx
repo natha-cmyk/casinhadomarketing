@@ -9,6 +9,7 @@ import { useStore } from "@/lib/store";
 import { ConexoesGrid } from "@/components/ConexoesGrid";
 import { UFS, RAMOS, maskPhone } from "@/lib/perfil-fields";
 import { createClient } from "@/lib/supabase/client";
+import { clearClientCaches } from "@/lib/client-cache";
 
 const PROVIDERS = [
   { v: "openrouter", label: "OpenRouter (recomendado)", url: "https://openrouter.ai/keys" },
@@ -27,6 +28,7 @@ export function OnboardingForm({ initial, redes }: { initial: Initial; redes: st
   const router = useRouter();
   const [step, setStep] = useState(0);
   const sair = async () => {
+    clearClientCaches();
     try { await createClient().auth.signOut(); } catch { /* segue pro login mesmo assim */ }
     router.push("/login");
     router.refresh();

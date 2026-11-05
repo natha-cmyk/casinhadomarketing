@@ -9,6 +9,7 @@ import { listWorkspaceAccounts } from "@/lib/profiles";
 import { sendEmail } from "@/lib/email";
 import { connectionLostEmail } from "@/lib/email-templates";
 import { logEvent } from "@/lib/events";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -18,11 +19,8 @@ const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 type Conta = { on?: boolean; accountId?: string };
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${secret}`) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  const denied = cronDenied(req);
+  if (denied) return denied;
   if (!process.env.ZERNIO_API_KEY) return NextResponse.json({ ok: true, skipped: "no zernio key" });
 
   const workspaces = await prisma.workspace.findMany({

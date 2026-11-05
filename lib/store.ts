@@ -2,7 +2,8 @@
 // Store de estado de UI (Zustand). A view atual vem da rota (lib/nav.ts), não da store.
 // Persistência: Hydrator + lib/api.ts (debounce) ↔ rotas /api/*.
 import { create } from "zustand";
-import { CUR_YEAR, CUR_MONTH, quarterOf, type Period } from "./scope";
+import { civilToday, quarterOf, type Period } from "./scope";
+import { redeOf } from "./rede";
 import { type SeedPost } from "./seed-data";
 
 export interface Cmp {
@@ -225,15 +226,17 @@ export interface UIState {
   addFonte: (f: FonteItem) => void; setFonteMap: (m: FonteMap | null) => void;
 }
 
+const today = civilToday();
+
 export const useStore = create<UIState>((set) => ({
-  period: "mes", year: CUR_YEAR, month: CUR_MONTH, week: 0, quarter: quarterOf(CUR_MONTH),
+  period: "mes", year: today.year, month: today.month, week: 0, quarter: quarterOf(today.month),
   // comparação padrão = mês anterior (tem dado real); ajusta o ano na virada de janeiro
   scenario: false, cmp: {
     period: "mes",
-    year: CUR_MONTH === 0 ? CUR_YEAR - 1 : CUR_YEAR,
-    month: (CUR_MONTH + 11) % 12,
+    year: today.month === 0 ? today.year - 1 : today.year,
+    month: (today.month + 11) % 12,
     week: 0,
-    quarter: quarterOf((CUR_MONTH + 11) % 12),
+    quarter: quarterOf((today.month + 11) % 12),
   },
   adsMetric: "receita", adsPlat: "todos", canaisView: "lista", concProd: "geral",
   igProfile: "seahub", ufFeriado: "RN",
@@ -243,7 +246,7 @@ export const useStore = create<UIState>((set) => ({
   paineis: {}, cfgOpen: {}, impOpen: false,
   agentOpen: false, agentMsgs: {}, panelSnapshot: null, snapshots: {},
   metasEdit: false, personaIdx: 0, personaPhotos: {}, compIcons: {}, compEdit: null,
-  calCanal: "todos", calPerfil: "todos", calCV: "todos", calMonth: CUR_MONTH, calYear: CUR_YEAR,
+  calCanal: "todos", calPerfil: "todos", calCV: "todos", calMonth: today.month, calYear: today.year,
   postModal: null,
   okr: { objetivo: "", areas: [] },
   posts: [],
@@ -346,11 +349,10 @@ export const useStore = create<UIState>((set) => ({
     set((s) => {
       // ativa no sidebar só as redes com conta SOCIAL habilitada (posting).
       // contas ads-only (enabled:false, adsStatus:connected) NÃO viram rede social.
-      const rev: Record<string, string> = { twitter: "x" };
       const redes = { ...s.redes };
       const byRede: Record<string, boolean> = {};
       for (const a of accounts) {
-        const id = rev[a.platform] || a.platform;
+        const id = redeOf(a.platform);
         byRede[id] = (byRede[id] ?? false) || a.enabled === true;
       }
       // só mexe nas redes que têm conta; toggles manuais de redes sem conta ficam intactos

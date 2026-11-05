@@ -105,7 +105,7 @@ Ajustar nomes de tabela/coluna ao SQL gerado pelas migrations Prisma. Para `FORC
 
 ## Cron (Vercel)
 
-`vercel.json` — `crm-sync`, `health`, `purge-trash`, `reminders`. Auth: `CRON_SECRET`.
+`vercel.json` — `crm-sync`, `health`, `purge-trash`, `reminders`. Auth: `Authorization: Bearer $CRON_SECRET`. Sem o secret, a rota responde 401.
 
 ## Persistência na UI
 

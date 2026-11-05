@@ -3,6 +3,30 @@
 import type { UIState } from "./store";
 import { useStore } from "./store";
 
+const KEEPALIVE_MAX = 48_000;
+let persistKeepalive = false;
+
+// O flush do pagehide liga isto só durante o start síncrono do fetch.
+export function runPersistFlush(fn: () => void) {
+  const prev = persistKeepalive;
+  persistKeepalive = true;
+  try {
+    fn();
+  } finally {
+    persistKeepalive = prev;
+  }
+}
+
+function putInit(body: string): RequestInit {
+  const keepalive = persistKeepalive && body.length <= KEEPALIVE_MAX;
+  return {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body,
+    ...(keepalive ? { keepalive: true } : {}),
+  };
+}
+
 async function getJSON<T>(url: string): Promise<T | null> {
   try {
     const r = await fetch(url);
@@ -12,9 +36,20 @@ async function getJSON<T>(url: string): Promise<T | null> {
     return null;
   }
 }
+async function getConfigBundle(): Promise<{ config: HydrationData["config"]; workspaceId: string | null }> {
+  try {
+    const r = await fetch("/api/config");
+    if (!r.ok) return { config: null, workspaceId: null };
+    const workspaceId = r.headers.get("x-workspace-id")?.trim() || null;
+    const config = (await r.json()) as HydrationData["config"];
+    return { config, workspaceId };
+  } catch {
+    return { config: null, workspaceId: null };
+  }
+}
 async function putJSON(url: string, body: unknown): Promise<void> {
   try {
-    await fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    await fetch(url, putInit(JSON.stringify(body)));
   } catch {
     /* sem banco: ignora */
   }
@@ -29,16 +64,16 @@ export interface HydrationData {
   concorrentes: { concorrentes: UIState["concorrentes"] } | null;
 }
 
-export async function fetchAll(): Promise<HydrationData> {
-  const [config, perfil, okr, posts, personas, concorrentes] = await Promise.all([
-    getJSON<HydrationData["config"]>("/api/config"),
+export async function fetchAll(): Promise<HydrationData & { workspaceId: string | null }> {
+  const [bundle, perfil, okr, posts, personas, concorrentes] = await Promise.all([
+    getConfigBundle(),
     getJSON<HydrationData["perfil"]>("/api/perfil"),
     getJSON<HydrationData["okr"]>("/api/okr"),
     getJSON<HydrationData["posts"]>("/api/posts"),
     getJSON<HydrationData["personas"]>("/api/personas"),
     getJSON<HydrationData["concorrentes"]>("/api/concorrentes"),
   ]);
-  return { config, perfil, okr, posts, personas, concorrentes };
+  return { config: bundle.config, workspaceId: bundle.workspaceId, perfil, okr, posts, personas, concorrentes };
 }
 
 export function saveConfig(s: UIState) {
@@ -62,7 +97,7 @@ export async function savePosts(s: UIState) {
   // lê a resposta pra aplicar remapeamentos de id (quando o servidor teve que criar id novo por
   // colisão com outro workspace) — assim o próximo save não recria o post duplicado.
   try {
-    const r = await fetch("/api/posts", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ posts: s.posts }) });
+    const r = await fetch("/api/posts", putInit(JSON.stringify({ posts: s.posts })));
     if (!r.ok) return;
     const data = (await r.json().catch(() => null)) as { remapped?: { from: string; to: string }[] } | null;
     const remapped = data?.remapped;
