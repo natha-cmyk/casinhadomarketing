@@ -8,8 +8,8 @@ export const SQUASHED_INIT_MIGRATION = "0_init";
 
 /** Atualizar ao publicar migration que define o novo “head” do schema (ver docs/migrations.md). */
 export const HEAD_SCHEMA_MARKER = {
-  table: "EnvConfig",
-  column: "concCategorias",
+  table: "Concorrente",
+  column: "categorias",
 } as const;
 
 /** Migration ↔ objeto no Postgres; se a linha está “aplicada” mas o objeto não existe → drift. */
@@ -21,7 +21,14 @@ export const DRIFT_MARKERS: DriftMarker[] = [
   { migration: "20260929_planilha_cell", kind: "table", table: "PlanilhaCell" },
   { migration: "20260930_reports", kind: "table", table: "Report" },
   {
+    // objeto real desta migration (não é mais o head — ver HEAD_SCHEMA_MARKER)
     migration: "20261007_concorrencia_custom",
+    kind: "column",
+    table: "EnvConfig",
+    column: "concCategorias",
+  },
+  {
+    migration: "20261105_conc_multi_categoria",
     kind: "column",
     table: HEAD_SCHEMA_MARKER.table,
     column: HEAD_SCHEMA_MARKER.column,

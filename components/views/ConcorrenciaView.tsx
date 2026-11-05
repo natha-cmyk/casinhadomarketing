@@ -4,7 +4,7 @@
 // Logo espelha automaticamente o avatar do Instagram (fallback: clearbit do domínio → inicial).
 import { useEffect, useMemo, useState } from "react";
 import { useStore, newId, type ConcItem, type ConcChannel } from "@/lib/store";
-import { Segmented, type SegOption } from "@/components/ui";
+import { Segmented, Chip, type SegOption } from "@/components/ui";
 
 // ── Metadados de canal: rótulo, cor e ícone (paths internos) ──
 const LINK_ICON = '<path d="M9 15l6-6"/><path d="M11 7l1-1a3 3 0 0 1 4 4l-1 1"/><path d="M13 17l-1 1a3 3 0 0 1-4-4l1-1"/>';
@@ -39,10 +39,18 @@ function PiconEl({ tipo }: { tipo: string }) {
 // normaliza URL: adiciona https:// se vier sem protocolo
 const norm = (u: string) => (/^https?:/i.test(u) ? u : `https://${u}`);
 
-function CompCard({ c, cats, autoEdit }: { c: ConcItem; cats: { id: string; label: string }[]; autoEdit?: boolean }) {
+function CompCard({ c, cats, autoEdit, showTags }: { c: ConcItem; cats: { id: string; label: string }[]; autoEdit?: boolean; showTags?: boolean }) {
   const update = useStore((s) => s.updateConc);
   const remove = useStore((s) => s.removeConc);
   const [editing, setEditing] = useState(!!autoEdit);
+
+  // categorias do concorrente (pode ter várias)
+  const catList = c.categorias || [];
+  const labelOf = (id: string) => cats.find((x) => x.id === id)?.label || LEGACY_LABELS[id] || id;
+  const toggleCat = (id: string) => {
+    const next = catList.includes(id) ? catList.filter((x) => x !== id) : [...catList, id];
+    update(c.id, { categorias: next, categoria: next[0] ?? "" }); // mantém `categoria` (1ª) em sincronia
+  };
 
   const hide = (e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = "none"; };
 
@@ -100,6 +108,12 @@ function CompCard({ c, cats, autoEdit }: { c: ConcItem; cats: { id: string; labe
             )))}
           </div>
         )}
+        {/* tags de categoria — só na aba Geral (nas abas específicas é redundante) */}
+        {showTags && catList.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+            {catList.map((id) => <Chip key={id} kind="flat">{labelOf(id)}</Chip>)}
+          </div>
+        )}
       </div>
     );
   }
@@ -149,11 +163,24 @@ function CompCard({ c, cats, autoEdit }: { c: ConcItem; cats: { id: string; labe
 
         <input className="comp-in" value={c.iconOverride || ""} placeholder="Logo manual (URL ou emoji)" onChange={(e) => update(c.id, { iconOverride: e.target.value })} />
 
-        <select className="comp-in" value={c.categoria} onChange={(e) => update(c.id, { categoria: e.target.value })}>
-          <option value="">— sem categoria —</option>
-          {cats.map((cat) => <option key={cat.id} value={cat.id}>{cat.label}</option>)}
-          {c.categoria && !cats.some((cat) => cat.id === c.categoria) && <option value={c.categoria}>{c.categoria}</option>}
-        </select>
+        {/* categorias: marque quantas quiser */}
+        <div style={{ display: "grid", gap: 4, padding: "2px 2px 0" }}>
+          <div style={{ fontSize: 11, color: "var(--label-3)" }}>Categorias</div>
+          {cats.length === 0 && <div style={{ fontSize: 11, color: "var(--label-3)" }}>Crie categorias em ⚙ Categorias.</div>}
+          {cats.map((cat) => (
+            <label key={cat.id} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, cursor: "pointer" }}>
+              <input type="checkbox" checked={catList.includes(cat.id)} onChange={() => toggleCat(cat.id)} />
+              {cat.label}
+            </label>
+          ))}
+          {/* ids legados do concorrente que não estão na lista de categorias do workspace */}
+          {catList.filter((id) => !cats.some((cat) => cat.id === id)).map((id) => (
+            <label key={id} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, cursor: "pointer" }}>
+              <input type="checkbox" checked onChange={() => toggleCat(id)} />
+              {labelOf(id)}
+            </label>
+          ))}
+        </div>
 
         {/* rodapé do editor: remover (só aqui) + concluir */}
         <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
@@ -193,8 +220,10 @@ export default function ConcorrenciaView() {
   const derived = useMemo(() => {
     const seen = new Map<string, string>();
     for (const c of concorrentes) {
-      const id = (c.categoria || "").trim();
-      if (id && !seen.has(id)) seen.set(id, LEGACY_LABELS[id] || id);
+      for (const raw of c.categorias || []) {
+        const id = (raw || "").trim();
+        if (id && !seen.has(id)) seen.set(id, LEGACY_LABELS[id] || id);
+      }
     }
     return [...seen].map(([id, label]) => ({ id, label }));
   }, [concorrentes]);
@@ -202,13 +231,14 @@ export default function ConcorrenciaView() {
 
   const seedIfEmpty = () => { if (!concCategorias.length && derived.length) setConcCategorias(derived); };
 
-  const list = sel === "geral" ? concorrentes : concorrentes.filter((c) => c.categoria === sel);
+  const list = sel === "geral" ? concorrentes : concorrentes.filter((c) => (c.categorias || []).includes(sel));
   const options: SegOption[] = [{ value: "geral", label: "Geral" }, ...cats.map((c) => ({ value: c.id, label: c.label }))];
 
   const add = () => {
-    const categoria = sel !== "geral" ? sel : cats[0]?.id || "";
+    // aba específica → já entra naquela categoria; Geral → sem categoria (escolhe nos checkboxes)
+    const categorias = sel !== "geral" ? [sel] : [];
     const id = newId("conc");
-    addConc({ id, nome: "Novo concorrente", ig: "", canais: [], categoria, ordem: concorrentes.length });
+    addConc({ id, nome: "Novo concorrente", ig: "", categorias, categoria: categorias[0] ?? "", canais: [], ordem: concorrentes.length });
     setAutoEditId(id);
   };
 
@@ -252,7 +282,7 @@ export default function ConcorrenciaView() {
         <div className="card" style={{ padding: 14, marginBottom: 16, display: "grid", gap: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Categorias do workspace</div>
           <p style={{ fontSize: 12, color: "var(--label-2)", margin: 0 }}>
-            Crie, renomeie ou remova. Remover uma categoria não apaga concorrentes — eles ficam sem categoria (visíveis em “Geral”).
+            Crie, renomeie ou remova. Remover uma categoria não apaga concorrentes — ela só é retirada deles (continuam nas outras; sem nenhuma, aparecem só em “Geral”).
           </p>
           <div style={{ display: "grid", gap: 6 }}>
             {cats.length === 0 && <div style={{ fontSize: 12, color: "var(--label-2)" }}>Nenhuma categoria ainda.</div>}
@@ -291,7 +321,7 @@ export default function ConcorrenciaView() {
         </div>
       ) : (
         <div className="comp-grid">
-          {list.map((c) => <CompCard key={c.id} c={c} cats={cats} autoEdit={c.id === autoEditId} />)}
+          {list.map((c) => <CompCard key={c.id} c={c} cats={cats} autoEdit={c.id === autoEditId} showTags={sel === "geral"} />)}
         </div>
       )}
     </>

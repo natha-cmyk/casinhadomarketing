@@ -37,7 +37,9 @@ export interface PersonaItem {
 export interface ConcChannel { tipo: string; url: string }
 export interface ConcItem {
   id: string; nome: string; ig: string;
-  dominio?: string; categoria: string; // categoria LIVRE por workspace
+  dominio?: string;
+  categoria?: string; // legado/compat: 1ª categoria (código antigo); fonte de verdade = `categorias`
+  categorias: string[]; // categorias LIVRES por workspace (um concorrente pode ter várias)
   canais: ConcChannel[]; // canais extras com URL
   iconOverride?: string; ordem: number;
   // legado (não usado na UI nova; migrado p/ `canais` na leitura):
@@ -490,7 +492,22 @@ export const useStore = create<UIState>((set) => ({
     return id;
   },
   renameConcCategoria: (id, label) => set((s) => ({ concCategorias: s.concCategorias.map((c) => (c.id === id ? { ...c, label } : c)) })),
-  removeConcCategoria: (id) => set((s) => ({ concCategorias: s.concCategorias.filter((c) => c.id !== id) })),
+  removeConcCategoria: (id) => set((s) => {
+    // cascata: tira a categoria removida de todos os concorrentes que a tinham
+    const anyHas = s.concorrentes.some((c) => (c.categorias || []).includes(id));
+    return {
+      concCategorias: s.concCategorias.filter((c) => c.id !== id),
+      ...(anyHas
+        ? {
+            concorrentes: s.concorrentes.map((c) => {
+              if (!(c.categorias || []).includes(id)) return c;
+              const cats = (c.categorias || []).filter((x) => x !== id);
+              return { ...c, categorias: cats, categoria: cats[0] ?? "" };
+            }),
+          }
+        : {}),
+    };
+  }),
 
   setPerfil: (patch) => set((s) => ({ perfil: { ...s.perfil, ...patch } })),
   toggleRelacao: (key) => set((s) => ({ perfil: { ...s.perfil, relacao: { ...s.perfil.relacao, [key]: !s.perfil.relacao[key] } } })),
